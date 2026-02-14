@@ -20,6 +20,7 @@ public sealed class CodingAgentService : IAgentService
     private readonly IAzureDevOpsClient _adoClient;
     private readonly IGitOperations _gitOps;
     private readonly IStoryContextFactory _contextFactory;
+    private readonly ICodebaseContextProvider _codebaseContext;
     private readonly ILogger<CodingAgentService> _logger;
     private readonly string _storageConnectionString;
 
@@ -28,6 +29,7 @@ public sealed class CodingAgentService : IAgentService
         IAzureDevOpsClient adoClient,
         IGitOperations gitOps,
         IStoryContextFactory contextFactory,
+        ICodebaseContextProvider codebaseContext,
         ILogger<CodingAgentService> logger,
         IConfiguration configuration)
     {
@@ -35,6 +37,7 @@ public sealed class CodingAgentService : IAgentService
         _adoClient = adoClient;
         _gitOps = gitOps;
         _contextFactory = contextFactory;
+        _codebaseContext = codebaseContext;
         _logger = logger;
         _storageConnectionString = configuration["AzureWebJobsStorage"]!;
     }
@@ -89,6 +92,8 @@ Follow these guidelines:
 
 ## Existing Files
 {fileListSummary}
+
+{await _codebaseContext.LoadRelevantContextAsync(repoPath, workItem.Title, workItem.Description, cancellationToken)}
 
 Generate all necessary code files for this story.";
 

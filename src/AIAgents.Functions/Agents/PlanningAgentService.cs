@@ -21,6 +21,7 @@ public sealed class PlanningAgentService : IAgentService
     private readonly IGitOperations _gitOps;
     private readonly IStoryContextFactory _contextFactory;
     private readonly ITemplateEngine _templateEngine;
+    private readonly ICodebaseContextProvider _codebaseContext;
     private readonly ILogger<PlanningAgentService> _logger;
     private readonly string _storageConnectionString;
 
@@ -30,6 +31,7 @@ public sealed class PlanningAgentService : IAgentService
         IGitOperations gitOps,
         IStoryContextFactory contextFactory,
         ITemplateEngine templateEngine,
+        ICodebaseContextProvider codebaseContext,
         ILogger<PlanningAgentService> logger,
         IConfiguration configuration)
     {
@@ -38,6 +40,7 @@ public sealed class PlanningAgentService : IAgentService
         _gitOps = gitOps;
         _contextFactory = contextFactory;
         _templateEngine = templateEngine;
+        _codebaseContext = codebaseContext;
         _logger = logger;
         _storageConnectionString = configuration["AzureWebJobsStorage"]!;
     }
@@ -90,6 +93,8 @@ Respond ONLY with valid JSON matching this structure:
 
 ## Existing Repository Files
 {fileListSummary}
+
+{await _codebaseContext.LoadRelevantContextAsync(repoPath, workItem.Title, workItem.Description, cancellationToken)}
 
 Analyze this story and create a comprehensive implementation plan.";
 

@@ -346,6 +346,257 @@
                 font-size: 1.5rem;
             }
         }
+
+        /* Codebase Intelligence Panel */
+        .codebase-panel {
+            background: #fff;
+            border-radius: 12px;
+            padding: 24px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.12);
+            margin-bottom: 28px;
+        }
+
+        .codebase-panel-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 16px;
+        }
+
+        .codebase-panel-title {
+            font-size: 1.1rem;
+            font-weight: 700;
+            color: #333;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .codebase-status-badge {
+            font-size: 0.72rem;
+            font-weight: 600;
+            padding: 4px 12px;
+            border-radius: 20px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .codebase-status-badge.up-to-date {
+            background: #e8f5e9;
+            color: #4caf50;
+        }
+
+        .codebase-status-badge.stale {
+            background: #fff3e0;
+            color: #ff9800;
+        }
+
+        .codebase-status-badge.not-analyzed {
+            background: #fce4ec;
+            color: #e91e63;
+        }
+
+        .codebase-status-badge.analyzing {
+            background: #e8edff;
+            color: #667eea;
+            animation: badgePulse 1.5s ease-in-out infinite;
+        }
+
+        .codebase-stats-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 24px;
+            margin-bottom: 16px;
+        }
+
+        .codebase-stat {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .codebase-stat-value {
+            font-size: 1.3rem;
+            font-weight: 700;
+            color: #667eea;
+        }
+
+        .codebase-stat-label {
+            font-size: 0.72rem;
+            color: #888;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .codebase-actions {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .btn {
+            padding: 8px 20px;
+            border-radius: 8px;
+            border: none;
+            font-size: 0.85rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: #fff;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn-primary:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+
+        .btn-secondary {
+            background: #f0f0f5;
+            color: #555;
+        }
+
+        .btn-secondary:hover {
+            background: #e4e4ea;
+        }
+
+        .codebase-info {
+            font-size: 0.82rem;
+            color: #888;
+            margin-top: 8px;
+        }
+
+        .codebase-recommendation {
+            font-size: 0.82rem;
+            color: #ff9800;
+            margin-top: 8px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        /* Analysis Modal */
+        .modal-backdrop {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.5);
+            backdrop-filter: blur(4px);
+            z-index: 200;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal-backdrop.show {
+            display: flex;
+        }
+
+        .modal {
+            background: #fff;
+            border-radius: 16px;
+            padding: 28px;
+            max-width: 480px;
+            width: 90%;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.2);
+        }
+
+        .modal h3 {
+            font-size: 1.15rem;
+            margin-bottom: 16px;
+            color: #333;
+        }
+
+        .modal label {
+            display: block;
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: #555;
+            margin-bottom: 6px;
+            margin-top: 14px;
+        }
+
+        .modal select, .modal input[type="checkbox"] {
+            font-size: 0.85rem;
+        }
+
+        .modal select {
+            width: 100%;
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            background: #fff;
+        }
+
+        .modal .radio-group {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            margin-top: 6px;
+        }
+
+        .modal .radio-group label {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-weight: 400;
+            margin: 0;
+            cursor: pointer;
+        }
+
+        .modal-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+            margin-top: 24px;
+        }
+
+        /* Progress Modal */
+        .progress-section {
+            margin-top: 16px;
+        }
+
+        .progress-bar-large {
+            width: 100%;
+            height: 10px;
+            background: #eef0f5;
+            border-radius: 6px;
+            overflow: hidden;
+            margin-bottom: 14px;
+        }
+
+        .progress-fill-large {
+            height: 100%;
+            background: linear-gradient(90deg, #667eea, #764ba2);
+            border-radius: 6px;
+            transition: width 0.6s ease;
+        }
+
+        .progress-steps {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .progress-step {
+            font-size: 0.82rem;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: #555;
+        }
     </style>
 </head>
 <body>
@@ -377,6 +628,110 @@
         </div>
 
         <!-- Main Content -->
+        <!-- Codebase Intelligence -->
+        <div class="codebase-panel" id="codebase-panel">
+            <div class="codebase-panel-header">
+                <div class="codebase-panel-title">
+                    🧠 Codebase Intelligence
+                    <span class="codebase-status-badge not-analyzed" id="codebase-status-badge">Not Analyzed</span>
+                </div>
+                <div class="codebase-actions">
+                    <button class="btn btn-primary" id="btn-analyze" onclick="openAnalyzeModal()">
+                        📊 Document My Codebase
+                    </button>
+                </div>
+            </div>
+            <div id="codebase-stats-container" style="display:none;">
+                <div class="codebase-stats-row">
+                    <div class="codebase-stat">
+                        <span class="codebase-stat-value" id="cb-files">0</span>
+                        <span class="codebase-stat-label">Files Analyzed</span>
+                    </div>
+                    <div class="codebase-stat">
+                        <span class="codebase-stat-value" id="cb-features">0</span>
+                        <span class="codebase-stat-label">Features</span>
+                    </div>
+                    <div class="codebase-stat">
+                        <span class="codebase-stat-value" id="cb-stories">0</span>
+                        <span class="codebase-stat-label">Stories Reviewed</span>
+                    </div>
+                    <div class="codebase-stat">
+                        <span class="codebase-stat-value" id="cb-commits">0</span>
+                        <span class="codebase-stat-label">Commits Linked</span>
+                    </div>
+                </div>
+                <div class="codebase-info" id="cb-last-analysis"></div>
+                <div class="codebase-recommendation" id="cb-recommendation" style="display:none;">
+                    ⚠️ <span id="cb-recommendation-text"></span>
+                </div>
+            </div>
+            <div id="codebase-empty" style="margin-top:8px;">
+                <p style="font-size:0.85rem;color:#888;">
+                    Before AI can work effectively on your stories, it needs to learn about your codebase.
+                    Click <strong>"Document My Codebase"</strong> to analyze your source code, past user stories, and coding patterns.
+                </p>
+            </div>
+        </div>
+
+        <!-- Analysis Modal -->
+        <div class="modal-backdrop" id="analyze-modal">
+            <div class="modal">
+                <h3>🔍 Analyze Codebase</h3>
+
+                <label for="analysis-timeframe">Learn from user stories:</label>
+                <select id="analysis-timeframe">
+                    <option value="3months">Last 3 months</option>
+                    <option value="6months" selected>Last 6 months</option>
+                    <option value="12months">Last 12 months</option>
+                    <option value="alltime">All time</option>
+                </select>
+
+                <label>Analysis depth:</label>
+                <div class="radio-group">
+                    <label><input type="radio" name="depth" value="standard" checked> Standard (faster, 10-15 min)</label>
+                    <label><input type="radio" name="depth" value="deep"> Deep (comprehensive, 20-30 min)</label>
+                </div>
+
+                <label style="margin-top:14px;display:flex;align-items:center;gap:8px;cursor:pointer;">
+                    <input type="checkbox" id="include-git" checked> Include git commit history
+                </label>
+
+                <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+                    <input type="checkbox" id="incremental"> Incremental (changes since last scan)
+                </label>
+
+                <div class="modal-actions">
+                    <button class="btn btn-secondary" onclick="closeAnalyzeModal()">Cancel</button>
+                    <button class="btn btn-primary" id="btn-start-analysis" onclick="startAnalysis()">Start Analysis →</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Progress Modal -->
+        <div class="modal-backdrop" id="progress-modal">
+            <div class="modal">
+                <h3>🔄 Analyzing Codebase...</h3>
+                <div class="progress-section">
+                    <div class="progress-bar-large">
+                        <div class="progress-fill-large" id="analysis-progress-bar" style="width: 0%"></div>
+                    </div>
+                    <div id="analysis-current-step" style="font-size:0.85rem;color:#667eea;font-weight:600;margin-bottom:14px;">
+                        Queuing analysis...
+                    </div>
+                    <div class="progress-steps" id="analysis-steps">
+                        <div class="progress-step">⏳ Scanning codebase structure...</div>
+                        <div class="progress-step">⏳ Analyzing code patterns...</div>
+                        <div class="progress-step">⏳ Querying user story history...</div>
+                        <div class="progress-step">⏳ Generating documentation...</div>
+                        <div class="progress-step">⏳ Committing to repository...</div>
+                    </div>
+                </div>
+                <div class="modal-actions">
+                    <button class="btn btn-secondary" onclick="closeProgressModal()">Run in Background</button>
+                </div>
+            </div>
+        </div>
+
         <div class="main-grid">
             <div>
                 <div class="section-title">⚡ Agent Pipeline</div>
@@ -405,7 +760,10 @@
     <script>
         // ========== Configuration ==========
         const API_URL = '/api/GetCurrentStatus';
+        const CODEBASE_INTEL_URL = '/api/codebase-intelligence';
+        const ANALYZE_URL = '/api/analyze-codebase';
         const POLL_INTERVAL = 2000;
+        const CODEBASE_POLL_INTERVAL = 30000; // check codebase status every 30s
 
         // ========== Default Agent Definitions ==========
         const DEFAULT_AGENTS = [
@@ -502,6 +860,171 @@
             });
         }
 
+        // ========== Codebase Intelligence ==========
+        let analysisInProgress = false;
+
+        function openAnalyzeModal() {
+            document.getElementById('analyze-modal').classList.add('show');
+        }
+
+        function closeAnalyzeModal() {
+            document.getElementById('analyze-modal').classList.remove('show');
+        }
+
+        function closeProgressModal() {
+            document.getElementById('progress-modal').classList.remove('show');
+        }
+
+        async function startAnalysis() {
+            closeAnalyzeModal();
+
+            const timeframe = document.getElementById('analysis-timeframe').value;
+            const depth = document.querySelector('input[name="depth"]:checked').value;
+            const includeGit = document.getElementById('include-git').checked;
+            const incremental = document.getElementById('incremental').checked;
+
+            // Show progress modal
+            document.getElementById('progress-modal').classList.add('show');
+            document.getElementById('analysis-progress-bar').style.width = '10%';
+            document.getElementById('analysis-current-step').textContent = 'Queuing analysis...';
+            analysisInProgress = true;
+
+            // Update button state
+            const btn = document.getElementById('btn-analyze');
+            btn.disabled = true;
+            btn.innerHTML = '🔄 Analyzing...';
+
+            // Update badge
+            const badge = document.getElementById('codebase-status-badge');
+            badge.className = 'codebase-status-badge analyzing';
+            badge.textContent = 'Analyzing';
+
+            try {
+                const response = await fetch(ANALYZE_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        userStoryTimeframe: timeframe,
+                        analysisDepth: depth,
+                        includeGitHistory: includeGit,
+                        incremental: incremental
+                    })
+                });
+
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                const result = await response.json();
+
+                document.getElementById('analysis-progress-bar').style.width = '25%';
+                document.getElementById('analysis-current-step').textContent =
+                    `Analysis queued (est. ${result.estimatedDuration})`;
+
+                // Simulate progress (real progress would come from polling activity log)
+                simulateProgress();
+            } catch (err) {
+                console.error('Failed to start analysis:', err);
+                document.getElementById('analysis-current-step').textContent =
+                    '❌ Failed to start analysis: ' + err.message;
+                analysisInProgress = false;
+                btn.disabled = false;
+                btn.innerHTML = '📊 Document My Codebase';
+            }
+        }
+
+        function simulateProgress() {
+            const steps = document.querySelectorAll('#analysis-steps .progress-step');
+            let current = 0;
+
+            const interval = setInterval(() => {
+                if (current < steps.length) {
+                    steps[current].innerHTML = steps[current].innerHTML.replace('⏳', '✅');
+                    current++;
+                    const pct = 25 + (current / steps.length) * 70;
+                    document.getElementById('analysis-progress-bar').style.width = pct + '%';
+                    if (current < steps.length) {
+                        document.getElementById('analysis-current-step').textContent =
+                            steps[current].textContent.replace('⏳ ', '');
+                    }
+                } else {
+                    clearInterval(interval);
+                    document.getElementById('analysis-progress-bar').style.width = '100%';
+                    document.getElementById('analysis-current-step').textContent = '✅ Analysis complete!';
+                    analysisInProgress = false;
+
+                    // Refresh intelligence data
+                    setTimeout(() => {
+                        closeProgressModal();
+                        fetchCodebaseIntelligence();
+
+                        const btn = document.getElementById('btn-analyze');
+                        btn.disabled = false;
+                        btn.innerHTML = '🔄 Re-analyze';
+                    }, 2000);
+                }
+            }, 15000); // ~15s per step = ~75s total simulated
+        }
+
+        async function fetchCodebaseIntelligence() {
+            try {
+                const response = await fetch(CODEBASE_INTEL_URL);
+                if (!response.ok) return;
+                const data = await response.json();
+                updateCodebasePanel(data);
+            } catch (err) {
+                console.warn('Codebase intelligence fetch failed:', err.message);
+            }
+        }
+
+        function updateCodebasePanel(data) {
+            const badge = document.getElementById('codebase-status-badge');
+            const statsContainer = document.getElementById('codebase-stats-container');
+            const emptyState = document.getElementById('codebase-empty');
+            const btn = document.getElementById('btn-analyze');
+
+            if (data.status === 'not_analyzed') {
+                badge.className = 'codebase-status-badge not-analyzed';
+                badge.textContent = 'Not Analyzed';
+                statsContainer.style.display = 'none';
+                emptyState.style.display = 'block';
+                btn.innerHTML = '📊 Document My Codebase';
+                return;
+            }
+
+            emptyState.style.display = 'none';
+            statsContainer.style.display = 'block';
+
+            if (!analysisInProgress) {
+                btn.disabled = false;
+                btn.innerHTML = '🔄 Re-analyze';
+            }
+
+            if (data.stats) {
+                document.getElementById('cb-files').textContent = (data.stats.filesAnalyzed || 0).toLocaleString();
+                document.getElementById('cb-features').textContent = data.stats.featuresDocumented || 0;
+                document.getElementById('cb-stories').textContent = data.stats.userStoriesReviewed || 0;
+                document.getElementById('cb-commits').textContent = data.stats.commitsAnalyzed || 0;
+            }
+
+            if (data.lastAnalysis) {
+                const date = new Date(data.lastAnalysis);
+                const daysAgo = Math.floor((Date.now() - date) / (1000 * 60 * 60 * 24));
+                document.getElementById('cb-last-analysis').textContent =
+                    `Last analysis: ${daysAgo === 0 ? 'today' : daysAgo + ' days ago'} (${date.toLocaleDateString()})`;
+
+                if (data.recommendReanalysis) {
+                    badge.className = 'codebase-status-badge stale';
+                    badge.textContent = 'Stale';
+                    const rec = document.getElementById('cb-recommendation');
+                    rec.style.display = 'flex';
+                    document.getElementById('cb-recommendation-text').textContent =
+                        'Recommend re-analysis: last scan was over 30 days ago.';
+                } else {
+                    badge.className = 'codebase-status-badge up-to-date';
+                    badge.textContent = 'Up to Date';
+                    document.getElementById('cb-recommendation').style.display = 'none';
+                }
+            }
+        }
+
         // ========== API Fetching ==========
         async function fetchStatus() {
             try {
@@ -532,6 +1055,10 @@
             // Start polling
             fetchStatus();
             setInterval(fetchStatus, POLL_INTERVAL);
+
+            // Fetch codebase intelligence
+            fetchCodebaseIntelligence();
+            setInterval(fetchCodebaseIntelligence, CODEBASE_POLL_INTERVAL);
         }
 
         document.addEventListener('DOMContentLoaded', init);

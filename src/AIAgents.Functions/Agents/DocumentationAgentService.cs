@@ -22,6 +22,7 @@ public sealed class DocumentationAgentService : IAgentService
     private readonly IGitOperations _gitOps;
     private readonly IStoryContextFactory _contextFactory;
     private readonly ITemplateEngine _templateEngine;
+    private readonly ICodebaseContextProvider _codebaseContext;
     private readonly ILogger<DocumentationAgentService> _logger;
     private readonly string _storageConnectionString;
 
@@ -32,6 +33,7 @@ public sealed class DocumentationAgentService : IAgentService
         IGitOperations gitOps,
         IStoryContextFactory contextFactory,
         ITemplateEngine templateEngine,
+        ICodebaseContextProvider codebaseContext,
         ILogger<DocumentationAgentService> logger,
         IConfiguration configuration)
     {
@@ -41,6 +43,7 @@ public sealed class DocumentationAgentService : IAgentService
         _gitOps = gitOps;
         _contextFactory = contextFactory;
         _templateEngine = templateEngine;
+        _codebaseContext = codebaseContext;
         _logger = logger;
         _storageConnectionString = configuration["AzureWebJobsStorage"]!;
     }
@@ -99,6 +102,8 @@ Respond ONLY with valid JSON:
 
 ## Generated Code
 {allCode}
+
+{await _codebaseContext.LoadRelevantContextAsync(repoPath, workItem.Title, workItem.Description, cancellationToken)}
 
 Generate comprehensive documentation for these changes.";
 

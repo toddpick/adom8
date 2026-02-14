@@ -40,5 +40,12 @@ public enum AgentType
     /// Handles merge, deployment, and autonomy-level decisions.
     /// Transition: AI Docs → Ready for QA / Deployed (based on autonomy level)
     /// </summary>
-    Deployment = 5
+    Deployment = 5,
+
+    /// <summary>
+    /// Analyzes codebase, user stories, and git history to generate
+    /// AI-optimized documentation in the .agent/ folder.
+    /// Triggered via dashboard button, not through the normal story pipeline.
+    /// </summary>
+    CodebaseDocumentation = 6
 }

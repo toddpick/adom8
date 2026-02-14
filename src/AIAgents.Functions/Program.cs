@@ -20,6 +20,7 @@ var host = new HostBuilder()
         services.Configure<GitOptions>(configuration.GetSection(GitOptions.SectionName));
         services.Configure<DeploymentOptions>(configuration.GetSection(DeploymentOptions.SectionName));
         services.Configure<GitHubOptions>(configuration.GetSection(GitHubOptions.SectionName));
+        services.Configure<CodebaseDocumentationOptions>(configuration.GetSection(CodebaseDocumentationOptions.SectionName));
 
         // Application Insights — register BEFORE HTTP resilience handlers
         services.AddApplicationInsightsTelemetryWorkerService();
@@ -59,6 +60,9 @@ var host = new HostBuilder()
         // Activity logging
         services.AddSingleton<IActivityLogger, TableStorageActivityLogger>();
 
+        // Codebase context provider (loads .agent/ docs for AI prompts)
+        services.AddSingleton<ICodebaseContextProvider, CodebaseContextLoader>();
+
         // Agent services — keyed DI for dispatcher routing
         services.AddKeyedScoped<IAgentService, PlanningAgentService>("Planning");
         services.AddKeyedScoped<IAgentService, CodingAgentService>("Coding");
@@ -66,6 +70,7 @@ var host = new HostBuilder()
         services.AddKeyedScoped<IAgentService, ReviewAgentService>("Review");
         services.AddKeyedScoped<IAgentService, DocumentationAgentService>("Documentation");
         services.AddKeyedScoped<IAgentService, DeploymentAgentService>("Deployment");
+        services.AddKeyedScoped<IAgentService, CodebaseDocumentationAgentService>("CodebaseDocumentation");
     })
     .Build();
 

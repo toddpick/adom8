@@ -21,6 +21,7 @@ public sealed class ReviewAgentService : IAgentService
     private readonly IGitOperations _gitOps;
     private readonly IStoryContextFactory _contextFactory;
     private readonly ITemplateEngine _templateEngine;
+    private readonly ICodebaseContextProvider _codebaseContext;
     private readonly ILogger<ReviewAgentService> _logger;
     private readonly string _storageConnectionString;
 
@@ -30,6 +31,7 @@ public sealed class ReviewAgentService : IAgentService
         IGitOperations gitOps,
         IStoryContextFactory contextFactory,
         ITemplateEngine templateEngine,
+        ICodebaseContextProvider codebaseContext,
         ILogger<ReviewAgentService> logger,
         IConfiguration configuration)
     {
@@ -38,6 +40,7 @@ public sealed class ReviewAgentService : IAgentService
         _gitOps = gitOps;
         _contextFactory = contextFactory;
         _templateEngine = templateEngine;
+        _codebaseContext = codebaseContext;
         _logger = logger;
         _storageConnectionString = configuration["AzureWebJobsStorage"]!;
     }
@@ -88,6 +91,8 @@ Check for: SQL injection, XSS, hardcoded secrets, null reference, race condition
 
 ## Code to Review
 {allCode}
+
+{await _codebaseContext.LoadRelevantContextAsync(repoPath, workItem.Title, workItem.Description, cancellationToken)}
 
 Perform a comprehensive code review.";
 

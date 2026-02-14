@@ -57,22 +57,26 @@ public sealed class AgentTaskDispatcher
         using var scope = _serviceProvider.CreateScope();
 
         // Autonomy-level early exit: fetch work item to check autonomy level
-        var workItem = await _adoClient.GetWorkItemAsync(agentTask.WorkItemId, cancellationToken);
-        var autonomyLevel = workItem.AutonomyLevel;
-
-        if (ShouldSkipAgent(autonomyLevel, agentTask.AgentType))
+        // Skip work item lookup for standalone agents (e.g., CodebaseDocumentation with WI-0)
+        if (agentTask.WorkItemId > 0)
         {
-            _logger.LogInformation(
-                "Skipping {AgentType} agent for WI-{WorkItemId}: autonomy level {Level} does not include this stage",
-                agentTask.AgentType, agentTask.WorkItemId, autonomyLevel);
+            var workItem = await _adoClient.GetWorkItemAsync(agentTask.WorkItemId, cancellationToken);
+            var autonomyLevel = workItem.AutonomyLevel;
 
-            await _activityLogger.LogAsync(
-                agentTask.AgentType.ToString(),
-                agentTask.WorkItemId,
-                $"Skipped — autonomy level {autonomyLevel} stops before {agentTask.AgentType}",
-                cancellationToken: cancellationToken);
+            if (ShouldSkipAgent(autonomyLevel, agentTask.AgentType))
+            {
+                _logger.LogInformation(
+                    "Skipping {AgentType} agent for WI-{WorkItemId}: autonomy level {Level} does not include this stage",
+                    agentTask.AgentType, agentTask.WorkItemId, autonomyLevel);
 
-            return;
+                await _activityLogger.LogAsync(
+                    agentTask.AgentType.ToString(),
+                    agentTask.WorkItemId,
+                    $"Skipped — autonomy level {autonomyLevel} stops before {agentTask.AgentType}",
+                    cancellationToken: cancellationToken);
+
+                return;
+            }
         }
 
         _logger.LogInformation(
@@ -134,11 +138,16 @@ public sealed class AgentTaskDispatcher
     /// Level 1 (Plan Only): only Planning runs.
     /// Level 2 (Code Only): Planning, Coding, Testing run.
     /// Levels 3-5: all agents run (Deployment agent handles the rest).
+    /// CodebaseDocumentation always runs (it's triggered outside the normal pipeline).
     /// </summary>
-    private static bool ShouldSkipAgent(int autonomyLevel, AgentType agentType) => autonomyLevel switch
+    private static bool ShouldSkipAgent(int autonomyLevel, AgentType agentType) => agentType switch
     {
-        1 => agentType > AgentType.Planning,
-        2 => agentType > AgentType.Testing,
-        _ => false
+        AgentType.CodebaseDocumentation => false, // standalone, always runs
+        _ => autonomyLevel switch
+        {
+            1 => agentType > AgentType.Planning,
+            2 => agentType > AgentType.Testing,
+            _ => false
+        }
     };
 }
