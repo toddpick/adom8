@@ -25,7 +25,7 @@ public sealed class ReviewAgentService : IAgentService
     private readonly string _storageConnectionString;
 
     public ReviewAgentService(
-        IAIClient aiClient,
+        IAIClientFactory aiClientFactory,
         IAzureDevOpsClient adoClient,
         IGitOperations gitOps,
         IStoryContextFactory contextFactory,
@@ -33,7 +33,7 @@ public sealed class ReviewAgentService : IAgentService
         ILogger<ReviewAgentService> logger,
         IConfiguration configuration)
     {
-        _aiClient = aiClient;
+        _aiClient = aiClientFactory.GetClientForAgent("Review");
         _adoClient = adoClient;
         _gitOps = gitOps;
         _contextFactory = contextFactory;

@@ -25,38 +25,10 @@ var host = new HostBuilder()
         services.AddApplicationInsightsTelemetryWorkerService();
         services.ConfigureFunctionsApplicationInsights();
 
-        // Named HTTP client for AI API calls with resilience pipeline
-        services.AddHttpClient("AIClient", (sp, client) =>
-        {
-            var aiOptions = new AIOptions
-            {
-                Provider = configuration[$"{AIOptions.SectionName}:Provider"] ?? "OpenAI",
-                Model = configuration[$"{AIOptions.SectionName}:Model"] ?? "gpt-4o",
-                ApiKey = configuration[$"{AIOptions.SectionName}:ApiKey"] ?? "",
-                Endpoint = configuration[$"{AIOptions.SectionName}:Endpoint"]
-            };
-            if (!string.IsNullOrEmpty(aiOptions.Endpoint))
-            {
-                client.BaseAddress = new Uri(aiOptions.Endpoint);
-            }
-            else
-            {
-                client.BaseAddress = new Uri("https://api.openai.com/");
-            }
-
-            // Set auth header based on provider
-            if (aiOptions.Provider.Equals("AzureOpenAI", StringComparison.OrdinalIgnoreCase))
-            {
-                client.DefaultRequestHeaders.Add("api-key", aiOptions.ApiKey);
-            }
-            else
-            {
-                client.DefaultRequestHeaders.Authorization =
-                    new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", aiOptions.ApiKey);
-            }
-
-            client.Timeout = TimeSpan.FromMinutes(5);
-        })
+        // Named HTTP client for AI API calls with resilience pipeline.
+        // Base URL and auth are set per-request by AIClient so that
+        // per-agent model overrides can target different providers.
+        services.AddHttpClient("AIClient")
         .AddStandardResilienceHandler(options =>
         {
             options.AttemptTimeout.Timeout = TimeSpan.FromSeconds(120);
@@ -67,6 +39,7 @@ var host = new HostBuilder()
 
         // Core services
         services.AddSingleton<IAIClient, AIClient>();
+        services.AddSingleton<IAIClientFactory, AIClientFactory>();
         services.AddSingleton<IAzureDevOpsClient, AzureDevOpsClient>();
         services.AddSingleton<IGitOperations, GitOperations>();
         services.AddSingleton<IStoryContextFactory, StoryContextFactory>();

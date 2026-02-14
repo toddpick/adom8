@@ -1,3 +1,4 @@
+using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -11,20 +12,36 @@ namespace AIAgents.Core.Services;
 /// <summary>
 /// Thin AI completion client that handles HTTP transport to OpenAI-compatible endpoints.
 /// All prompt engineering is owned by the agent services, not by this client.
+/// Supports per-agent model overrides via <see cref="IAIClientFactory"/>.
 /// </summary>
 public sealed class AIClient : IAIClient
 {
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly AIOptions _options;
-    private readonly ILogger<AIClient> _logger;
+    private readonly ILogger _logger;
 
+    /// <summary>
+    /// Standard DI constructor — uses IOptions&lt;AIOptions&gt; (default config).
+    /// </summary>
     public AIClient(
         IHttpClientFactory httpClientFactory,
         IOptions<AIOptions> options,
         ILogger<AIClient> logger)
+        : this(httpClientFactory, options.Value, logger)
+    {
+    }
+
+    /// <summary>
+    /// Internal constructor used by <see cref="AIClientFactory"/> to create
+    /// per-agent instances with merged configuration.
+    /// </summary>
+    internal AIClient(
+        IHttpClientFactory httpClientFactory,
+        AIOptions options,
+        ILogger logger)
     {
         _httpClientFactory = httpClientFactory;
-        _options = options.Value;
+        _options = options;
         _logger = logger;
     }
 
@@ -34,6 +51,8 @@ public sealed class AIClient : IAIClient
         AICompletionOptions? options = null,
         CancellationToken cancellationToken = default)
     {
+        // Use the resilience-enabled named client but set auth per-request
+        // so each AIClient instance can target a different provider/model.
         var client = _httpClientFactory.CreateClient("AIClient");
 
         var requestBody = BuildRequestBody(systemPrompt, userPrompt, options);
@@ -42,15 +61,16 @@ public sealed class AIClient : IAIClient
             "Sending completion request to {Provider} model {Model}, max_tokens={MaxTokens}",
             _options.Provider, _options.Model, options?.MaxTokens ?? _options.MaxTokens);
 
-        var jsonContent = new StringContent(
+        var url = BuildFullUrl();
+
+        var request = new HttpRequestMessage(HttpMethod.Post, url);
+        ConfigureAuth(request);
+        request.Content = new StringContent(
             JsonSerializer.Serialize(requestBody),
             Encoding.UTF8,
             "application/json");
 
-        var response = await client.PostAsync(
-            GetCompletionEndpoint(),
-            jsonContent,
-            cancellationToken);
+        var response = await client.SendAsync(request, cancellationToken);
 
         response.EnsureSuccessStatusCode();
 
@@ -87,14 +107,39 @@ public sealed class AIClient : IAIClient
         };
     }
 
-    private string GetCompletionEndpoint()
+    /// <summary>
+    /// Builds the full absolute URL for the completion endpoint,
+    /// combining the base endpoint with the provider-specific path.
+    /// </summary>
+    private string BuildFullUrl()
     {
-        return _options.Provider.ToUpperInvariant() switch
+        var baseUri = !string.IsNullOrEmpty(_options.Endpoint)
+            ? _options.Endpoint.TrimEnd('/')
+            : "https://api.openai.com";
+
+        var path = _options.Provider.ToUpperInvariant() switch
         {
-            "AZUREOPENAI" => $"openai/deployments/{_options.Model}/chat/completions?api-version=2024-08-01-preview",
-            "OPENAI" => "v1/chat/completions",
-            _ => throw new NotSupportedException($"AI provider '{_options.Provider}' is not supported.")
+            "AZUREOPENAI" => $"/openai/deployments/{_options.Model}/chat/completions?api-version=2024-08-01-preview",
+            _ => "/v1/chat/completions"  // OpenAI, OpenRouter, LiteLLM, etc.
         };
+
+        return baseUri + path;
+    }
+
+    /// <summary>
+    /// Sets the authentication header on the request based on the provider.
+    /// </summary>
+    private void ConfigureAuth(HttpRequestMessage request)
+    {
+        if (_options.Provider.Equals("AzureOpenAI", StringComparison.OrdinalIgnoreCase))
+        {
+            request.Headers.Add("api-key", _options.ApiKey);
+        }
+        else
+        {
+            request.Headers.Authorization =
+                new AuthenticationHeaderValue("Bearer", _options.ApiKey);
+        }
     }
 
     // Internal response DTOs for deserializing OpenAI-compatible responses

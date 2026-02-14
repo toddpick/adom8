@@ -38,4 +38,17 @@ public sealed class AIOptions
     /// Temperature for sampling (0.0 = deterministic, 1.0 = creative).
     /// </summary>
     public double Temperature { get; init; } = 0.3;
+
+    /// <summary>
+    /// Optional per-agent model overrides. Keys are agent names
+    /// ("Planning", "Coding", "Testing", "Review", "Documentation").
+    /// Any property left null in the profile inherits from the defaults above.
+    /// </summary>
+    /// <example>
+    /// Use an expensive model for Planning/Coding and a cheap one for Documentation:
+    ///   "AI:AgentModels:Documentation:Model": "gemini-2.0-flash"
+    ///   "AI:AgentModels:Documentation:Provider": "OpenAI"
+    ///   "AI:AgentModels:Documentation:Endpoint": "https://openrouter.ai/api"
+    /// </example>
+    public Dictionary<string, AgentAIProfile>? AgentModels { get; init; }
 }

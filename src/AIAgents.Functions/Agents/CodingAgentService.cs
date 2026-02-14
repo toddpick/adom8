@@ -24,14 +24,14 @@ public sealed class CodingAgentService : IAgentService
     private readonly string _storageConnectionString;
 
     public CodingAgentService(
-        IAIClient aiClient,
+        IAIClientFactory aiClientFactory,
         IAzureDevOpsClient adoClient,
         IGitOperations gitOps,
         IStoryContextFactory contextFactory,
         ILogger<CodingAgentService> logger,
         IConfiguration configuration)
     {
-        _aiClient = aiClient;
+        _aiClient = aiClientFactory.GetClientForAgent("Coding");
         _adoClient = adoClient;
         _gitOps = gitOps;
         _contextFactory = contextFactory;

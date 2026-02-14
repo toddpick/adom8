@@ -25,7 +25,7 @@ public sealed class PlanningAgentService : IAgentService
     private readonly string _storageConnectionString;
 
     public PlanningAgentService(
-        IAIClient aiClient,
+        IAIClientFactory aiClientFactory,
         IAzureDevOpsClient adoClient,
         IGitOperations gitOps,
         IStoryContextFactory contextFactory,
@@ -33,7 +33,7 @@ public sealed class PlanningAgentService : IAgentService
         ILogger<PlanningAgentService> logger,
         IConfiguration configuration)
     {
-        _aiClient = aiClient;
+        _aiClient = aiClientFactory.GetClientForAgent("Planning");
         _adoClient = adoClient;
         _gitOps = gitOps;
         _contextFactory = contextFactory;

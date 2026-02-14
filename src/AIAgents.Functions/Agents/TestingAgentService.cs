@@ -25,7 +25,7 @@ public sealed class TestingAgentService : IAgentService
     private readonly string _storageConnectionString;
 
     public TestingAgentService(
-        IAIClient aiClient,
+        IAIClientFactory aiClientFactory,
         IAzureDevOpsClient adoClient,
         IGitOperations gitOps,
         IStoryContextFactory contextFactory,
@@ -33,7 +33,7 @@ public sealed class TestingAgentService : IAgentService
         ILogger<TestingAgentService> logger,
         IConfiguration configuration)
     {
-        _aiClient = aiClient;
+        _aiClient = aiClientFactory.GetClientForAgent("Testing");
         _adoClient = adoClient;
         _gitOps = gitOps;
         _contextFactory = contextFactory;

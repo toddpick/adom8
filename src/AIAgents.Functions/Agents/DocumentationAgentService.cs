@@ -26,7 +26,7 @@ public sealed class DocumentationAgentService : IAgentService
     private readonly string _storageConnectionString;
 
     public DocumentationAgentService(
-        IAIClient aiClient,
+        IAIClientFactory aiClientFactory,
         IAzureDevOpsClient adoClient,
         IRepositoryProvider repoProvider,
         IGitOperations gitOps,
@@ -35,7 +35,7 @@ public sealed class DocumentationAgentService : IAgentService
         ILogger<DocumentationAgentService> logger,
         IConfiguration configuration)
     {
-        _aiClient = aiClient;
+        _aiClient = aiClientFactory.GetClientForAgent("Documentation");
         _adoClient = adoClient;
         _repoProvider = repoProvider;
         _gitOps = gitOps;
