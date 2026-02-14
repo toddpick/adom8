@@ -135,8 +135,8 @@ This codebase uses AI agents for development automation. To work effectively:
 cat .agent/CONTEXT_INDEX.md
 cat .agent/FEATURES/{relevant-area}.md
 
-# Using Claude Code CLI with context
-./scripts/claude-with-context.sh "your task description"
+# Using AI CLI with context (auto-detects Claude Code or Codex)
+./scripts/ai-with-context.sh "your task description"
 ```
 
 **Important:** Even if you're coding manually (not using AI), follow patterns documented in `.agent/CODING_STANDARDS.md` to maintain consistency.

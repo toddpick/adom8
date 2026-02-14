@@ -1,6 +1,6 @@
 # Developer Guidelines
 
-Comprehensive guide for human developers working alongside AI agents in this codebase. Whether you're using Claude Code CLI, Cursor, GitHub Copilot, or coding manually — these guidelines ensure your code integrates seamlessly with AI-generated code.
+Comprehensive guide for human developers working alongside AI agents in this codebase. Whether you're using Claude Code CLI, OpenAI Codex CLI, Cursor, GitHub Copilot, or coding manually — these guidelines ensure your code integrates seamlessly with AI-generated code.
 
 ---
 
@@ -43,7 +43,7 @@ Before starting, check Azure DevOps for:
 
 ---
 
-## 3. Using Claude Code CLI / Cursor / Copilot
+## 3. Using AI Coding Tools (Claude Code / Codex / Cursor / Copilot)
 
 ### The Problem
 
@@ -56,8 +56,12 @@ Always include `.agent/` context in your prompts. Use the helper script or struc
 ### Helper Script (Recommended)
 
 ```bash
-# Automatically loads .agent/ context
-./scripts/claude-with-context.sh "add OAuth2 authentication to the API"
+# Automatically loads .agent/ context and detects available CLI
+./scripts/ai-with-context.sh "add OAuth2 authentication to the API"
+
+# Force a specific CLI
+./scripts/ai-with-context.sh --tool codex "add OAuth2 authentication to the API"
+./scripts/ai-with-context.sh --tool claude "add OAuth2 authentication to the API"
 ```
 
 ### Manual Prompt Structure
@@ -300,8 +304,8 @@ Use the AI plan as a guide while coding:
 # Read the AI plan
 cat .ado/stories/US-{id}/PLAN.md
 
-# Code with Claude Code CLI (with context)
-./scripts/claude-with-context.sh "implement OAuth2 per PLAN.md in .ado/stories/US-{id}/"
+# Code with AI CLI (auto-detects Claude Code or Codex)
+./scripts/ai-with-context.sh "implement OAuth2 per PLAN.md in .ado/stories/US-{id}/"
 
 # Or code manually following the plan
 ```
@@ -555,11 +559,11 @@ If you set **Autonomy Level 1 (Plan Only)**, the story stops after `Story Planni
 □ Verify no pattern inconsistencies
 ```
 
-### Claude Code CLI Pattern
+### AI CLI Pattern (Claude Code / Codex)
 
 ```bash
-# Quick — use helper script
-./scripts/claude-with-context.sh "your task description"
+# Quick — use helper script (auto-detects Claude Code or Codex)
+./scripts/ai-with-context.sh "your task description"
 
 # Manual — include context in prompt
 # 1. Reference .agent/CONTEXT_INDEX.md

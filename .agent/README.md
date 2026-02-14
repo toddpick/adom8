@@ -8,7 +8,7 @@ Provide context for:
 
 1. **AI Agents** — Autonomous agents read these files to understand codebase patterns before generating code, tests, and documentation
 2. **Human Developers** — Developers reference these files when working on complex features to follow established conventions
-3. **AI-Assisted Tools** — Claude Code CLI, Cursor, and GitHub Copilot produce better results when given this context
+3. **AI-Assisted Tools** — Claude Code CLI, OpenAI Codex CLI, Cursor, and GitHub Copilot produce better results when given this context
 
 ## Contents
 
@@ -31,10 +31,11 @@ Provide context for:
 2. **Read relevant `FEATURES/*.md`** — understand the existing implementation in your area
 3. **Read `CODING_STANDARDS.md`** — know the patterns to follow
 
-### When Using Claude Code / Cursor / Copilot
+### When Using AI Coding Tools (Claude Code / Codex / Cursor / Copilot)
 
 - Include `.agent/` context in your prompts for consistent results
-- Use the helper script: `./scripts/claude-with-context.sh "your task"`
+- Use the helper script: `./scripts/ai-with-context.sh "your task"`
+- Force a specific CLI: `./scripts/ai-with-context.sh --tool codex "your task"`
 - See [DEVELOPERS.md](../DEVELOPERS.md) for detailed prompt structure
 
 ### After Completing a Feature
@@ -79,7 +80,7 @@ The `.agent/` folder should **NOT** be in `.gitignore` because:
 - Developers need these files for reference during local development
 - AI agents need them for context when processing work items
 - They are part of the codebase documentation, just like `README.md`
-- Helper scripts (`scripts/claude-with-context.sh`) depend on them
+- Helper scripts (`scripts/ai-with-context.sh`) depend on them
 
 ## Last Updated
 

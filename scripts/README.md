@@ -2,36 +2,41 @@
 
 Helper scripts for working with AI agents and maintaining code consistency.
 
-## claude-with-context.sh
+## ai-with-context.sh
 
-Wrapper for Claude Code CLI that automatically includes `.agent/` documentation context in prompts.
+Wrapper for AI coding CLIs (Claude Code, OpenAI Codex) that automatically includes `.agent/` documentation context in prompts.
 
 ### Usage
 
 ```bash
-./scripts/claude-with-context.sh "task description"
+# Auto-detect available CLI
+./scripts/ai-with-context.sh "task description"
+
+# Force a specific CLI
+./scripts/ai-with-context.sh --tool claude "task description"
+./scripts/ai-with-context.sh --tool codex "task description"
 ```
 
 ### Examples
 
 ```bash
 # Add a new feature
-./scripts/claude-with-context.sh "add OAuth2 support to authentication"
+./scripts/ai-with-context.sh "add OAuth2 support to authentication"
 
 # Refactor existing code
-./scripts/claude-with-context.sh "refactor StoryContext to support multi-region storage"
+./scripts/ai-with-context.sh "refactor StoryContext to support multi-region storage"
 
 # Add tests
-./scripts/claude-with-context.sh "add integration tests for DeploymentAgentService"
+./scripts/ai-with-context.sh "add integration tests for DeploymentAgentService"
 
-# Fix a bug
-./scripts/claude-with-context.sh "fix race condition in concurrent state file access"
+# Fix a bug (using a specific CLI)
+./scripts/ai-with-context.sh --tool codex "fix race condition in concurrent state file access"
 ```
 
 ### What It Does
 
 1. Validates `.agent/` folder exists
-2. Checks Claude Code CLI is installed
+2. Auto-detects installed AI CLIs (Claude Code and/or OpenAI Codex)
 3. Loads context files automatically:
    - `.agent/CONTEXT_INDEX.md` — master overview (always loaded)
    - `.agent/CODING_STANDARDS.md` — conventions and patterns (always loaded)
@@ -39,20 +44,33 @@ Wrapper for Claude Code CLI that automatically includes `.agent/` documentation 
    - `.agent/COMMON_PATTERNS.md` — how-to patterns (if present)
    - `.agent/FEATURES/*.md` — all feature documentation (if present)
 4. Builds a structured prompt with your task + loaded context
-5. Calls Claude Code CLI with the complete prompt
+5. Calls the detected (or specified) CLI with the complete prompt
 
 ### Prerequisites
 
-- **Claude Code CLI** installed and in PATH
+- **At least one AI CLI** installed and in PATH:
   ```bash
+  # Claude Code CLI
   npm install -g @anthropic-ai/claude-code
+
+  # OpenAI Codex CLI
+  npm install -g @openai/codex
   ```
 - **`.agent/` folder populated** — run CodebaseDocumentationAgent first via the dashboard, or create manually
 - Run from the **repository root** (where `.agent/` folder is located)
 
+### CLI Selection
+
+| Scenario | Behavior |
+|----------|----------|
+| `--tool claude` | Uses Claude Code CLI (error if not installed) |
+| `--tool codex` | Uses OpenAI Codex CLI (error if not installed) |
+| No `--tool` flag | Auto-detects: prefers Claude Code if both are installed |
+| Neither installed | Prints prompt for copy/paste into any AI tool |
+
 ### Fallback Mode
 
-If Claude Code CLI is not installed, the script prints the generated prompt so you can copy/paste it into any AI tool (Cursor, GitHub Copilot Chat, ChatGPT, etc.).
+If no AI CLI is installed, the script prints the generated prompt so you can copy/paste it into any AI tool (Cursor, GitHub Copilot Chat, ChatGPT, etc.).
 
 ### Why Use This
 
