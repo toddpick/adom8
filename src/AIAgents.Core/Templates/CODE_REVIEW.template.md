@@ -12,7 +12,7 @@
 ## Security Analysis
 
 ### Critical Issues ({{ CRITICAL_COUNT }})
-{{ if CRITICAL_ISSUES && CRITICAL_ISSUES | array.size > 0 }}
+{{ if CRITICAL_ISSUES && (CRITICAL_ISSUES | array.size) > 0 }}
 {{ for issue in CRITICAL_ISSUES }}
 - **Line {{ issue.LINE }}**: {{ issue.ISSUE }}
   - **Fix:** {{ issue.FIX }}
@@ -28,7 +28,7 @@
 {{ end }}
 
 ### High Priority ({{ HIGH_COUNT }})
-{{ if HIGH_ISSUES && HIGH_ISSUES | array.size > 0 }}
+{{ if HIGH_ISSUES && (HIGH_ISSUES | array.size) > 0 }}
 {{ for issue in HIGH_ISSUES }}
 - **Line {{ issue.LINE }}**: {{ issue.ISSUE }}
   - **Fix:** {{ issue.FIX }}
@@ -42,7 +42,7 @@
 ## Code Quality
 
 ### Medium Priority ({{ MEDIUM_COUNT }})
-{{ if MEDIUM_ISSUES && MEDIUM_ISSUES | array.size > 0 }}
+{{ if MEDIUM_ISSUES && (MEDIUM_ISSUES | array.size) > 0 }}
 {{ for issue in MEDIUM_ISSUES }}
 - {{ issue.ISSUE }}
 {{ end }}
@@ -51,7 +51,7 @@
 {{ end }}
 
 ### Low Priority ({{ LOW_COUNT }})
-{{ if LOW_ISSUES && LOW_ISSUES | array.size > 0 }}
+{{ if LOW_ISSUES && (LOW_ISSUES | array.size) > 0 }}
 {{ for issue in LOW_ISSUES }}
 - {{ issue.ISSUE }}
 {{ end }}

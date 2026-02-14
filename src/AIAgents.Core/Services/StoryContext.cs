@@ -48,7 +48,22 @@ public sealed class StoryContext : IStoryContext
         }
 
         var json = await File.ReadAllTextAsync(stateFile, cancellationToken);
-        var state = JsonSerializer.Deserialize<StoryState>(json, s_jsonOptions);
+        StoryState? state;
+        try
+        {
+            state = JsonSerializer.Deserialize<StoryState>(json, s_jsonOptions);
+        }
+        catch (JsonException ex)
+        {
+            _logger.LogWarning(ex, "Corrupted state file for US-{WorkItemId}, resetting to default", WorkItemId);
+            var defaultState = new StoryState
+            {
+                WorkItemId = WorkItemId,
+                CurrentState = "New"
+            };
+            await SaveStateAsync(defaultState, cancellationToken);
+            return defaultState;
+        }
 
         if (state is null)
         {

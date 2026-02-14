@@ -60,6 +60,9 @@ var host = new HostBuilder()
         // Activity logging
         services.AddSingleton<IActivityLogger, TableStorageActivityLogger>();
 
+        // Agent task queue — abstracts Azure Storage Queue for testability
+        services.AddSingleton<IAgentTaskQueue, AgentTaskQueue>();
+
         // Codebase context provider (loads .agent/ docs for AI prompts)
         services.AddSingleton<ICodebaseContextProvider, CodebaseContextLoader>();
 

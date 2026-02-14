@@ -3,8 +3,6 @@ using AIAgents.Core.Interfaces;
 using AIAgents.Core.Models;
 using AIAgents.Functions.Models;
 using AIAgents.Functions.Services;
-using Azure.Storage.Queues;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 
 namespace AIAgents.Functions.Agents;
@@ -23,7 +21,7 @@ public sealed class PlanningAgentService : IAgentService
     private readonly ITemplateEngine _templateEngine;
     private readonly ICodebaseContextProvider _codebaseContext;
     private readonly ILogger<PlanningAgentService> _logger;
-    private readonly string _storageConnectionString;
+    private readonly IAgentTaskQueue _taskQueue;
 
     public PlanningAgentService(
         IAIClientFactory aiClientFactory,
@@ -33,7 +31,7 @@ public sealed class PlanningAgentService : IAgentService
         ITemplateEngine templateEngine,
         ICodebaseContextProvider codebaseContext,
         ILogger<PlanningAgentService> logger,
-        IConfiguration configuration)
+        IAgentTaskQueue taskQueue)
     {
         _aiClient = aiClientFactory.GetClientForAgent("Planning");
         _adoClient = adoClient;
@@ -42,7 +40,7 @@ public sealed class PlanningAgentService : IAgentService
         _templateEngine = templateEngine;
         _codebaseContext = codebaseContext;
         _logger = logger;
-        _storageConnectionString = configuration["AzureWebJobsStorage"]!;
+        _taskQueue = taskQueue;
     }
 
     public async Task ExecuteAsync(AgentTask task, CancellationToken cancellationToken = default)
@@ -173,10 +171,7 @@ Analyze this story and create a comprehensive implementation plan.";
             AgentType = AgentType.Coding,
             CorrelationId = task.CorrelationId
         };
-        var queueClient = new QueueClient(_storageConnectionString, "agent-tasks");
-        var messageJson = JsonSerializer.Serialize(nextTask);
-        var base64 = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(messageJson));
-        await queueClient.SendMessageAsync(base64, cancellationToken);
+        await _taskQueue.EnqueueAsync(nextTask, cancellationToken);
 
         _logger.LogInformation("Planning agent completed for WI-{WorkItemId}, enqueued Coding agent", task.WorkItemId);
     }

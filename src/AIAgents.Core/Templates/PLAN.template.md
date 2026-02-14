@@ -44,7 +44,7 @@
 {{ end }}
 
 ### Dependencies
-{{ if DEPENDENCIES && DEPENDENCIES | array.size > 0 }}
+{{ if DEPENDENCIES && (DEPENDENCIES | array.size) > 0 }}
 {{ for dep in DEPENDENCIES }}
 - {{ dep }}
 {{ end }}

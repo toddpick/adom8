@@ -3,8 +3,6 @@ using AIAgents.Core.Interfaces;
 using AIAgents.Core.Models;
 using AIAgents.Functions.Models;
 using AIAgents.Functions.Services;
-using Azure.Storage.Queues;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 
 namespace AIAgents.Functions.Agents;
@@ -24,7 +22,7 @@ public sealed class DocumentationAgentService : IAgentService
     private readonly ITemplateEngine _templateEngine;
     private readonly ICodebaseContextProvider _codebaseContext;
     private readonly ILogger<DocumentationAgentService> _logger;
-    private readonly string _storageConnectionString;
+    private readonly IAgentTaskQueue _taskQueue;
 
     public DocumentationAgentService(
         IAIClientFactory aiClientFactory,
@@ -35,7 +33,7 @@ public sealed class DocumentationAgentService : IAgentService
         ITemplateEngine templateEngine,
         ICodebaseContextProvider codebaseContext,
         ILogger<DocumentationAgentService> logger,
-        IConfiguration configuration)
+        IAgentTaskQueue taskQueue)
     {
         _aiClient = aiClientFactory.GetClientForAgent("Documentation");
         _adoClient = adoClient;
@@ -45,7 +43,7 @@ public sealed class DocumentationAgentService : IAgentService
         _templateEngine = templateEngine;
         _codebaseContext = codebaseContext;
         _logger = logger;
-        _storageConnectionString = configuration["AzureWebJobsStorage"]!;
+        _taskQueue = taskQueue;
     }
 
     public async Task ExecuteAsync(AgentTask task, CancellationToken cancellationToken = default)
@@ -185,10 +183,7 @@ Generate comprehensive documentation for these changes.";
             AgentType = AgentType.Deployment,
             CorrelationId = task.CorrelationId
         };
-        var queueClient = new QueueClient(_storageConnectionString, "agent-tasks");
-        var messageJson = JsonSerializer.Serialize(nextTask);
-        var base64 = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(messageJson));
-        await queueClient.SendMessageAsync(base64, cancellationToken);
+        await _taskQueue.EnqueueAsync(nextTask, cancellationToken);
 
         _logger.LogInformation(
             "Documentation agent completed for WI-{WorkItemId}. PR #{PrId} created. Enqueued Deployment agent.",

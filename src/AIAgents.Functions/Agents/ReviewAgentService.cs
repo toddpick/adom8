@@ -3,8 +3,6 @@ using AIAgents.Core.Interfaces;
 using AIAgents.Core.Models;
 using AIAgents.Functions.Models;
 using AIAgents.Functions.Services;
-using Azure.Storage.Queues;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 
 namespace AIAgents.Functions.Agents;
@@ -23,7 +21,7 @@ public sealed class ReviewAgentService : IAgentService
     private readonly ITemplateEngine _templateEngine;
     private readonly ICodebaseContextProvider _codebaseContext;
     private readonly ILogger<ReviewAgentService> _logger;
-    private readonly string _storageConnectionString;
+    private readonly IAgentTaskQueue _taskQueue;
 
     public ReviewAgentService(
         IAIClientFactory aiClientFactory,
@@ -33,7 +31,7 @@ public sealed class ReviewAgentService : IAgentService
         ITemplateEngine templateEngine,
         ICodebaseContextProvider codebaseContext,
         ILogger<ReviewAgentService> logger,
-        IConfiguration configuration)
+        IAgentTaskQueue taskQueue)
     {
         _aiClient = aiClientFactory.GetClientForAgent("Review");
         _adoClient = adoClient;
@@ -42,7 +40,7 @@ public sealed class ReviewAgentService : IAgentService
         _templateEngine = templateEngine;
         _codebaseContext = codebaseContext;
         _logger = logger;
-        _storageConnectionString = configuration["AzureWebJobsStorage"]!;
+        _taskQueue = taskQueue;
     }
 
     public async Task ExecuteAsync(AgentTask task, CancellationToken cancellationToken = default)
@@ -170,10 +168,7 @@ Perform a comprehensive code review.";
             AgentType = AgentType.Documentation,
             CorrelationId = task.CorrelationId
         };
-        var queueClient = new QueueClient(_storageConnectionString, "agent-tasks");
-        var messageJson = JsonSerializer.Serialize(nextTask);
-        var base64 = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(messageJson));
-        await queueClient.SendMessageAsync(base64, cancellationToken);
+        await _taskQueue.EnqueueAsync(nextTask, cancellationToken);
 
         _logger.LogInformation("Review agent completed for WI-{WorkItemId}, enqueued Documentation agent", task.WorkItemId);
     }

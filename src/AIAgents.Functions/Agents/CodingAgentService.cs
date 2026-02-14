@@ -3,8 +3,6 @@ using AIAgents.Core.Interfaces;
 using AIAgents.Core.Models;
 using AIAgents.Functions.Models;
 using AIAgents.Functions.Services;
-using Azure.Storage.Queues;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 
 namespace AIAgents.Functions.Agents;
@@ -22,7 +20,7 @@ public sealed class CodingAgentService : IAgentService
     private readonly IStoryContextFactory _contextFactory;
     private readonly ICodebaseContextProvider _codebaseContext;
     private readonly ILogger<CodingAgentService> _logger;
-    private readonly string _storageConnectionString;
+    private readonly IAgentTaskQueue _taskQueue;
 
     public CodingAgentService(
         IAIClientFactory aiClientFactory,
@@ -31,7 +29,7 @@ public sealed class CodingAgentService : IAgentService
         IStoryContextFactory contextFactory,
         ICodebaseContextProvider codebaseContext,
         ILogger<CodingAgentService> logger,
-        IConfiguration configuration)
+        IAgentTaskQueue taskQueue)
     {
         _aiClient = aiClientFactory.GetClientForAgent("Coding");
         _adoClient = adoClient;
@@ -39,7 +37,7 @@ public sealed class CodingAgentService : IAgentService
         _contextFactory = contextFactory;
         _codebaseContext = codebaseContext;
         _logger = logger;
-        _storageConnectionString = configuration["AzureWebJobsStorage"]!;
+        _taskQueue = taskQueue;
     }
 
     public async Task ExecuteAsync(AgentTask task, CancellationToken cancellationToken = default)
@@ -134,10 +132,7 @@ Generate all necessary code files for this story.";
             AgentType = AgentType.Testing,
             CorrelationId = task.CorrelationId
         };
-        var queueClient = new QueueClient(_storageConnectionString, "agent-tasks");
-        var messageJson = JsonSerializer.Serialize(nextTask);
-        var base64 = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(messageJson));
-        await queueClient.SendMessageAsync(base64, cancellationToken);
+        await _taskQueue.EnqueueAsync(nextTask, cancellationToken);
 
         _logger.LogInformation("Coding agent completed for WI-{WorkItemId}, enqueued Testing agent", task.WorkItemId);
     }
