@@ -109,6 +109,7 @@ Azure DevOps doesn't let you modify built-in processes directly. You need to cre
 | `AI Deployment` | In Progress | ⚫ Gray | AI Deployment Agent is evaluating merge/deploy |
 | `Code Review` | In Progress | 🟢 Green | Waiting for human code review (Autonomy Level 3) |
 | `Needs Revision` | In Progress | 🔴 Red | Review score too low — human intervention required |
+| `Agent Failed` | In Progress | 🔴 Dark Red | Agent exhausted retries or hit a permanent error |
 | `Ready for QA` | Resolved | 🟢 Green | All AI agents done — ready for QA testing |
 | `Ready for Deployment` | Resolved | 🟢 Green | PR merged — ready for deployment |
 | `Deployed` | Completed | ✅ Green | Merged + deployed (Autonomy Level 5) |
@@ -125,10 +126,12 @@ Azure DevOps doesn't let you modify built-in processes directly. You need to cre
 4. Add columns matching the pipeline flow. Suggested layout:
 
 ```
-New → Story Planning → AI Code → AI Test → AI Review → AI Docs → AI Deployment → Code Review → Ready for QA → Ready for Deployment → Deployed → Closed
+New → Story Planning → AI Code → AI Test → AI Review → AI Docs → AI Deployment → Code Review → Needs Revision → Agent Failed → Ready for QA → Ready for Deployment → Deployed
 ```
 
 Map each column to its matching state. This gives you a visual Kanban board showing stories flowing through the AI pipeline.
+
+> **Note:** You don't need to add a "Closed" column — Azure DevOps automatically includes a rightmost column for the **Completed** category (which contains "Deployed" and the default "Closed" state). Stories in "Deployed" will appear in that final column. The default "Closed" state can be used to archive stories that are fully done.
 
 ### 3e. Add Custom Fields (Autonomy Levels)
 
