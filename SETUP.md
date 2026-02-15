@@ -138,12 +138,23 @@ Map each column to its matching state. This gives you a visual Kanban board show
 Still in **Organization Settings → Process → User Story**:
 
 1. Click the **Layout** tab
-2. Click **+ New field** and add these two fields:
+2. Click **+ New field** to add the first field:
+   - **Name:** `AI Autonomy Level`
+   - **Type:** Integer
+   - **Default:** `3`
+   - **Description:** Controls how far the AI pipeline goes automatically
+   - **Group:** Select **"Create new group"** → name it **AI Agent Settings**
+   - **Page:** Details
 
-| Field Name | Reference Name | Type | Default | Description |
-|------------|---------------|------|---------|-------------|
-| AI Autonomy Level | `Custom.AIAutonomyLevel` | Integer | `3` | Controls how far the AI pipeline goes automatically |
-| AI Minimum Review Score | `Custom.AIMinimumReviewScore` | Integer | `85` | Min score (0–100) for auto-merge at Levels 4–5 |
+3. Click **+ New field** again for the second field:
+   - **Name:** `AI Minimum Review Score`
+   - **Type:** Integer
+   - **Default:** `85`
+   - **Description:** Min score (0–100) for auto-merge at Levels 4–5
+   - **Group:** Select **AI Agent Settings** (the group you just created)
+   - **Page:** Details
+
+> **Note:** ADO auto-generates the reference names (`Custom.AIAutonomyLevel` and `Custom.AIMinimumReviewScore`) from the field names. You won't see a separate input for this — it happens automatically.
 
 **Autonomy Level reference:**
 
