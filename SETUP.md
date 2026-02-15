@@ -201,47 +201,73 @@ The AI pipeline uses **20 custom fields** organized into three groups: **Input F
 
 These fields let users override which AI model each agent uses on a per-story basis. Leave them blank to use the system defaults. Most users won't touch these — they exist for stories that need heavier (or lighter) models than the default.
 
+> **Important:** All fields in this group use **Picklist (string)** type, not plain String. This prevents typos and ensures users pick valid model identifiers.
+
 4. Click **+ New field**:
    - **Name:** `AI Model Tier`
-   - **Type:** String
-   - **Description:** Quick preset: "Standard", "Premium", or "Economy". Maps to pre-configured model sets.
+   - **Type:** Picklist (string)
+   - **Items:** `Standard`, `Premium`, `Economy`
+   - **Description:** Quick preset that switches all agents to a pre-configured model set
    - **Group:** Select **"Create new group"** → name it **AI Model Settings**
    - **Page:** Details
 
 5. Click **+ New field**:
    - **Name:** `AI Planning Model`
-   - **Type:** String
-   - **Description:** Override model for the Planning agent (e.g., "claude-opus-4-20250514")
+   - **Type:** Picklist (string)
+   - **Items:** *(use the model picklist below)*
+   - **Description:** Override model for the Planning agent
    - **Group:** Select **AI Model Settings**
    - **Page:** Details
 
 6. Click **+ New field**:
    - **Name:** `AI Coding Model`
-   - **Type:** String
-   - **Description:** Override model for the Coding agent (e.g., "codex-mini-latest")
+   - **Type:** Picklist (string)
+   - **Items:** *(use the model picklist below)*
+   - **Description:** Override model for the Coding agent
    - **Group:** Select **AI Model Settings**
    - **Page:** Details
 
 7. Click **+ New field**:
    - **Name:** `AI Testing Model`
-   - **Type:** String
-   - **Description:** Override model for the Testing agent (e.g., "gpt-4o-mini")
+   - **Type:** Picklist (string)
+   - **Items:** *(use the model picklist below)*
+   - **Description:** Override model for the Testing agent
    - **Group:** Select **AI Model Settings**
    - **Page:** Details
 
 8. Click **+ New field**:
    - **Name:** `AI Review Model`
-   - **Type:** String
-   - **Description:** Override model for the Review agent (e.g., "gpt-4o")
+   - **Type:** Picklist (string)
+   - **Items:** *(use the model picklist below)*
+   - **Description:** Override model for the Review agent
    - **Group:** Select **AI Model Settings**
    - **Page:** Details
 
 9. Click **+ New field**:
    - **Name:** `AI Documentation Model`
-   - **Type:** String
-   - **Description:** Override model for the Documentation agent (e.g., "gemini-2.0-flash")
+   - **Type:** Picklist (string)
+   - **Items:** *(use the model picklist below)*
+   - **Description:** Override model for the Documentation agent
    - **Group:** Select **AI Model Settings**
    - **Page:** Details
+
+**Model Picklist Values** — Add these items to each of the 5 per-agent model fields:
+
+| Picklist Value | Provider | Tier | Best For |
+|---|---|---|---|
+| `claude-opus-4-20250514` | Claude | Premium | Complex architecture, difficult refactors |
+| `claude-sonnet-4.5-20250514` | Claude | Premium | Latest Sonnet, strong reasoning + code |
+| `claude-sonnet-4-20250514` | Claude | Standard | Great all-rounder, default recommendation |
+| `claude-haiku-4.5` | Claude | Economy | Fast & cheap, formulaic tasks |
+| `gpt-5.1-codex` | OpenAI | Premium | Code-specialized, large context |
+| `gpt-5.1-codex-mini` | OpenAI | Economy | Code-specialized, budget-friendly |
+| `gpt-4.1` | OpenAI | Standard | Strong reasoning + code generation |
+| `gpt-4o` | OpenAI | Standard | Fast, versatile, good code review |
+| `gpt-5-mini` | OpenAI | Economy | Cheap, handles structured tasks well |
+| `gemini-2.5-pro` | Google | Standard | Long context, good analysis |
+| `gemini-3-flash` | Google | Economy | Fastest, cheapest, great for docs |
+
+> **Tip:** You don't need to add every model — just the ones relevant to the providers you have API keys for. You can always add more later in **Organization Settings → Process → Fields → AI Planning Model → Edit picklist**.
 
 #### Output Fields — "AI Tracking" Group
 
