@@ -25,6 +25,31 @@ public static class CustomFieldNames
     /// </summary>
     public const string MinimumReviewScore = "Custom.AIMinimumReviewScore";
 
+    // ── Per-Story Model Override Fields ─────────────────────────────
+    // These fields let users override the AI model on a per-story basis.
+    // When blank, the system falls back to config-level defaults.
+
+    /// <summary>
+    /// Model tier preset: "Standard", "Premium", or "Economy".
+    /// Maps to pre-configured model sets defined in AI:ModelTiers config.
+    /// </summary>
+    public const string ModelTier = "Custom.AIModelTier";
+
+    /// <summary>Override model for the Planning agent (e.g., "claude-opus-4-20250514").</summary>
+    public const string PlanningModel = "Custom.AIPlanningModel";
+
+    /// <summary>Override model for the Coding agent (e.g., "codex-mini-latest").</summary>
+    public const string CodingModel = "Custom.AICodingModel";
+
+    /// <summary>Override model for the Testing agent (e.g., "gpt-4o-mini").</summary>
+    public const string TestingModel = "Custom.AITestingModel";
+
+    /// <summary>Override model for the Review agent (e.g., "claude-sonnet-4-20250514").</summary>
+    public const string ReviewModel = "Custom.AIReviewModel";
+
+    /// <summary>Override model for the Documentation agent (e.g., "gemini-2.0-flash").</summary>
+    public const string DocumentationModel = "Custom.AIDocumentationModel";
+
     // ── Output Fields (written by agents during processing) ─────────
 
     /// <summary>
@@ -107,5 +132,13 @@ public static class CustomFieldNames
         public const string LastAgent = "/fields/" + CustomFieldNames.LastAgent;
         public const string CriticalIssues = "/fields/" + CustomFieldNames.CriticalIssues;
         public const string DeploymentDecision = "/fields/" + CustomFieldNames.DeploymentDecision;
+
+        // Per-story model override paths
+        public const string ModelTier = "/fields/" + CustomFieldNames.ModelTier;
+        public const string PlanningModel = "/fields/" + CustomFieldNames.PlanningModel;
+        public const string CodingModel = "/fields/" + CustomFieldNames.CodingModel;
+        public const string TestingModel = "/fields/" + CustomFieldNames.TestingModel;
+        public const string ReviewModel = "/fields/" + CustomFieldNames.ReviewModel;
+        public const string DocumentationModel = "/fields/" + CustomFieldNames.DocumentationModel;
     }
 }

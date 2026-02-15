@@ -30,6 +30,49 @@ public sealed record StoryWorkItem
     /// </summary>
     public int MinimumReviewScore { get; init; } = 85;
 
+    // ── Per-Story Model Override Fields ──────────────────────────────
+
+    /// <summary>Model tier preset: "Standard", "Premium", or "Economy".</summary>
+    public string? AIModelTier { get; init; }
+
+    /// <summary>Override model for the Planning agent.</summary>
+    public string? AIPlanningModel { get; init; }
+
+    /// <summary>Override model for the Coding agent.</summary>
+    public string? AICodingModel { get; init; }
+
+    /// <summary>Override model for the Testing agent.</summary>
+    public string? AITestingModel { get; init; }
+
+    /// <summary>Override model for the Review agent.</summary>
+    public string? AIReviewModel { get; init; }
+
+    /// <summary>Override model for the Documentation agent.</summary>
+    public string? AIDocumentationModel { get; init; }
+
+    /// <summary>
+    /// Builds a <see cref="StoryModelOverrides"/> from this work item's
+    /// per-story model fields. Returns null if no overrides are set.
+    /// </summary>
+    public StoryModelOverrides? GetModelOverrides()
+    {
+        if (AIModelTier is null && AIPlanningModel is null && AICodingModel is null &&
+            AITestingModel is null && AIReviewModel is null && AIDocumentationModel is null)
+        {
+            return null;
+        }
+
+        return new StoryModelOverrides
+        {
+            ModelTier = AIModelTier,
+            PlanningModel = AIPlanningModel,
+            CodingModel = AICodingModel,
+            TestingModel = AITestingModel,
+            ReviewModel = AIReviewModel,
+            DocumentationModel = AIDocumentationModel
+        };
+    }
+
     // ── AI Output Fields (written by agents, read back for display) ─────
 
     /// <summary>Total tokens consumed across all agents.</summary>

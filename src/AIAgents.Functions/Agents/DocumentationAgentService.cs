@@ -16,7 +16,7 @@ namespace AIAgents.Functions.Agents;
 /// </summary>
 public sealed class DocumentationAgentService : IAgentService
 {
-    private readonly IAIClient _aiClient;
+    private readonly IAIClientFactory _aiClientFactory;
     private readonly IAzureDevOpsClient _adoClient;
     private readonly IRepositoryProvider _repoProvider;
     private readonly IGitOperations _gitOps;
@@ -37,7 +37,7 @@ public sealed class DocumentationAgentService : IAgentService
         ILogger<DocumentationAgentService> logger,
         IAgentTaskQueue taskQueue)
     {
-        _aiClient = aiClientFactory.GetClientForAgent("Documentation");
+        _aiClientFactory = aiClientFactory;
         _adoClient = adoClient;
         _repoProvider = repoProvider;
         _gitOps = gitOps;
@@ -55,6 +55,7 @@ public sealed class DocumentationAgentService : IAgentService
         _logger.LogInformation("Documentation agent starting for WI-{WorkItemId}", task.WorkItemId);
 
         var workItem = await _adoClient.GetWorkItemAsync(task.WorkItemId, cancellationToken);
+        var aiClient = _aiClientFactory.GetClientForAgent("Documentation", workItem.GetModelOverrides());
         var branchName = $"feature/US-{task.WorkItemId}";
         var repoPath = await _gitOps.EnsureBranchAsync(branchName, cancellationToken);
 
@@ -109,7 +110,7 @@ Respond ONLY with valid JSON:
 
 Generate comprehensive documentation for these changes.";
 
-        var aiResult = await _aiClient.CompleteAsync(systemPrompt, userPrompt,
+        var aiResult = await aiClient.CompleteAsync(systemPrompt, userPrompt,
             new AICompletionOptions { MaxTokens = 4096, Temperature = 0.3 }, cancellationToken);
         state.TokenUsage.RecordUsage("Documentation", aiResult.Usage);
 

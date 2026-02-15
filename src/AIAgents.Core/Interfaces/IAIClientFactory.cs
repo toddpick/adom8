@@ -1,3 +1,5 @@
+using AIAgents.Core.Models;
+
 namespace AIAgents.Core.Interfaces;
 
 /// <summary>
@@ -17,5 +19,10 @@ public interface IAIClientFactory
     /// The agent name, matching the keyed DI key
     /// (e.g., "Planning", "Coding", "Testing", "Review", "Documentation").
     /// </param>
-    IAIClient GetClientForAgent(string agentName);
+    /// <param name="storyOverrides">
+    /// Optional per-story model overrides from a work item's custom fields.
+    /// When provided, these take priority over config-level defaults.
+    /// Resolution order: story per-agent field → story tier → config per-agent → global default.
+    /// </param>
+    IAIClient GetClientForAgent(string agentName, StoryModelOverrides? storyOverrides = null);
 }

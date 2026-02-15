@@ -16,7 +16,7 @@ namespace AIAgents.Functions.Agents;
 /// </summary>
 public sealed class TestingAgentService : IAgentService
 {
-    private readonly IAIClient _aiClient;
+    private readonly IAIClientFactory _aiClientFactory;
     private readonly IAzureDevOpsClient _adoClient;
     private readonly IGitOperations _gitOps;
     private readonly IStoryContextFactory _contextFactory;
@@ -35,7 +35,7 @@ public sealed class TestingAgentService : IAgentService
         ILogger<TestingAgentService> logger,
         IAgentTaskQueue taskQueue)
     {
-        _aiClient = aiClientFactory.GetClientForAgent("Testing");
+        _aiClientFactory = aiClientFactory;
         _adoClient = adoClient;
         _gitOps = gitOps;
         _contextFactory = contextFactory;
@@ -52,6 +52,7 @@ public sealed class TestingAgentService : IAgentService
         _logger.LogInformation("Testing agent starting for WI-{WorkItemId}", task.WorkItemId);
 
         var workItem = await _adoClient.GetWorkItemAsync(task.WorkItemId, cancellationToken);
+        var aiClient = _aiClientFactory.GetClientForAgent("Testing", workItem.GetModelOverrides());
         var branchName = $"feature/US-{task.WorkItemId}";
         var repoPath = await _gitOps.EnsureBranchAsync(branchName, cancellationToken);
 
@@ -116,7 +117,7 @@ Use xUnit and Moq for .NET test projects. Include edge cases and error scenarios
 
 Generate comprehensive tests for this implementation.";
 
-        var aiResult = await _aiClient.CompleteAsync(systemPrompt, userPrompt,
+        var aiResult = await aiClient.CompleteAsync(systemPrompt, userPrompt,
             new AICompletionOptions { MaxTokens = 8192, Temperature = 0.2 }, cancellationToken);
         state.TokenUsage.RecordUsage("Testing", aiResult.Usage);
 

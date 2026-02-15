@@ -51,4 +51,19 @@ public sealed class AIOptions
     ///   "AI:AgentModels:Documentation:Endpoint": "https://openrouter.ai/api"
     /// </example>
     public Dictionary<string, AgentAIProfile>? AgentModels { get; init; }
+
+    /// <summary>
+    /// Optional model tier presets. Keys are tier names ("Standard", "Premium", "Economy").
+    /// Values are dictionaries mapping agent names to their AI profiles for that tier.
+    /// Users select a tier on the work item, and all agents in that tier use the
+    /// configured model/provider/endpoint.
+    /// </summary>
+    /// <example>
+    /// Use Opus for Planning+Coding in Premium tier:
+    ///   "AI:ModelTiers:Premium:Planning:Model": "claude-opus-4-20250514"
+    ///   "AI:ModelTiers:Premium:Coding:Model": "claude-opus-4-20250514"
+    ///   "AI:ModelTiers:Economy:Testing:Model": "gpt-4o-mini"
+    ///   "AI:ModelTiers:Economy:Documentation:Model": "gemini-2.0-flash"
+    /// </example>
+    public Dictionary<string, Dictionary<string, AgentAIProfile>>? ModelTiers { get; init; }
 }

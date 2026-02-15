@@ -385,11 +385,14 @@ customEvents
 
 3. **Use cheaper models for non-critical agents:**
    ```json
-   "AI__AgentModels__Testing": "claude-haiku-3",
-   "AI__AgentModels__Documentation": "claude-haiku-3"
+   "AI__AgentModels__Testing__Model": "gpt-4o-mini",
+   "AI__AgentModels__Documentation__Model": "gemini-2.0-flash"
    ```
 
-4. **Lower autonomy level** to avoid auto-processing:
+4. **Set per-story model overrides for costly stories:**
+   Set `AI Model Tier = "Economy"` on low-priority stories to use cheaper models across the board, or set individual agent model fields (e.g., `AI Coding Model = "gpt-4o-mini"`) for granular control.
+
+5. **Lower autonomy level** to avoid auto-processing:
    Set stories to Autonomy Level 1 (Plan Only) or 2 (Code + Review)
 
 ---

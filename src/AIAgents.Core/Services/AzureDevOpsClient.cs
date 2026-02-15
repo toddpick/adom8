@@ -168,6 +168,14 @@ public sealed class AzureDevOpsClient : IAzureDevOpsClient, IDisposable
             MinimumReviewScore = GetField<double?>(fields, CustomFieldNames.MinimumReviewScore) is double mrs
                 ? (int)mrs : 85,
 
+            // Per-Story Model Override Fields
+            AIModelTier = GetField<string>(fields, CustomFieldNames.ModelTier),
+            AIPlanningModel = GetField<string>(fields, CustomFieldNames.PlanningModel),
+            AICodingModel = GetField<string>(fields, CustomFieldNames.CodingModel),
+            AITestingModel = GetField<string>(fields, CustomFieldNames.TestingModel),
+            AIReviewModel = GetField<string>(fields, CustomFieldNames.ReviewModel),
+            AIDocumentationModel = GetField<string>(fields, CustomFieldNames.DocumentationModel),
+
             // AI Output Fields (written by agents, readable for dashboards/queries)
             AITokensUsed = GetField<double?>(fields, CustomFieldNames.TokensUsed) is double tu
                 ? (int)tu : null,

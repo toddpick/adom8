@@ -40,7 +40,7 @@ public sealed class PlanningAgentServiceTests
         _codebaseMock = new Mock<ICodebaseContextProvider>();
         _taskQueueMock = new Mock<IAgentTaskQueue>();
 
-        _aiFactoryMock.Setup(f => f.GetClientForAgent("Planning")).Returns(_aiClientMock.Object);
+        _aiFactoryMock.Setup(f => f.GetClientForAgent("Planning", It.IsAny<StoryModelOverrides?>())).Returns(_aiClientMock.Object);
         _contextFactoryMock.Setup(f => f.Create(It.IsAny<int>(), It.IsAny<string>())).Returns(_contextMock.Object);
     }
 

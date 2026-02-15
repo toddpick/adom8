@@ -176,7 +176,7 @@ Map each column to its matching state. This gives you a visual Kanban board show
 
 Still in **Organization Settings → Process → User Story**:
 
-The AI pipeline uses **14 custom fields** organized into two groups: **Input Fields** (you set per-story) and **AI Tracking** (written automatically by agents).
+The AI pipeline uses **20 custom fields** organized into three groups: **Input Fields** (you set per-story), **Model Override Fields** (optional per-story AI model control), and **AI Tracking** (written automatically by agents).
 
 #### Input Fields — "AI Agent Settings" Group
 
@@ -197,88 +197,134 @@ The AI pipeline uses **14 custom fields** organized into two groups: **Input Fie
    - **Group:** Select **AI Agent Settings**
    - **Page:** Details
 
+#### Per-Story Model Override Fields — "AI Model Settings" Group
+
+These fields let users override which AI model each agent uses on a per-story basis. Leave them blank to use the system defaults. Most users won't touch these — they exist for stories that need heavier (or lighter) models than the default.
+
+4. Click **+ New field**:
+   - **Name:** `AI Model Tier`
+   - **Type:** String
+   - **Description:** Quick preset: "Standard", "Premium", or "Economy". Maps to pre-configured model sets.
+   - **Group:** Select **"Create new group"** → name it **AI Model Settings**
+   - **Page:** Details
+
+5. Click **+ New field**:
+   - **Name:** `AI Planning Model`
+   - **Type:** String
+   - **Description:** Override model for the Planning agent (e.g., "claude-opus-4-20250514")
+   - **Group:** Select **AI Model Settings**
+   - **Page:** Details
+
+6. Click **+ New field**:
+   - **Name:** `AI Coding Model`
+   - **Type:** String
+   - **Description:** Override model for the Coding agent (e.g., "codex-mini-latest")
+   - **Group:** Select **AI Model Settings**
+   - **Page:** Details
+
+7. Click **+ New field**:
+   - **Name:** `AI Testing Model`
+   - **Type:** String
+   - **Description:** Override model for the Testing agent (e.g., "gpt-4o-mini")
+   - **Group:** Select **AI Model Settings**
+   - **Page:** Details
+
+8. Click **+ New field**:
+   - **Name:** `AI Review Model`
+   - **Type:** String
+   - **Description:** Override model for the Review agent (e.g., "gpt-4o")
+   - **Group:** Select **AI Model Settings**
+   - **Page:** Details
+
+9. Click **+ New field**:
+   - **Name:** `AI Documentation Model`
+   - **Type:** String
+   - **Description:** Override model for the Documentation agent (e.g., "gemini-2.0-flash")
+   - **Group:** Select **AI Model Settings**
+   - **Page:** Details
+
 #### Output Fields — "AI Tracking" Group
 
 These fields are written automatically by the agents during processing. They show up on every user story so you can see exactly what the AI did.
 
-4. Click **+ New field**:
+10. Click **+ New field**:
    - **Name:** `AI Tokens Used`
    - **Type:** Integer
    - **Description:** Total tokens consumed across all agents
    - **Group:** Select **"Create new group"** → name it **AI Tracking**
    - **Page:** Details
 
-5. Click **+ New field**:
+11. Click **+ New field**:
    - **Name:** `AI Cost`
    - **Type:** String
    - **Description:** Estimated USD cost (e.g., "$0.1234")
    - **Group:** Select **AI Tracking**
    - **Page:** Details
 
-6. Click **+ New field**:
+12. Click **+ New field**:
    - **Name:** `AI Complexity`
    - **Type:** String
    - **Description:** Complexity classification: XS, S, M, L, XL
    - **Group:** Select **AI Tracking**
    - **Page:** Details
 
-7. Click **+ New field**:
+13. Click **+ New field**:
    - **Name:** `AI Model`
    - **Type:** String
    - **Description:** Per-agent AI model breakdown (e.g., "Planning: gpt-4o, Coding: claude-opus")
    - **Group:** Select **AI Tracking**
    - **Page:** Details
 
-8. Click **+ New field**:
+14. Click **+ New field**:
    - **Name:** `AI Review Score`
    - **Type:** Integer
    - **Description:** Code review score (0–100) from the Review agent
    - **Group:** Select **AI Tracking**
    - **Page:** Details
 
-9. Click **+ New field**:
+15. Click **+ New field**:
    - **Name:** `AI Processing Time`
    - **Type:** Decimal
    - **Description:** Total pipeline processing time in seconds
    - **Group:** Select **AI Tracking**
    - **Page:** Details
 
-10. Click **+ New field**:
+16. Click **+ New field**:
     - **Name:** `AI Files Generated`
     - **Type:** Integer
     - **Description:** Number of source code files generated
     - **Group:** Select **AI Tracking**
     - **Page:** Details
 
-11. Click **+ New field**:
+17. Click **+ New field**:
     - **Name:** `AI Tests Generated`
     - **Type:** Integer
     - **Description:** Number of test cases generated
     - **Group:** Select **AI Tracking**
     - **Page:** Details
 
-12. Click **+ New field**:
+18. Click **+ New field**:
     - **Name:** `AI PR Number`
     - **Type:** Integer
     - **Description:** Pull request number created for this story
     - **Group:** Select **AI Tracking**
     - **Page:** Details
 
-13. Click **+ New field**:
+19. Click **+ New field**:
     - **Name:** `AI Last Agent`
     - **Type:** String
     - **Description:** Last agent that processed this story
     - **Group:** Select **AI Tracking**
     - **Page:** Details
 
-14. Click **+ New field**:
+20. Click **+ New field**:
     - **Name:** `AI Critical Issues`
     - **Type:** Integer
     - **Description:** Critical issues found during code review
     - **Group:** Select **AI Tracking**
     - **Page:** Details
 
-15. Click **+ New field**:
+21. Click **+ New field**:
     - **Name:** `AI Deployment Decision`
     - **Type:** String
     - **Description:** Final deployment action taken (e.g., "Auto-merged", "Assigned for human review")
@@ -293,6 +339,12 @@ These fields are written automatically by the agents during processing. They sho
 |-------|-------|---------------|
 | AI Agent Settings | AI Autonomy Level | 3 |
 | AI Agent Settings | AI Minimum Review Score | 85 |
+| AI Model Settings | AI Model Tier | *(blank = Standard)* |
+| AI Model Settings | AI Planning Model | *(blank = use default)* |
+| AI Model Settings | AI Coding Model | *(blank = use default)* |
+| AI Model Settings | AI Testing Model | *(blank = use default)* |
+| AI Model Settings | AI Review Model | *(blank = use default)* |
+| AI Model Settings | AI Documentation Model | *(blank = use default)* |
 | AI Tracking | AI Tokens Used | 24,500 |
 | AI Tracking | AI Cost | $0.1234 |
 | AI Tracking | AI Complexity | M |
@@ -306,6 +358,17 @@ These fields are written automatically by the agents during processing. They sho
 | AI Tracking | AI Critical Issues | 0 |
 | AI Tracking | AI Deployment Decision | Auto-merged PR #42 |
 
+**Model override resolution order** (most specific wins):
+
+| Priority | Source | Example |
+|----------|--------|---------|
+| 1 (highest) | Per-agent field on story | `AI Coding Model = "claude-opus-4-20250514"` |
+| 2 | Model Tier on story | `AI Model Tier = "Premium"` → looks up tier config |
+| 3 | Config per-agent default | `AI__AgentModels__Coding__Model = "codex-mini-latest"` |
+| 4 (lowest) | Global default | `AI__Model = "claude-sonnet-4-20250514"` |
+
+> **Tip:** 99% of the time, just leave the Model Settings fields blank and the system defaults are used. Set `AI Model Tier = "Premium"` when you have a complex story that needs heavier models. Use the per-agent fields when you want surgical control (e.g., trying Opus on just the Coding agent for one story).
+
 **Autonomy Level reference:**
 
 | Level | Name | Pipeline Stops After |
@@ -316,7 +379,7 @@ These fields are written automatically by the agents during processing. They sho
 | 4 | Auto-Merge | All agents run → auto-merges PR if review score meets threshold |
 | 5 | Full Autonomy | All agents run → auto-merges + triggers deployment pipeline |
 
-> **Tip:** If you skip the AI Tracking fields, the pipeline still works — it just won't display the values on the work item. The agents gracefully handle missing fields. But you MUST add the two AI Agent Settings fields (Autonomy Level and Minimum Review Score) for the pipeline to function correctly.
+> **Tip:** If you skip the AI Tracking fields, the pipeline still works — it just won't display the values on the work item. The agents gracefully handle missing fields. But you MUST add the two AI Agent Settings fields (Autonomy Level and Minimum Review Score) for the pipeline to function correctly. The AI Model Settings fields are entirely optional — skip them if you don't need per-story model control.
 
 ---
 
@@ -495,6 +558,59 @@ az functionapp config appsettings set \
 | `Git__Token` | GitHub PAT with `repo` scope | ADO PAT with `Code: Read & Write` |
 | `GitHub__*` settings | **Required** (Owner, Repo, Token) | Not needed |
 | Level 5 deploy trigger | `GitHub__DeployWorkflow` (e.g., `deploy.yml`) | `Deployment__PipelineId` (numeric) |
+
+### 6c. (Optional) Per-Agent Model Defaults
+
+By default, all agents use the global `AI__Model`. To assign different models to specific agents at the config level:
+
+```bash
+az functionapp config appsettings set \
+  --name <YOUR_FUNCTION_APP_NAME> \
+  --resource-group ai-agents-rg \
+  --settings \
+    "AI__AgentModels__Planning__Model=claude-sonnet-4-20250514" \
+    "AI__AgentModels__Coding__Model=claude-sonnet-4-20250514" \
+    "AI__AgentModels__Testing__Model=gpt-4o-mini" \
+    "AI__AgentModels__Review__Model=gpt-4o" \
+    "AI__AgentModels__Documentation__Model=gemini-2.0-flash"
+```
+
+If an agent needs a different provider/endpoint/key (e.g., Testing uses OpenAI while default is Claude):
+
+```bash
+az functionapp config appsettings set \
+  --name <YOUR_FUNCTION_APP_NAME> \
+  --resource-group ai-agents-rg \
+  --settings \
+    "AI__AgentModels__Testing__Provider=OpenAI" \
+    "AI__AgentModels__Testing__Model=gpt-4o-mini" \
+    "AI__AgentModels__Testing__ApiKey=sk-..." \
+    "AI__AgentModels__Documentation__Provider=OpenAI" \
+    "AI__AgentModels__Documentation__Model=gemini-2.0-flash" \
+    "AI__AgentModels__Documentation__Endpoint=https://generativelanguage.googleapis.com/v1beta/openai" \
+    "AI__AgentModels__Documentation__ApiKey=AIza..."
+```
+
+### 6d. (Optional) Model Tier Presets
+
+Tiers let users pick "Premium" or "Economy" on a user story to switch all agents at once. Configure the tier→model mappings:
+
+```bash
+az functionapp config appsettings set \
+  --name <YOUR_FUNCTION_APP_NAME> \
+  --resource-group ai-agents-rg \
+  --settings \
+    "AI__ModelTiers__Premium__Planning__Model=claude-opus-4-20250514" \
+    "AI__ModelTiers__Premium__Coding__Model=claude-opus-4-20250514" \
+    "AI__ModelTiers__Premium__Review__Model=claude-sonnet-4-20250514" \
+    "AI__ModelTiers__Economy__Testing__Model=gpt-4o-mini" \
+    "AI__ModelTiers__Economy__Documentation__Model=gemini-2.0-flash" \
+    "AI__ModelTiers__Economy__Planning__Model=gpt-4o-mini" \
+    "AI__ModelTiers__Economy__Coding__Model=gpt-4o-mini" \
+    "AI__ModelTiers__Economy__Review__Model=gpt-4o-mini"
+```
+
+> **How it works:** When a user sets `AI Model Tier = "Premium"` on a story, every agent checks the `AI:ModelTiers:Premium:{agentName}` config. Agents not defined in the tier fall back to the config-level per-agent defaults, then to the global default. Per-agent fields on the story (e.g., `AI Coding Model = "codex-mini-latest"`) always take highest priority.
 
 > **Note:** For Level 5 autonomy, GitHub dispatches a `workflow_dispatch` event to the configured GitHub Actions workflow. Azure DevOps triggers an ADO pipeline by ID.
 

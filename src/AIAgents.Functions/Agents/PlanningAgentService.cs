@@ -16,7 +16,7 @@ namespace AIAgents.Functions.Agents;
 /// </summary>
 public sealed class PlanningAgentService : IAgentService
 {
-    private readonly IAIClient _aiClient;
+    private readonly IAIClientFactory _aiClientFactory;
     private readonly IAzureDevOpsClient _adoClient;
     private readonly IGitOperations _gitOps;
     private readonly IStoryContextFactory _contextFactory;
@@ -35,7 +35,7 @@ public sealed class PlanningAgentService : IAgentService
         ILogger<PlanningAgentService> logger,
         IAgentTaskQueue taskQueue)
     {
-        _aiClient = aiClientFactory.GetClientForAgent("Planning");
+        _aiClientFactory = aiClientFactory;
         _adoClient = adoClient;
         _gitOps = gitOps;
         _contextFactory = contextFactory;
@@ -53,6 +53,9 @@ public sealed class PlanningAgentService : IAgentService
 
         // 1. Get the work item details
         var workItem = await _adoClient.GetWorkItemAsync(task.WorkItemId, cancellationToken);
+
+        // 1b. Resolve AI client with per-story model overrides
+        var aiClient = _aiClientFactory.GetClientForAgent("Planning", workItem.GetModelOverrides());
 
         // 2. Ensure branch and get repo path
         var branchName = $"feature/US-{task.WorkItemId}";
@@ -100,7 +103,7 @@ Respond ONLY with valid JSON matching this structure:
 
 Analyze this story and create a comprehensive implementation plan.";
 
-        var aiResult = await _aiClient.CompleteAsync(systemPrompt, userPrompt,
+        var aiResult = await aiClient.CompleteAsync(systemPrompt, userPrompt,
             new AICompletionOptions { Temperature = 0.3 }, cancellationToken);
         state.TokenUsage.RecordUsage("Planning", aiResult.Usage);
 

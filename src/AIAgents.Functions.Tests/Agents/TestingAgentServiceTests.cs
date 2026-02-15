@@ -29,7 +29,7 @@ public sealed class TestingAgentServiceTests
 
     public TestingAgentServiceTests()
     {
-        _aiFactoryMock.Setup(f => f.GetClientForAgent("Testing")).Returns(_aiClientMock.Object);
+        _aiFactoryMock.Setup(f => f.GetClientForAgent("Testing", It.IsAny<StoryModelOverrides?>())).Returns(_aiClientMock.Object);
         _contextFactoryMock.Setup(f => f.Create(It.IsAny<int>(), It.IsAny<string>())).Returns(_contextMock.Object);
     }
 
