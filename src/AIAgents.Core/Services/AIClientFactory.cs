@@ -107,6 +107,33 @@ public sealed class AIClientFactory : IAIClientFactory
             }
         }
 
+        // Step 5: Auto-detect provider from model name and resolve credentials.
+        // This handles the case where a story override sets model="gpt-4o" but
+        // the current provider/key is still Claude — we detect OpenAI and swap.
+        var detectedProvider = DetectProviderFromModel(model);
+        if (detectedProvider is not null && !string.Equals(detectedProvider, provider, StringComparison.OrdinalIgnoreCase))
+        {
+            _logger.LogInformation(
+                "Auto-detected provider '{DetectedProvider}' from model '{Model}' (was '{OldProvider}')",
+                detectedProvider, model, provider);
+
+            provider = detectedProvider;
+
+            // Look up the provider's API key and endpoint from ProviderKeys config
+            if (_defaults.ProviderKeys?.TryGetValue(detectedProvider, out var providerConfig) == true)
+            {
+                apiKey = providerConfig.ApiKey;
+                endpoint = providerConfig.Endpoint ?? endpoint;
+            }
+            else
+            {
+                _logger.LogWarning(
+                    "No ProviderKeys configured for '{Provider}'. Add AI__ProviderKeys__{ProviderSetting}__ApiKey to app settings. " +
+                    "Falling back to current API key which may not work.",
+                    detectedProvider, detectedProvider);
+            }
+        }
+
         return new AIOptions
         {
             Provider = provider,
@@ -116,6 +143,33 @@ public sealed class AIClientFactory : IAIClientFactory
             MaxTokens = maxTokens,
             Temperature = temperature
         };
+    }
+
+    /// <summary>
+    /// Detects the AI provider from the model name prefix.
+    /// Returns null if the model doesn't match any known pattern.
+    /// </summary>
+    internal static string? DetectProviderFromModel(string? model)
+    {
+        if (string.IsNullOrWhiteSpace(model))
+            return null;
+
+        // Claude models: claude-opus-4, claude-sonnet-4, claude-haiku-4.5, etc.
+        if (model.StartsWith("claude-", StringComparison.OrdinalIgnoreCase))
+            return "Claude";
+
+        // OpenAI models: gpt-4o, gpt-5-mini, gpt-5.1-codex, o1-*, o3-*, etc.
+        if (model.StartsWith("gpt-", StringComparison.OrdinalIgnoreCase) ||
+            model.StartsWith("o1-", StringComparison.OrdinalIgnoreCase) ||
+            model.StartsWith("o3-", StringComparison.OrdinalIgnoreCase) ||
+            model.StartsWith("codex-", StringComparison.OrdinalIgnoreCase))
+            return "OpenAI";
+
+        // Google models: gemini-2.5-pro, gemini-3-flash, etc.
+        if (model.StartsWith("gemini-", StringComparison.OrdinalIgnoreCase))
+            return "Google";
+
+        return null;
     }
 
     /// <summary>

@@ -66,4 +66,18 @@ public sealed class AIOptions
     ///   "AI:ModelTiers:Economy:Documentation:Model": "gemini-2.0-flash"
     /// </example>
     public Dictionary<string, Dictionary<string, AgentAIProfile>>? ModelTiers { get; init; }
+
+    /// <summary>
+    /// API keys and endpoints for each AI provider, keyed by provider name.
+    /// Used by the factory to auto-resolve credentials when a model override
+    /// switches to a different provider (e.g., user picks "gpt-4o" on a story
+    /// that defaults to Claude — the factory detects OpenAI and looks up the key here).
+    /// </summary>
+    /// <example>
+    /// Store keys for all providers you want to support:
+    ///   "AI:ProviderKeys:OpenAI:ApiKey": "sk-..."
+    ///   "AI:ProviderKeys:Google:ApiKey": "AIza..."
+    ///   "AI:ProviderKeys:Google:Endpoint": "https://generativelanguage.googleapis.com/v1beta/openai"
+    /// </example>
+    public Dictionary<string, ProviderKeyConfig>? ProviderKeys { get; init; }
 }
