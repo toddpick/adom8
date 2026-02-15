@@ -88,7 +88,7 @@ public sealed class ReviewAgentServiceTests
 
         Assert.NotNull(_capturedState.Agents["Review"].AdditionalData);
         Assert.Equal(85, _capturedState.Agents["Review"].AdditionalData!["score"]);
-        Assert.Equal("Approve", _capturedState.Agents["Review"].AdditionalData["recommendation"]);
+        Assert.Equal("Approve", _capturedState.Agents["Review"].AdditionalData!["recommendation"]);
     }
 
     [Fact]

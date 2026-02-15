@@ -33,6 +33,7 @@ jobs:
         run: dotnet publish ${{ env.AZURE_FUNCTIONAPP_PACKAGE_PATH }}/AIAgents.Functions.csproj --configuration Release --output ./publish
 
       - name: Deploy to Azure Functions
+        if: ${{ secrets.AZURE_FUNCTIONAPP_NAME != '' }}
         uses: azure/functions-action@v1
         with:
           app-name: ${{ secrets.AZURE_FUNCTIONAPP_NAME }}
