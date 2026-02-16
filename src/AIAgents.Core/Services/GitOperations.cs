@@ -60,6 +60,10 @@ public sealed class GitOperations : IGitOperations
             };
             Commands.Fetch(repo, remote.Name, remote.FetchRefSpecs.Select(r => r.Specification), fetchOptions, null);
 
+            // Clean working directory before any branch switch to avoid conflicts
+            repo.Reset(ResetMode.Hard);
+            repo.RemoveUntrackedFiles();
+
             var branch = repo.Branches[branchName];
             var remoteBranch = repo.Branches[$"origin/{branchName}"];
 

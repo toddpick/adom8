@@ -161,7 +161,7 @@ Generate all necessary code files for this story.";
         }
         catch (HttpRequestException ex)
         {
-            return AgentResult.Fail(ErrorCategory.Transient, $"HTTP error in Coding agent for WI-{task.WorkItemId}: {ex.Message}", ex);
+            return AgentResult.Fail(ErrorCategory.Transient, $"HTTP error in Coding agent for WI-{task.WorkItemId}: {ex.Message} [StatusCode={ex.StatusCode}, Stack={ex.StackTrace?.Split('\n').FirstOrDefault()?.Trim()}]", ex);
         }
         catch (Exception ex)
         {
