@@ -246,6 +246,7 @@ public sealed class AIClient : IAIClient
         var path = _options.Provider.ToUpperInvariant() switch
         {
             "AZUREOPENAI" => $"/openai/deployments/{_options.Model}/chat/completions?api-version=2024-08-01-preview",
+            "GOOGLE" => "/chat/completions",  // Google's OpenAI-compatible endpoint already includes /v1beta/openai
             _ => "/v1/chat/completions"  // OpenAI, OpenRouter, LiteLLM, etc.
         };
 
