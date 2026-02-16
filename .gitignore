@@ -62,3 +62,6 @@ desktop.ini
 *.tmp
 *.bak
 *.log
+
+# SWA deployment artifacts
+*-app.zip

@@ -13,6 +13,8 @@ env:
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
+    env:
+      AZURE_FUNCTIONAPP_NAME: ${{ secrets.AZURE_FUNCTIONAPP_NAME }}
 
     steps:
       - name: Checkout code
@@ -33,9 +35,9 @@ jobs:
         run: dotnet publish ${{ env.AZURE_FUNCTIONAPP_PACKAGE_PATH }}/AIAgents.Functions.csproj --configuration Release --output ./publish
 
       - name: Deploy to Azure Functions
-        if: ${{ secrets.AZURE_FUNCTIONAPP_NAME != '' }}
+        if: ${{ env.AZURE_FUNCTIONAPP_NAME != '' }}
         uses: azure/functions-action@v1
         with:
-          app-name: ${{ secrets.AZURE_FUNCTIONAPP_NAME }}
+          app-name: ${{ env.AZURE_FUNCTIONAPP_NAME }}
           publish-profile: ${{ secrets.AZURE_FUNCTIONAPP_PUBLISH_PROFILE }}
           package: ./publish

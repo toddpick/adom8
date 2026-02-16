@@ -904,9 +904,9 @@
 
     <script>
         // ========== Configuration ==========
-        const API_URL = '/api/GetCurrentStatus';
-        const CODEBASE_INTEL_URL = '/api/codebase-intelligence';
-        const ANALYZE_URL = '/api/analyze-codebase';
+        const API_URL = 'https://ai-agents-func-todd.azurewebsites.net/api/status';
+        const CODEBASE_INTEL_URL = 'https://ai-agents-func-todd.azurewebsites.net/api/codebase-intelligence';
+        const ANALYZE_URL = 'https://ai-agents-func-todd.azurewebsites.net/api/analyze-codebase';
         const POLL_INTERVAL = 2000;
         const CODEBASE_POLL_INTERVAL = 30000; // check codebase status every 30s
 
@@ -1241,7 +1241,7 @@
         }
 
         // ========== API Fetching ==========
-        const HEALTH_URL = API_URL.replace('/GetCurrentStatus', '/health');
+        const HEALTH_URL = API_URL.replace('/status', '/health');
         const HEALTH_POLL_INTERVAL = 60000; // 60 seconds
 
         async function fetchHealth() {
