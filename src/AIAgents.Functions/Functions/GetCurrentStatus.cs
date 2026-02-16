@@ -1,3 +1,4 @@
+using AIAgents.Core.Interfaces;
 using AIAgents.Core.Models;
 using AIAgents.Functions.Models;
 using AIAgents.Functions.Services;
@@ -17,15 +18,18 @@ public sealed class GetCurrentStatus
     private readonly ILogger<GetCurrentStatus> _logger;
     private readonly IActivityLogger _activityLogger;
     private readonly IAgentTaskQueue _taskQueue;
+    private readonly IAzureDevOpsClient _adoClient;
 
     public GetCurrentStatus(
         ILogger<GetCurrentStatus> logger,
         IActivityLogger activityLogger,
-        IAgentTaskQueue taskQueue)
+        IAgentTaskQueue taskQueue,
+        IAzureDevOpsClient adoClient)
     {
         _logger = logger;
         _activityLogger = activityLogger;
         _taskQueue = taskQueue;
+        _adoClient = adoClient;
     }
 
     [Function("GetCurrentStatus")]
@@ -67,6 +71,18 @@ public sealed class GetCurrentStatus
                 ? FormatElapsed(DateTime.UtcNow - firstActivity.Timestamp)
                 : null;
 
+            // Fetch work item to get autonomy level
+            string? autonomyLevel = null;
+            try
+            {
+                var workItem = await _adoClient.GetWorkItemAsync(activeStory.WorkItemId, cancellationToken);
+                autonomyLevel = workItem.AutonomyLevel.ToString();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to fetch autonomy level for work item {WorkItemId}", activeStory.WorkItemId);
+            }
+
             currentWorkItem = new CurrentWorkItemInfo
             {
                 Id = activeStory.WorkItemId,
@@ -76,6 +92,7 @@ public sealed class GetCurrentStatus
                 State = activeStory.CurrentAgent != null
                     ? $"AI {activeStory.CurrentAgent}"
                     : null,
+                AutonomyLevel = autonomyLevel,
                 ElapsedTime = elapsed
             };
         }

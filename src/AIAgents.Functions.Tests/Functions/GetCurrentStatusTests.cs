@@ -1,3 +1,4 @@
+using AIAgents.Core.Interfaces;
 using AIAgents.Functions.Functions;
 using AIAgents.Functions.Models;
 using AIAgents.Functions.Services;
@@ -16,6 +17,7 @@ public sealed class GetCurrentStatusTests
 {
     private readonly Mock<IActivityLogger> _activityMock = new();
     private readonly Mock<IAgentTaskQueue> _taskQueueMock = new();
+    private readonly Mock<IAzureDevOpsClient> _adoMock = new();
 
     private GetCurrentStatus CreateFunction()
     {
@@ -25,7 +27,8 @@ public sealed class GetCurrentStatusTests
         return new GetCurrentStatus(
             NullLogger<GetCurrentStatus>.Instance,
             _activityMock.Object,
-            _taskQueueMock.Object);
+            _taskQueueMock.Object,
+            _adoMock.Object);
     }
 
     private static HttpRequest CreateRequest()

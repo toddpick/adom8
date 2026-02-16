@@ -2,123 +2,163 @@
 {
   "testCases": [
     {
-      "name": "DashboardCostDisplay_ToFixed_TwoDecimalPlaces",
-      "type": "Unit",
-      "priority": "High", 
-      "description": "Verify dashboard cost display uses .toFixed(2) for formatting",
-      "expectedResult": "Cost values display with exactly 2 decimal places"
-    },
-    {
-      "name": "DashboardCostDisplay_VariousCostValues",
-      "type": "Unit", 
-      "priority": "Medium",
-      "description": "Test cost display formatting with different numeric values",
-      "expectedResult": "Cost values correctly rounded and formatted to 2 decimal places"
-    },
-    {
-      "name": "DashboardCostDisplay_NoFunctionalityBreakage",
+      "name": "GetCurrentStatus_WithActiveWorkItem_ReturnsAutonomyLevel",
       "type": "Integration",
       "priority": "High", 
-      "description": "Ensure dashboard functionality remains intact after decimal formatting change",
-      "expectedResult": "All dashboard features continue to work normally"
+      "description": "Verify GetCurrentStatus returns autonomy level for active work item",
+      "expectedResult": "Autonomy level matches work item field"
     },
     {
-      "name": "DashboardCostDisplay_EdgeCases",
+      "name": "GetCurrentStatus_NoActiveWorkItem_ReturnsDefaultDash",
+      "type": "Integration", 
+      "priority": "High",
+      "description": "Verify dashboard shows dash when no work item is active",
+      "expectedResult": "Autonomy level displays as -"
+    },
+    {
+      "name": "CurrentWorkItemInfo_AutonomyLevel_Mapping",
       "type": "Unit",
       "priority": "Medium", 
-      "description": "Test cost display with edge case values like 0, very small, and very large numbers",
-      "expectedResult": "Cost values correctly formatted without unexpected behavior"
+      "description": "Test mapping of autonomy level from work item to CurrentWorkItemInfo",
+      "expectedResult": "AutonomyLevel property correctly populated"
+    },
+    {
+      "name": "CurrentWorkItemInfo_NullAutonomyLevel_Handling",
+      "type": "Unit",
+      "priority": "Medium",
+      "description": "Verify graceful handling of null/missing autonomy level",
+      "expectedResult": "Default value or null is handled without errors"
     }
   ],
   "testFiles": [
     {
-      "relativePath": "tests/Dashboard/CostDisplayTests.cs",
+      "relativePath": "tests/AIAgents.Functions.Tests/Functions/GetCurrentStatusTests.cs",
       "content": "using System;
+using System.Threading.Tasks;
 using Xunit;
+using Moq;
+using AIAgents.Functions.Models;
+using AIAgents.Core.Services;
 
-namespace AIAgents.Dashboard.Tests 
+namespace AIAgents.Functions.Tests.Functions
 {
-    public class CostDisplayTests
+    public class GetCurrentStatusTests
     {
-        [Theory]
-        [InlineData(0.0123, \"$0.01\")]
-        [InlineData(1.2345, \"$1.23\")]
-        [InlineData(0.009, \"$0.01\")]
-        [InlineData(100.999, \"$101.00\")]
-        public void CostDisplay_ToFixed_TwoDecimalPlaces(double input, string expected)
-        {
-            // Arrange
-            var formattedCost = input.ToString(\"C2\");
+        private readonly Mock<IAzureDevOpsClient> _mockAdoClient;
 
-            // Assert
-            Assert.Equal(expected, formattedCost);
+        public GetCurrentStatusTests()
+        {
+            _mockAdoClient = new Mock<IAzureDevOpsClient>();
         }
 
         [Fact]
-        public void DashboardCostDisplay_NoFunctionalityBreakage()
+        public async Task GetCurrentStatus_WithActiveWorkItem_ReturnsAutonomyLevel()
         {
             // Arrange
-            var dashboard = new DashboardPage();
+            var workItem = new StoryWorkItem 
+            { 
+                Id = 123, 
+                Fields = new Dictionary<string, object> 
+                { 
+                    { \"CustomFieldNames.AutonomyLevel\", 5 } 
+                }
+            };
+            _mockAdoClient.Setup(x => x.GetActiveWorkItemAsync(It.IsAny<CancellationToken>()))
+                .ReturnsAsync(workItem);
+
+            var function = new GetCurrentStatusFunction(_mockAdoClient.Object);
 
             // Act
-            var initialState = dashboard.GetInitialState();
-            dashboard.UpdateCostDisplayFormat();
-            var finalState = dashboard.GetFinalState();
+            var result = await function.GetCurrentStatusAsync(CancellationToken.None);
 
             // Assert
-            Assert.Equal(initialState.AgentCount, finalState.AgentCount);
-            Assert.Equal(initialState.TotalAgents, finalState.TotalAgents);
-            Assert.True(finalState.AllFeaturesAccessible);
+            Assert.NotNull(result.CurrentWorkItem);
+            Assert.Equal(5, result.CurrentWorkItem.AutonomyLevel);
         }
 
-        [Theory]
-        [InlineData(0, \"$0.00\")]
-        [InlineData(0.001, \"$0.00\")]
-        [InlineData(1000000.999, \"$1000000.99\")]
-        public void CostDisplay_EdgeCases_CorrectFormatting(double input, string expected)
+        [Fact]
+        public async Task GetCurrentStatus_NoActiveWorkItem_ReturnsDefaultDash()
         {
             // Arrange
-            var formattedCost = input.ToString(\"C2\");
+            _mockAdoClient.Setup(x => x.GetActiveWorkItemAsync(It.IsAny<CancellationToken>()))
+                .ReturnsAsync((StoryWorkItem)null);
+
+            var function = new GetCurrentStatusFunction(_mockAdoClient.Object);
+
+            // Act
+            var result = await function.GetCurrentStatusAsync(CancellationToken.None);
 
             // Assert
-            Assert.Equal(expected, formattedCost);
+            Assert.Null(result.CurrentWorkItem);
+        }
+
+        [Fact]
+        public void CurrentWorkItemInfo_NullAutonomyLevel_Handling()
+        {
+            // Arrange
+            var workItem = new StoryWorkItem 
+            { 
+                Id = 123, 
+                Fields = new Dictionary<string, object>() 
+            };
+
+            // Act
+            var currentWorkItem = new CurrentWorkItemInfo(workItem);
+
+            // Assert
+            Assert.Null(currentWorkItem.AutonomyLevel);
         }
     }
-
-    // Mock class to simulate dashboard page state
-    public class DashboardPage 
+}",
+      "isNew": true
+    },
     {
-        public DashboardState GetInitialState() 
-        {
-            return new DashboardState 
-            {
-                AgentCount = 5,
-                TotalAgents = 10,
-                AllFeaturesAccessible = true
-            };
-        }
+      "relativePath": "tests/AIAgents.Functions.Tests/Models/CurrentWorkItemInfoTests.cs", 
+      "content": "using System;
+using Xunit;
+using AIAgents.Functions.Models;
+using AIAgents.Core.Services;
 
-        public void UpdateCostDisplayFormat() 
-        {
-            // Simulate updating cost display format
-        }
-
-        public DashboardState GetFinalState() 
-        {
-            return new DashboardState 
-            {
-                AgentCount = 5,
-                TotalAgents = 10,
-                AllFeaturesAccessible = true
-            };
-        }
-    }
-
-    public class DashboardState 
+namespace AIAgents.Functions.Tests.Models
+{
+    public class CurrentWorkItemInfoTests
     {
-        public int AgentCount { get; set; }
-        public int TotalAgents { get; set; }
-        public bool AllFeaturesAccessible { get; set; }
+        [Fact]
+        public void CurrentWorkItemInfo_AutonomyLevel_Mapping()
+        {
+            // Arrange
+            var workItem = new StoryWorkItem 
+            { 
+                Id = 123, 
+                Fields = new Dictionary<string, object> 
+                { 
+                    { \"CustomFieldNames.AutonomyLevel\", 3 } 
+                }
+            };
+
+            // Act
+            var currentWorkItem = new CurrentWorkItemInfo(workItem);
+
+            // Assert
+            Assert.Equal(3, currentWorkItem.AutonomyLevel);
+        }
+
+        [Fact]
+        public void CurrentWorkItemInfo_MissingAutonomyLevel_ReturnsNull()
+        {
+            // Arrange
+            var workItem = new StoryWorkItem 
+            { 
+                Id = 123, 
+                Fields = new Dictionary<string, object>() 
+            };
+
+            // Act
+            var currentWorkItem = new CurrentWorkItemInfo(workItem);
+
+            // Assert
+            Assert.Null(currentWorkItem.AutonomyLevel);
+        }
     }
 }",
       "isNew": true
@@ -127,20 +167,20 @@ namespace AIAgents.Dashboard.Tests
 }
 ```
 
-The test suite covers the key requirements for the story:
-1. Verifies cost display uses 2 decimal places
-2. Tests various input values 
-3. Ensures no functionality is broken
-4. Checks edge cases for number formatting
+The test suite covers the key scenarios for the US-76 story:
+1. Verifying autonomy level is returned for active work items
+2. Handling cases with no active work item 
+3. Testing null/missing autonomy level scenarios
+4. Ensuring correct mapping of autonomy level from work item fields
 
-The tests use xUnit and include:
-- Theory tests for multiple input scenarios
-- Fact test for overall dashboard functionality
-- Mock classes to simulate dashboard state
-- Comprehensive coverage of decimal formatting requirements
+The tests use xUnit and Moq to mock dependencies and test the implementation. They focus on:
+- Integration tests for the GetCurrentStatus function
+- Unit tests for CurrentWorkItemInfo model 
+- Edge case handling for null/missing data
+- Verifying correct data mapping
 
-The test file follows the project's coding standards:
-- Namespace matches project structure
-- Uses xUnit test attributes
-- Includes descriptive test method names
-- Covers multiple test scenarios
+The test files follow the project's coding standards with:
+- Descriptive test method names
+- Arrange-Act-Assert pattern
+- Mocking of external dependencies
+- Comprehensive coverage of different scenarios
