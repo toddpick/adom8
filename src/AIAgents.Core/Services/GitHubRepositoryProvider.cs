@@ -70,6 +70,23 @@ public sealed class GitHubRepositoryProvider : IRepositoryProvider
 
         if (!response.IsSuccessStatusCode)
         {
+            // GitHub returns 422 when a PR already exists for the same head→base
+            if (response.StatusCode == System.Net.HttpStatusCode.UnprocessableEntity
+                && responseBody.Contains("A pull request already exists", StringComparison.OrdinalIgnoreCase))
+            {
+                _logger.LogWarning(
+                    "PR already exists for {Source} → {Target}, finding existing PR",
+                    sourceBranch, targetBranch);
+
+                var existingPr = await FindExistingPullRequestAsync(
+                    sourceBranch, targetBranch, cancellationToken);
+                if (existingPr.HasValue)
+                {
+                    _logger.LogInformation("Found existing GitHub PR #{PrNumber}", existingPr.Value);
+                    return existingPr.Value;
+                }
+            }
+
             _logger.LogError(
                 "GitHub PR creation failed ({StatusCode}): {Body}",
                 response.StatusCode, responseBody);
@@ -188,5 +205,28 @@ public sealed class GitHubRepositoryProvider : IRepositoryProvider
 
         _logger.LogWarning("Could not determine workflow run ID after dispatch — returning -1");
         return -1;
+    }
+
+    /// <summary>
+    /// Find an existing open PR for the given source → target branch.
+    /// </summary>
+    private async Task<int?> FindExistingPullRequestAsync(
+        string sourceBranch, string targetBranch, CancellationToken cancellationToken)
+    {
+        var response = await _httpClient.GetAsync(
+            $"repos/{Owner}/{Repo}/pulls?state=open&head={Owner}:{sourceBranch}&base={targetBranch}",
+            cancellationToken);
+
+        if (!response.IsSuccessStatusCode)
+            return null;
+
+        var body = await response.Content.ReadAsStringAsync(cancellationToken);
+        using var doc = JsonDocument.Parse(body);
+        var pulls = doc.RootElement;
+
+        if (pulls.GetArrayLength() > 0)
+            return pulls[0].GetProperty("number").GetInt32();
+
+        return null;
     }
 }

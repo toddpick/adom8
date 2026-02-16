@@ -114,6 +114,7 @@
             display: flex;
             flex-direction: column;
             overflow: hidden;
+            overflow-x: hidden;
         }
 
         .sidebar-right .sidebar-header {
@@ -724,6 +725,9 @@
             flex: 1;
             color: #555;
             line-height: 1.4;
+            word-break: break-word;
+            overflow-wrap: break-word;
+            min-width: 0;
         }
 
         .activity-time {
@@ -1104,6 +1108,16 @@
             return 'Pending';
         }
 
+        function formatDuration(seconds) {
+            if (seconds == null) return '—';
+            if (seconds < 60) return Math.round(seconds) + 's';
+            const mins = Math.floor(seconds / 60);
+            const secs = Math.round(seconds % 60);
+            if (mins < 60) return mins + 'm ' + secs + 's';
+            const hrs = Math.floor(mins / 60);
+            return hrs + 'h ' + (mins % 60) + 'm';
+        }
+
         // ========== Update Functions ==========
         function updateWorkItem(data) {
             const titleEl = document.getElementById('wi-title');
@@ -1198,8 +1212,23 @@
                     const status = story.agents[name] || 'pending';
                     const emoji = getAgentEmoji(name);
                     const tokInfo = story.tokenUsage?.agents?.[name];
+                    const timing = story.agentTimings?.[name];
                     const card = document.createElement('div');
                     card.className = `agent-card ${status}`;
+
+                    // Compute duration display
+                    let durationStr = '—';
+                    if (timing) {
+                        if (timing.durationSeconds != null) {
+                            durationStr = formatDuration(timing.durationSeconds);
+                        } else if (timing.startedAt && status === 'in_progress') {
+                            // Live ticking for active agents
+                            const startMs = new Date(timing.startedAt).getTime();
+                            const elapsedSec = (Date.now() - startMs) / 1000;
+                            durationStr = formatDuration(elapsedSec) + ' ⏱️';
+                        }
+                    }
+
                     card.innerHTML = `
                         <div class="agent-header">
                             <span class="agent-emoji">${emoji}</span>
@@ -1211,7 +1240,7 @@
                         </div>
                         <div class="agent-details">
                             <span>WI: US-${story.workItemId}</span>
-                            <span>Duration: ${tokInfo ? tokInfo.callCount + ' calls' : '—'}</span>
+                            <span>Duration: ${durationStr}</span>
                             <span>Tokens: ${tokInfo ? tokInfo.totalTokens.toLocaleString() : '—'}</span>
                             <span>Cost: ${tokInfo ? '$' + tokInfo.estimatedCost.toFixed(4) : '—'}</span>
                         </div>

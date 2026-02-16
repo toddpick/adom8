@@ -84,6 +84,24 @@ public sealed class StoryStatus
 
     [JsonPropertyName("tokenUsage")]
     public StoryTokenUsageDto? TokenUsage { get; init; }
+
+    [JsonPropertyName("agentTimings")]
+    public IReadOnlyDictionary<string, AgentTimingDto>? AgentTimings { get; init; }
+}
+
+/// <summary>
+/// Timing information for a single agent's execution.
+/// </summary>
+public sealed class AgentTimingDto
+{
+    [JsonPropertyName("startedAt")]
+    public DateTime? StartedAt { get; init; }
+
+    [JsonPropertyName("completedAt")]
+    public DateTime? CompletedAt { get; init; }
+
+    [JsonPropertyName("durationSeconds")]
+    public double? DurationSeconds { get; init; }
 }
 
 /// <summary>

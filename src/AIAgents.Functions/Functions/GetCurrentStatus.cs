@@ -118,6 +118,8 @@ public sealed class GetCurrentStatus
         foreach (var group in storyGroups)
         {
             var agents = new Dictionary<string, string>();
+            var agentTimings = new Dictionary<string, AgentTimingDto>();
+            var agentStartTimes = new Dictionary<string, DateTime>();
             string? currentAgent = null;
 
             foreach (var activity in group.OrderBy(a => a.Timestamp))
@@ -129,16 +131,47 @@ public sealed class GetCurrentStatus
                 {
                     agents[agent] = "in_progress";
                     currentAgent = agent;
+                    agentStartTimes[agent] = activity.Timestamp;
                 }
                 else if (activity.Message.Contains("completed", StringComparison.OrdinalIgnoreCase))
                 {
                     agents[agent] = "completed";
                     if (currentAgent == agent) currentAgent = null;
+                    var startedAt = agentStartTimes.TryGetValue(agent, out var st) ? st : (DateTime?)null;
+                    var duration = startedAt.HasValue ? (activity.Timestamp - startedAt.Value).TotalSeconds : (double?)null;
+                    agentTimings[agent] = new AgentTimingDto
+                    {
+                        StartedAt = startedAt,
+                        CompletedAt = activity.Timestamp,
+                        DurationSeconds = duration
+                    };
                 }
                 else if (activity.Message.Contains("failed", StringComparison.OrdinalIgnoreCase))
                 {
                     agents[agent] = "failed";
                     if (currentAgent == agent) currentAgent = null;
+                    var startedAt = agentStartTimes.TryGetValue(agent, out var st) ? st : (DateTime?)null;
+                    var duration = startedAt.HasValue ? (activity.Timestamp - startedAt.Value).TotalSeconds : (double?)null;
+                    agentTimings[agent] = new AgentTimingDto
+                    {
+                        StartedAt = startedAt,
+                        CompletedAt = activity.Timestamp,
+                        DurationSeconds = duration
+                    };
+                }
+            }
+
+            // Add timings for in-progress agents (no completedAt yet)
+            foreach (var (agent, startTime) in agentStartTimes)
+            {
+                if (!agentTimings.ContainsKey(agent))
+                {
+                    agentTimings[agent] = new AgentTimingDto
+                    {
+                        StartedAt = startTime,
+                        CompletedAt = null,
+                        DurationSeconds = null
+                    };
                 }
             }
 
@@ -171,6 +204,7 @@ public sealed class GetCurrentStatus
                 CurrentAgent = currentAgent,
                 Progress = progress,
                 Agents = agents,
+                AgentTimings = agentTimings.Count > 0 ? agentTimings : null,
                 TokenUsage = totalTokens > 0 ? new StoryTokenUsageDto
                 {
                     TotalTokens = totalTokens,
