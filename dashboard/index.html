@@ -1232,7 +1232,7 @@
                 document.getElementById('stat-tokens').textContent =
                     (data.stats.totalTokens ?? 0).toLocaleString();
                 document.getElementById('stat-cost').textContent =
-                    '$' + (data.stats.totalCost ?? 0).toFixed(4);
+                    '$' + (data.stats.totalCost ?? 0).toFixed(2);
             }
 
             // Stories (agent pipeline progress per work item)
@@ -1247,7 +1247,7 @@
                 updateActivity(data.recentActivity.map(a => ({
                     emoji: a.level === 'error' ? '❌' : getAgentEmoji(a.agent),
                     message: `[${a.agent}] WI-${a.workItemId}: ${a.message}` +
-                        (a.tokens > 0 ? ` (${a.tokens.toLocaleString()} tokens, $${a.cost.toFixed(4)})` : ''),
+                        (a.tokens > 0 ? ` (${a.tokens.toLocaleString()} tokens, $${a.cost.toFixed(2)})` : ''),
                     time: new Date(a.timestamp).toLocaleTimeString()
                 })));
             } else if (data.activities) {
@@ -1304,7 +1304,7 @@
                             <span>WI: US-${story.workItemId}</span>
                             <span>Duration: ${durationStr}</span>
                             <span>Tokens: ${tokInfo ? tokInfo.totalTokens.toLocaleString() : '—'}</span>
-                            <span>Cost: ${tokInfo ? '$' + tokInfo.estimatedCost.toFixed(4) : '—'}</span>
+                            <span>Cost: ${tokInfo ? '$' + tokInfo.estimatedCost.toFixed(2) : '—'}</span>
                         </div>
                         ${status === 'awaiting_code' ? `
                             <div style="margin-top: 8px; display: flex; align-items: center; gap: 10px;">
@@ -1328,7 +1328,7 @@
                         </div>
                         <div class="agent-details">
                             <span>Total: ${story.tokenUsage.totalTokens.toLocaleString()} tokens</span>
-                            <span>Cost: $${story.tokenUsage.totalCost.toFixed(4)}</span>
+                            <span>Cost: $${story.tokenUsage.totalCost.toFixed(2)}</span>
                             <span>Complexity: ${story.tokenUsage.complexity}</span>
                         </div>
                     `;
@@ -1346,7 +1346,7 @@
                 const card = document.createElement('div');
                 card.className = `agent-card ${agent.status || 'pending'}`;
                 const tokenStr = agent.tokens ? agent.tokens.toLocaleString() : '—';
-                const costStr = agent.cost ? '$' + agent.cost.toFixed(4) : '—';
+                const costStr = agent.cost ? '$' + agent.cost.toFixed(2) : '—';
                 card.innerHTML = `
                     <div class="agent-header">
                         <span class="agent-emoji">${agent.emoji || '⚡'}</span>
