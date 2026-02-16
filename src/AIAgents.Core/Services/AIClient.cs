@@ -232,6 +232,9 @@ public sealed class AIClient : IAIClient
                 }
             }
 
+            _logger.LogInformation("Claude round {Round}: stop_reason={StopReason}, text_blocks={TextCount}, tool_use_blocks={ToolCount}",
+                round, stopReason, textParts.Count, toolUseCalls.Count);
+
             if (stopReason == "tool_use" && toolUseCalls.Count > 0)
             {
                 // Build assistant content blocks for the conversation

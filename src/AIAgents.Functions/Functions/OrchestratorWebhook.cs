@@ -25,14 +25,13 @@ public sealed class OrchestratorWebhook
     private readonly IInputValidator _inputValidator;
     private readonly TelemetryClient _telemetry;
 
-    // Maps ADO work item states to the agent that processes them
+    // Maps ADO work item states to the agent that processes them.
+    // ONLY "Story Planning" is here — all other transitions are handled by direct
+    // EnqueueAsync calls within each agent. This prevents double-dispatch where
+    // both the webhook AND the agent enqueue the next step, causing exponential reruns.
     private static readonly Dictionary<string, AgentType> s_stateToAgent = new(StringComparer.OrdinalIgnoreCase)
     {
-        ["Story Planning"] = AgentType.Planning,
-        ["AI Code"] = AgentType.Coding,
-        ["AI Test"] = AgentType.Testing,
-        ["AI Review"] = AgentType.Review,
-        ["AI Docs"] = AgentType.Documentation
+        ["Story Planning"] = AgentType.Planning
     };
 
     public OrchestratorWebhook(
@@ -95,17 +94,10 @@ public sealed class OrchestratorWebhook
             return new BadRequestObjectResult(new { error = "Could not determine work item ID" });
         }
 
-        // Determine the new state
+        // Determine the new state — ONLY from an explicit state change, never the current state.
+        // Reading current state from revision fields caused infinite loops: any ADO update
+        // (comment, field change) while WI was in a mapped state would re-trigger the agent.
         var newState = payload.Resource.Fields?.State?.NewValue;
-
-        if (string.IsNullOrEmpty(newState))
-        {
-            // Try to get state from revision fields
-            if (payload.Resource.Revision?.Fields?.TryGetValue("System.State", out var stateElement) == true)
-            {
-                newState = stateElement.GetString();
-            }
-        }
 
         if (string.IsNullOrEmpty(newState) || !s_stateToAgent.TryGetValue(newState, out var agentType))
         {

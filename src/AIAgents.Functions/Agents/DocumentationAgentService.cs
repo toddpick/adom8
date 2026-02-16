@@ -185,6 +185,9 @@ Generate comprehensive documentation for these changes.";
         try { await _adoClient.UpdateWorkItemFieldAsync(workItem.Id, CustomFieldNames.Paths.LastAgent, "Documentation", cancellationToken); }
         catch { /* field may not exist yet */ }
 
+        // Update ADO state before enqueuing next agent
+        await _adoClient.UpdateWorkItemStateAsync(workItem.Id, "AI Deployment", cancellationToken);
+
         // Enqueue Deployment agent (handles merge/deploy based on autonomy level)
         var nextTask = new AgentTask
         {

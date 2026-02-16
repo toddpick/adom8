@@ -13,14 +13,12 @@ public sealed class WebhookPayloadParsingTests
     /// <summary>
     /// Maps ADO work item states to expected agent types.
     /// This mirrors the static dictionary in OrchestratorWebhook.
+    /// Only "Story Planning" is mapped — all other transitions are handled
+    /// by direct EnqueueAsync calls within each agent (prevents double-dispatch).
     /// </summary>
     private static readonly Dictionary<string, AgentType> s_expectedMapping = new(StringComparer.OrdinalIgnoreCase)
     {
-        ["Story Planning"] = AgentType.Planning,
-        ["AI Code"] = AgentType.Coding,
-        ["AI Test"] = AgentType.Testing,
-        ["AI Review"] = AgentType.Review,
-        ["AI Docs"] = AgentType.Documentation
+        ["Story Planning"] = AgentType.Planning
     };
 
     // ── Payload deserialization ──
@@ -122,10 +120,6 @@ public sealed class WebhookPayloadParsingTests
 
     [Theory]
     [InlineData("Story Planning", AgentType.Planning)]
-    [InlineData("AI Code", AgentType.Coding)]
-    [InlineData("AI Test", AgentType.Testing)]
-    [InlineData("AI Review", AgentType.Review)]
-    [InlineData("AI Docs", AgentType.Documentation)]
     public void StateMapping_KnownStates_MapToCorrectAgents(string state, AgentType expectedAgent)
     {
         Assert.True(s_expectedMapping.TryGetValue(state, out var agent));
@@ -140,6 +134,10 @@ public sealed class WebhookPayloadParsingTests
     [InlineData("Ready for QA")]
     [InlineData("Deployed")]
     [InlineData("Needs Revision")]
+    [InlineData("AI Code")]
+    [InlineData("AI Test")]
+    [InlineData("AI Review")]
+    [InlineData("AI Docs")]
     public void StateMapping_UnknownStates_AreNotMapped(string state)
     {
         Assert.False(s_expectedMapping.ContainsKey(state));
@@ -150,7 +148,6 @@ public sealed class WebhookPayloadParsingTests
     {
         Assert.True(s_expectedMapping.TryGetValue("story planning", out _));
         Assert.True(s_expectedMapping.TryGetValue("STORY PLANNING", out _));
-        Assert.True(s_expectedMapping.TryGetValue("ai code", out _));
     }
 
     // ── Work item ID extraction logic ──

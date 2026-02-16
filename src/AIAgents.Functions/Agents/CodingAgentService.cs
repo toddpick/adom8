@@ -113,8 +113,24 @@ public sealed class CodingAgentService : IAgentService
             if (filesModified == 0)
             {
                 _logger.LogWarning("Agentic loop produced no file changes for WI-{WorkItemId}", task.WorkItemId);
+
+                // Log diagnostic details to ADO so we can investigate
+                var diagToolCalls = agenticResult.ToolCalls.Count > 0
+                    ? string.Join("<br/>", agenticResult.ToolCalls.Select(t => $"Round {t.Round}: {t.ToolName}({t.Input})"))
+                    : "None";
+                var diagResponse = agenticResult.FinalResponse is not null
+                    ? (agenticResult.FinalResponse.Length > 500 ? agenticResult.FinalResponse[..500] + "..." : agenticResult.FinalResponse)
+                    : "(null)";
+
+                await _adoClient.AddWorkItemCommentAsync(workItem.Id,
+                    $"<b>⚠️ Coding Agent Diagnostic — No Files Modified</b><br/>" +
+                    $"Rounds: {agenticResult.RoundsExecuted} | CompletedNaturally: {agenticResult.CompletedNaturally}<br/>" +
+                    $"<b>Tool calls:</b><br/>{diagToolCalls}<br/>" +
+                    $"<b>Final response:</b><br/>{System.Net.WebUtility.HtmlEncode(diagResponse)}",
+                    cancellationToken);
+
                 await _activityLogger.LogAsync("Coding", task.WorkItemId,
-                    "Warning: agentic loop produced no file changes — proceeding to testing anyway",
+                    $"Warning: agentic loop produced no file changes ({agenticResult.RoundsExecuted} rounds, {agenticResult.ToolCalls.Count} tool calls) — proceeding to testing anyway",
                     "warning", cancellationToken);
             }
 
@@ -203,16 +219,19 @@ public sealed class CodingAgentService : IAgentService
         """
         You are an expert software developer implementing code changes for a user story.
         You have access to tools that let you read, write, edit, list, and search files in the repository.
+        
+        IMPORTANT: You MUST use the provided tools to implement the changes. Do NOT just describe what to do — actually do it by calling the tools. Every task requires at least reading files and making edits.
 
         YOUR WORKFLOW:
-        1. First, use list_files to understand the project structure
-        2. Use read_file to examine existing code mentioned in the plan
-        3. Use search_code to find relevant patterns, imports, or existing implementations
-        4. Implement the changes using write_file (for new files) or edit_file (for modifying existing files)
-        5. After writing/editing, use read_file to verify your changes look correct
+        1. First, call list_files to understand the project structure
+        2. Call read_file to examine existing code mentioned in the plan
+        3. Call search_code to find relevant patterns, imports, or existing implementations
+        4. Implement the changes by calling write_file (for new files) or edit_file (for modifying existing files)
+        5. After writing/editing, call read_file to verify your changes look correct
         6. When all changes are complete, respond with a summary of what you did
 
         RULES:
+        - You MUST call tools to make changes — never respond without having called at least one write or edit tool
         - Follow the implementation plan closely
         - Match existing code style, naming conventions, and patterns
         - Use edit_file for surgical changes to existing files (preferred over write_file for edits)
@@ -223,7 +242,7 @@ public sealed class CodingAgentService : IAgentService
         - Add appropriate imports/usings when adding new dependencies
         - Keep changes minimal and focused on the story requirements
 
-        When you're done, provide a brief summary of all changes made.
+        Start by calling list_files now.
         """;
 
     /// <summary>
