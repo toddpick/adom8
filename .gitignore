@@ -63,5 +63,9 @@ desktop.ini
 *.bak
 *.log
 
+# Publish output
+publish/
+deploy.zip
+
 # SWA deployment artifacts
 *-app.zip
