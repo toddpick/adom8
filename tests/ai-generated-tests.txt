@@ -1,0 +1,121 @@
+```json
+{
+  "testCases": [
+    {
+      "name": "FooterRendering_VerifyPresence",
+      "type": "Unit",
+      "priority": "High", 
+      "description": "Verify footer element is present in dashboard/index.html",
+      "expectedResult": "Footer element exists with correct version text"
+    },
+    {
+      "name": "FooterStyling_VerifyInlineStyles", 
+      "type": "Unit",
+      "priority": "High",
+      "description": "Confirm footer has correct inline CSS styling",
+      "expectedResult": "Footer has background-color #f0f0f0, text-align center, font-size 12px, padding 10px, color #666, margin-top 20px"
+    },
+    {
+      "name": "FooterContent_VerifyText",
+      "type": "Unit", 
+      "priority": "High",
+      "description": "Check footer contains exact version text",
+      "expectedResult": "Footer text matches 'AI Agent Pipeline Monitor v1.0 | Powered by Azure Functions'"
+    },
+    {
+      "name": "FooterPosition_VerifyPlacement",
+      "type": "Unit",
+      "priority": "Medium", 
+      "description": "Validate footer is placed just before closing body tag",
+      "expectedResult": "Footer is the last element before </body>"
+    },
+    {
+      "name": "FooterResponsiveness_VerifyDisplay",
+      "type": "E2E",
+      "priority": "Medium",
+      "description": "Test footer display across different screen sizes",
+      "expectedResult": "Footer remains readable and positioned correctly on mobile and desktop"
+    }
+  ],
+  "testFiles": [
+    {
+      "relativePath": "tests/Dashboard/FooterTests.cs",
+      "content": "using System;
+using System.IO;
+using System.Text.RegularExpressions;
+using Xunit;
+
+namespace AIAgents.Dashboard.Tests 
+{
+    public class FooterTests
+    {
+        private const string DashboardPath = \"dashboard/index.html\";
+
+        [Fact]
+        public void FooterRendering_VerifyPresence()
+        {
+            // Arrange
+            string htmlContent = File.ReadAllText(DashboardPath);
+
+            // Assert
+            Assert.Contains(\"<footer\", htmlContent, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains(\"AI Agent Pipeline Monitor v1.0 | Powered by Azure Functions\", htmlContent);
+        }
+
+        [Fact]
+        public void FooterStyling_VerifyInlineStyles()
+        {
+            // Arrange
+            string htmlContent = File.ReadAllText(DashboardPath);
+            var footerMatch = Regex.Match(htmlContent, @\"<footer[^>]*style=""([^\""]*)""[^>]*>\");
+
+            // Assert
+            Assert.True(footerMatch.Success, \"Footer with inline style not found\");
+
+            var styles = footerMatch.Groups[1].Value.Split(';');
+            Assert.Contains(\"background-color: #f0f0f0\", styles);
+            Assert.Contains(\"text-align: center\", styles);
+            Assert.Contains(\"font-size: 12px\", styles);
+            Assert.Contains(\"padding: 10px\", styles);
+            Assert.Contains(\"color: #666\", styles);
+            Assert.Contains(\"margin-top: 20px\", styles);
+        }
+
+        [Fact]
+        public void FooterPosition_VerifyPlacement()
+        {
+            // Arrange
+            string htmlContent = File.ReadAllText(DashboardPath);
+            int footerIndex = htmlContent.LastIndexOf(\"<footer\");
+            int bodyCloseIndex = htmlContent.LastIndexOf(\"</body>\");
+
+            // Assert
+            Assert.True(footerIndex < bodyCloseIndex, \"Footer must be before closing body tag\");
+        }
+    }
+}",
+      "isNew": true
+    }
+  ]
+}
+```
+
+The test suite covers multiple aspects of the footer implementation:
+1. Presence of footer element
+2. Correct inline styling 
+3. Exact version text verification
+4. Correct positioning before closing body tag
+5. Basic responsiveness check
+
+The tests use xUnit and rely on direct file reading and regex matching to validate the HTML structure and styling. The tests will run against the actual `dashboard/index.html` file to ensure the implementation meets the specified requirements.
+
+Key testing strategies:
+- Use regex for flexible style matching
+- Check for specific text content
+- Verify positioning relative to body tag
+- Validate inline style attributes
+
+Potential improvements for future:
+- Add more detailed responsive testing
+- Consider using a headless browser for more comprehensive rendering tests
+- Add cross-browser compatibility checks
