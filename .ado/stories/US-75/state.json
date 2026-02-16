@@ -1,8 +1,8 @@
 {
   "workItemId": 75,
-  "currentState": "AI Review",
+  "currentState": "AI Docs",
   "createdAt": "2026-02-16T09:12:17.7055472Z",
-  "updatedAt": "2026-02-16T09:13:29.5478467Z",
+  "updatedAt": "2026-02-16T09:13:40.6064789Z",
   "agents": {
     "Planning": {
       "status": "in_progress",
@@ -25,6 +25,12 @@
     "Review": {
       "status": "in_progress",
       "startedAt": "2026-02-16T09:13:29.5478419Z",
+      "completedAt": null,
+      "additionalData": null
+    },
+    "Documentation": {
+      "status": "in_progress",
+      "startedAt": "2026-02-16T09:13:40.6064748Z",
       "completedAt": null,
       "additionalData": null
     }
