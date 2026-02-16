@@ -1,12 +1,18 @@
 {
   "workItemId": 72,
-  "currentState": "Story Planning",
+  "currentState": "AI Test",
   "createdAt": "2026-02-16T08:33:04.3423826Z",
-  "updatedAt": "2026-02-16T08:33:04.3515702Z",
+  "updatedAt": "2026-02-16T08:34:25.9909304Z",
   "agents": {
     "Planning": {
       "status": "in_progress",
       "startedAt": "2026-02-16T08:33:04.3515255Z",
+      "completedAt": null,
+      "additionalData": null
+    },
+    "Testing": {
+      "status": "in_progress",
+      "startedAt": "2026-02-16T08:34:25.9909271Z",
       "completedAt": null,
       "additionalData": null
     }
