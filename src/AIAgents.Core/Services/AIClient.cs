@@ -115,6 +115,399 @@ public sealed class AIClient : IAIClient
         };
     }
 
+    // ──────────── Agentic Tool-Use Loop ────────────
+
+    public async Task<AgenticResult> CompleteWithToolsAsync(
+        string systemPrompt,
+        string userPrompt,
+        IReadOnlyList<ToolDefinition> tools,
+        Func<ToolCall, CancellationToken, Task<string>> toolExecutor,
+        AgenticOptions? options = null,
+        CancellationToken cancellationToken = default)
+    {
+        options ??= new AgenticOptions();
+        return IsClaude
+            ? await ClaudeAgenticLoopAsync(systemPrompt, userPrompt, tools, toolExecutor, options, cancellationToken)
+            : await OpenAIAgenticLoopAsync(systemPrompt, userPrompt, tools, toolExecutor, options, cancellationToken);
+    }
+
+    // ──────── Claude Agentic Loop (Anthropic Messages API) ────────
+
+    private async Task<AgenticResult> ClaudeAgenticLoopAsync(
+        string systemPrompt, string userPrompt,
+        IReadOnlyList<ToolDefinition> tools,
+        Func<ToolCall, CancellationToken, Task<string>> toolExecutor,
+        AgenticOptions options, CancellationToken cancellationToken)
+    {
+        var client = _httpClientFactory.CreateClient("AIClient");
+        var url = BuildFullUrl();
+
+        var claudeTools = tools.Select(t => new
+        {
+            name = t.Name,
+            description = t.Description,
+            input_schema = t.InputSchema
+        }).ToArray();
+
+        var messages = new List<object>
+        {
+            new { role = "user", content = userPrompt }
+        };
+
+        int totalInputTokens = 0, totalOutputTokens = 0;
+        decimal totalCost = 0m;
+        var toolCallLog = new List<ToolCallLog>();
+        string? finalResponse = null;
+        bool completedNaturally = false;
+        int round = 0;
+
+        for (round = 1; round <= options.MaxRounds; round++)
+        {
+            _logger.LogInformation("Claude agentic round {Round}/{MaxRounds}", round, options.MaxRounds);
+
+            var requestBody = new
+            {
+                model = _options.Model,
+                system = systemPrompt,
+                messages,
+                tools = claudeTools,
+                max_tokens = options.MaxTokens,
+                temperature = options.Temperature
+            };
+
+            var request = new HttpRequestMessage(HttpMethod.Post, url);
+            ConfigureAuth(request);
+            request.Content = new StringContent(
+                JsonSerializer.Serialize(requestBody, _jsonOptions),
+                Encoding.UTF8,
+                "application/json");
+
+            var response = await client.SendAsync(request, cancellationToken);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                var errorBody = await response.Content.ReadAsStringAsync(cancellationToken);
+                _logger.LogError("Agentic round {Round} failed ({StatusCode}): {Body}",
+                    round, response.StatusCode, errorBody);
+                response.EnsureSuccessStatusCode();
+            }
+
+            var responseJson = await response.Content.ReadAsStringAsync(cancellationToken);
+            using var doc = JsonDocument.Parse(responseJson);
+            var root = doc.RootElement;
+
+            // Track tokens
+            if (root.TryGetProperty("usage", out var usage))
+            {
+                var inTok = usage.TryGetProperty("input_tokens", out var it) ? it.GetInt32() : 0;
+                var outTok = usage.TryGetProperty("output_tokens", out var ot) ? ot.GetInt32() : 0;
+                totalInputTokens += inTok;
+                totalOutputTokens += outTok;
+                totalCost += TokenCostCalculator.Calculate(_options.Model, inTok, outTok);
+            }
+
+            var stopReason = root.TryGetProperty("stop_reason", out var sr) ? sr.GetString() : null;
+            var contentBlocks = root.TryGetProperty("content", out var cb) ? cb : default;
+
+            var textParts = new List<string>();
+            var toolUseCalls = new List<(string id, string name, JsonElement input)>();
+
+            if (contentBlocks.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var block in contentBlocks.EnumerateArray())
+                {
+                    var type = block.TryGetProperty("type", out var bt) ? bt.GetString() : null;
+                    if (type == "text")
+                    {
+                        var text = block.TryGetProperty("text", out var tt) ? tt.GetString() : null;
+                        if (text != null) textParts.Add(text);
+                    }
+                    else if (type == "tool_use")
+                    {
+                        var id = block.TryGetProperty("id", out var tid) ? tid.GetString()! : "";
+                        var name = block.TryGetProperty("name", out var tn) ? tn.GetString()! : "";
+                        var input = block.TryGetProperty("input", out var ti) ? ti : default;
+                        toolUseCalls.Add((id, name, input));
+                    }
+                }
+            }
+
+            if (stopReason == "tool_use" && toolUseCalls.Count > 0)
+            {
+                // Build assistant content blocks for the conversation
+                var assistantContentBlocks = new List<object>();
+                if (contentBlocks.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (var block in contentBlocks.EnumerateArray())
+                    {
+                        var type = block.TryGetProperty("type", out var bt) ? bt.GetString() : null;
+                        if (type == "text")
+                        {
+                            assistantContentBlocks.Add(new
+                            {
+                                type = "text",
+                                text = block.GetProperty("text").GetString()
+                            });
+                        }
+                        else if (type == "tool_use")
+                        {
+                            assistantContentBlocks.Add(new
+                            {
+                                type = "tool_use",
+                                id = block.GetProperty("id").GetString(),
+                                name = block.GetProperty("name").GetString(),
+                                input = JsonSerializer.Deserialize<object>(block.GetProperty("input").GetRawText(), _jsonOptions)
+                            });
+                        }
+                    }
+                }
+
+                messages.Add(new { role = "assistant", content = assistantContentBlocks });
+
+                // Execute tools and build result blocks
+                var toolResults = await ExecuteToolCallsAsync(toolUseCalls, toolExecutor, toolCallLog, round, cancellationToken);
+
+                messages.Add(new { role = "user", content = toolResults.Select(r => new
+                {
+                    type = "tool_result",
+                    tool_use_id = r.id,
+                    content = r.result
+                }).ToArray() });
+            }
+            else
+            {
+                finalResponse = string.Join("\n", textParts);
+                completedNaturally = stopReason == "end_turn";
+                LogAgenticCompletion(round, stopReason, toolCallLog.Count, totalInputTokens + totalOutputTokens);
+                break;
+            }
+        }
+
+        return BuildAgenticResult(finalResponse, round, completedNaturally, toolCallLog, totalInputTokens, totalOutputTokens, totalCost);
+    }
+
+    // ──────── OpenAI / Gemini Agentic Loop (Chat Completions API) ────────
+
+    private async Task<AgenticResult> OpenAIAgenticLoopAsync(
+        string systemPrompt, string userPrompt,
+        IReadOnlyList<ToolDefinition> tools,
+        Func<ToolCall, CancellationToken, Task<string>> toolExecutor,
+        AgenticOptions options, CancellationToken cancellationToken)
+    {
+        var client = _httpClientFactory.CreateClient("AIClient");
+        var url = BuildFullUrl();
+
+        // OpenAI tool format: { type: "function", function: { name, description, parameters } }
+        var openAiTools = tools.Select(t => new
+        {
+            type = "function",
+            function = new
+            {
+                name = t.Name,
+                description = t.Description,
+                parameters = t.InputSchema
+            }
+        }).ToArray();
+
+        var messages = new List<object>
+        {
+            new { role = "system", content = systemPrompt },
+            new { role = "user", content = userPrompt }
+        };
+
+        int totalInputTokens = 0, totalOutputTokens = 0;
+        decimal totalCost = 0m;
+        var toolCallLog = new List<ToolCallLog>();
+        string? finalResponse = null;
+        bool completedNaturally = false;
+        int round = 0;
+
+        for (round = 1; round <= options.MaxRounds; round++)
+        {
+            _logger.LogInformation("OpenAI agentic round {Round}/{MaxRounds}", round, options.MaxRounds);
+
+            var requestBody = new
+            {
+                model = _options.Model,
+                messages,
+                tools = openAiTools,
+                max_tokens = options.MaxTokens,
+                temperature = options.Temperature
+            };
+
+            var request = new HttpRequestMessage(HttpMethod.Post, url);
+            ConfigureAuth(request);
+            request.Content = new StringContent(
+                JsonSerializer.Serialize(requestBody, _jsonOptions),
+                Encoding.UTF8,
+                "application/json");
+
+            var response = await client.SendAsync(request, cancellationToken);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                var errorBody = await response.Content.ReadAsStringAsync(cancellationToken);
+                _logger.LogError("Agentic round {Round} failed ({StatusCode}): {Body}",
+                    round, response.StatusCode, errorBody);
+                response.EnsureSuccessStatusCode();
+            }
+
+            var responseJson = await response.Content.ReadAsStringAsync(cancellationToken);
+            using var doc = JsonDocument.Parse(responseJson);
+            var root = doc.RootElement;
+
+            // Track tokens — OpenAI uses prompt_tokens / completion_tokens
+            if (root.TryGetProperty("usage", out var usage))
+            {
+                var inTok = usage.TryGetProperty("prompt_tokens", out var pt) ? pt.GetInt32() : 0;
+                var outTok = usage.TryGetProperty("completion_tokens", out var ct) ? ct.GetInt32() : 0;
+                totalInputTokens += inTok;
+                totalOutputTokens += outTok;
+                totalCost += TokenCostCalculator.Calculate(_options.Model, inTok, outTok);
+            }
+
+            // Parse the first choice
+            var choice = root.TryGetProperty("choices", out var choices) && choices.GetArrayLength() > 0
+                ? choices[0]
+                : default;
+            var finishReason = choice.ValueKind != JsonValueKind.Undefined && choice.TryGetProperty("finish_reason", out var fr)
+                ? fr.GetString() : null;
+            var message = choice.ValueKind != JsonValueKind.Undefined && choice.TryGetProperty("message", out var msg)
+                ? msg : default;
+
+            // Check for tool calls
+            var hasToolCalls = message.ValueKind != JsonValueKind.Undefined
+                && message.TryGetProperty("tool_calls", out var toolCallsEl)
+                && toolCallsEl.ValueKind == JsonValueKind.Array
+                && toolCallsEl.GetArrayLength() > 0;
+
+            if (hasToolCalls)
+            {
+                var toolCallsEl2 = message.GetProperty("tool_calls");
+
+                // Add the full assistant message (with tool_calls) to conversation
+                var assistantMsg = JsonSerializer.Deserialize<object>(message.GetRawText(), _jsonOptions);
+                messages.Add(assistantMsg!);
+
+                // Execute each tool call
+                var openAiToolCalls = new List<(string id, string name, JsonElement input)>();
+                foreach (var tc in toolCallsEl2.EnumerateArray())
+                {
+                    var tcId = tc.TryGetProperty("id", out var tci) ? tci.GetString()! : "";
+                    var fn = tc.TryGetProperty("function", out var fnEl) ? fnEl : default;
+                    var tcName = fn.ValueKind != JsonValueKind.Undefined && fn.TryGetProperty("name", out var n)
+                        ? n.GetString()! : "";
+                    var tcArgs = fn.ValueKind != JsonValueKind.Undefined && fn.TryGetProperty("arguments", out var a)
+                        ? a : default;
+                    // OpenAI sends arguments as a string, parse to JsonElement
+                    var argsStr = tcArgs.ValueKind == JsonValueKind.String ? tcArgs.GetString()! : "{}";
+                    using var argsDoc = JsonDocument.Parse(argsStr);
+                    openAiToolCalls.Add((tcId, tcName, argsDoc.RootElement.Clone()));
+                }
+
+                var toolResults = await ExecuteToolCallsAsync(openAiToolCalls, toolExecutor, toolCallLog, round, cancellationToken);
+
+                // Add tool results as "tool" role messages (OpenAI format)
+                foreach (var (id, result) in toolResults)
+                {
+                    messages.Add(new { role = "tool", tool_call_id = id, content = result });
+                }
+            }
+            else
+            {
+                // Done — extract text content
+                var textContent = message.ValueKind != JsonValueKind.Undefined && message.TryGetProperty("content", out var c)
+                    ? c.GetString() : null;
+                finalResponse = textContent;
+                completedNaturally = finishReason == "stop";
+                LogAgenticCompletion(round, finishReason, toolCallLog.Count, totalInputTokens + totalOutputTokens);
+                break;
+            }
+        }
+
+        return BuildAgenticResult(finalResponse, round, completedNaturally, toolCallLog, totalInputTokens, totalOutputTokens, totalCost);
+    }
+
+    // ──────── Shared Helpers ────────
+
+    private async Task<List<(string id, string result)>> ExecuteToolCallsAsync(
+        List<(string id, string name, JsonElement input)> toolCalls,
+        Func<ToolCall, CancellationToken, Task<string>> toolExecutor,
+        List<ToolCallLog> toolCallLog, int round,
+        CancellationToken cancellationToken)
+    {
+        var results = new List<(string id, string result)>();
+
+        foreach (var (id, name, input) in toolCalls)
+        {
+            var inputJson = input.ValueKind != JsonValueKind.Undefined ? input.GetRawText() : "{}";
+
+            toolCallLog.Add(new ToolCallLog
+            {
+                ToolName = name,
+                Input = inputJson.Length > 200 ? inputJson[..200] + "..." : inputJson,
+                Round = round
+            });
+
+            _logger.LogInformation("Round {Round}: calling tool {ToolName}", round, name);
+
+            string toolResult;
+            try
+            {
+                toolResult = await toolExecutor(
+                    new ToolCall { Id = id, Name = name, InputJson = inputJson },
+                    cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                toolResult = $"Error executing tool: {ex.Message}";
+                _logger.LogWarning(ex, "Tool {ToolName} failed in round {Round}", name, round);
+            }
+
+            // Truncate very large results
+            if (toolResult.Length > 15000)
+                toolResult = toolResult[..15000] + "\n\n[Output truncated — file too large]";
+
+            results.Add((id, toolResult));
+        }
+
+        return results;
+    }
+
+    private void LogAgenticCompletion(int round, string? stopReason, int toolCallCount, int totalTokens)
+    {
+        _logger.LogInformation(
+            "Agentic loop finished after {Rounds} rounds (stop_reason={StopReason}), " +
+            "{ToolCalls} tool calls, {TotalTokens} total tokens",
+            round, stopReason, toolCallCount, totalTokens);
+    }
+
+    private AgenticResult BuildAgenticResult(string? finalResponse, int rounds, bool completedNaturally,
+        List<ToolCallLog> toolCallLog, int totalInputTokens, int totalOutputTokens, decimal totalCost)
+    {
+        return new AgenticResult
+        {
+            FinalResponse = finalResponse,
+            RoundsExecuted = rounds,
+            CompletedNaturally = completedNaturally,
+            ToolCalls = toolCallLog,
+            TotalUsage = new TokenUsageData
+            {
+                InputTokens = totalInputTokens,
+                OutputTokens = totalOutputTokens,
+                TotalTokens = totalInputTokens + totalOutputTokens,
+                EstimatedCost = totalCost,
+                Model = _options.Model
+            }
+        };
+    }
+
+    private static readonly JsonSerializerOptions _jsonOptions = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+    };
+
     // ──────────── Request Body Builders ────────────
 
     private object BuildOpenAIRequestBody(string systemPrompt, string userPrompt, AICompletionOptions? options)

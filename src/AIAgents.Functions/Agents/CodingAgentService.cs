@@ -1,5 +1,4 @@
 using System.Net;
-using System.Text.Json;
 using System.Text.RegularExpressions;
 using AIAgents.Core.Constants;
 using AIAgents.Core.Interfaces;
@@ -11,10 +10,10 @@ using Microsoft.Extensions.Logging;
 namespace AIAgents.Functions.Agents;
 
 /// <summary>
-/// Coding agent: evaluates complexity and either auto-generates code or hands off to a human.
-/// Simple tasks (complexity 1-2): AI generates search/replace edits and new files directly.
-/// Complex tasks (3+): Sets "Awaiting Code" for human developer with Codex/Copilot.
-/// Transitions: AI Code → AI Test (auto) or AI Code → Awaiting Code → AI Test (via /api/resume).
+/// Coding agent: uses a multi-turn agentic tool-use loop to read, understand,
+/// and modify the codebase. The AI iteratively calls tools (read_file, write_file,
+/// edit_file, list_files, search_code) until the implementation is complete.
+/// Always transitions to Testing agent when done.
 /// </summary>
 public sealed class CodingAgentService : IAgentService
 {
@@ -26,11 +25,6 @@ public sealed class CodingAgentService : IAgentService
     private readonly ILogger<CodingAgentService> _logger;
     private readonly IAgentTaskQueue _taskQueue;
     private readonly IActivityLogger _activityLogger;
-
-    /// <summary>
-    /// Complexity threshold: 1-2 = auto, 3+ = handoff to human.
-    /// </summary>
-    private const int AutoComplexityThreshold = 3;
 
     public CodingAgentService(
         IAIClientFactory aiClientFactory,
@@ -56,121 +50,133 @@ public sealed class CodingAgentService : IAgentService
     {
         try
         {
-        _logger.LogInformation("Coding agent starting for WI-{WorkItemId}", task.WorkItemId);
+            _logger.LogInformation("Coding agent (agentic loop) starting for WI-{WorkItemId}", task.WorkItemId);
 
-        var workItem = await _adoClient.GetWorkItemAsync(task.WorkItemId, cancellationToken);
-        var aiClient = _aiClientFactory.GetClientForAgent("Coding", workItem.GetModelOverrides());
-        var branchName = $"feature/US-{task.WorkItemId}";
-        var repoPath = await _gitOps.EnsureBranchAsync(branchName, cancellationToken);
+            var workItem = await _adoClient.GetWorkItemAsync(task.WorkItemId, cancellationToken);
+            var aiClient = _aiClientFactory.GetClientForAgent("Coding", workItem.GetModelOverrides());
+            var branchName = $"feature/US-{task.WorkItemId}";
+            var repoPath = await _gitOps.EnsureBranchAsync(branchName, cancellationToken);
 
-        await using var context = _contextFactory.Create(task.WorkItemId, repoPath);
-        var state = await context.LoadStateAsync(cancellationToken);
-        state.CurrentState = "AI Code";
-        state.Agents["Coding"] = AgentStatus.InProgress();
-        await context.SaveStateAsync(state, cancellationToken);
+            await using var context = _contextFactory.Create(task.WorkItemId, repoPath);
+            var state = await context.LoadStateAsync(cancellationToken);
+            state.CurrentState = "AI Code";
+            state.Agents["Coding"] = AgentStatus.InProgress();
+            await context.SaveStateAsync(state, cancellationToken);
 
-        // Read the plan
-        var plan = await context.ReadArtifactAsync("PLAN.md", cancellationToken)
-            ?? "No plan found. Generate code based on the story description.";
+            // Read the plan
+            var plan = await context.ReadArtifactAsync("PLAN.md", cancellationToken)
+                ?? "No plan found. Generate code based on the story description.";
 
-        // Get existing file structure
-        var existingFiles = await _gitOps.ListFilesAsync(repoPath, cancellationToken);
-        var fileListSummary = string.Join("\n", existingFiles.Take(100));
+            // Get existing file structure for context
+            var existingFiles = await _gitOps.ListFilesAsync(repoPath, cancellationToken);
+            var fileListSummary = string.Join("\n", existingFiles.Take(100));
+            if (existingFiles.Count > 100)
+                fileListSummary += $"\n... and {existingFiles.Count - 100} more files";
 
-        // Extract file paths mentioned in the plan and read their content
-        var referencedFiles = ExtractReferencedFiles(plan, existingFiles);
-        var fileContents = new List<string>();
-        foreach (var filePath in referencedFiles.Take(10)) // Limit to 10 files to stay within token budget
-        {
-            var content = await _gitOps.ReadFileAsync(repoPath, filePath, cancellationToken);
-            if (content is not null)
+            // Load any additional codebase context
+            var codebaseCtx = await _codebaseContext.LoadRelevantContextAsync(
+                repoPath, workItem.Title, workItem.Description, cancellationToken);
+
+            // Set up the tool executor
+            var toolExecutor = new CodingToolExecutor(_gitOps, repoPath, _logger);
+
+            // Build prompts for the agentic loop
+            var systemPrompt = BuildSystemPrompt();
+            var userPrompt = BuildUserPrompt(workItem, plan, fileListSummary, codebaseCtx);
+
+            await _activityLogger.LogAsync("Coding", task.WorkItemId,
+                "Starting agentic coding loop with tool use", "info", cancellationToken);
+
+            // Run the agentic tool-use loop
+            var agenticResult = await aiClient.CompleteWithToolsAsync(
+                systemPrompt,
+                userPrompt,
+                CodingToolExecutor.GetToolDefinitions(),
+                toolExecutor.ExecuteAsync,
+                new AgenticOptions { MaxRounds = 25, MaxTokens = 8192, Temperature = 0.2 },
+                cancellationToken);
+
+            // Record token usage
+            if (agenticResult.TotalUsage is not null)
+                state.TokenUsage.RecordUsage("Coding", agenticResult.TotalUsage);
+
+            var filesModified = toolExecutor.ModifiedFiles.Count;
+            _logger.LogInformation(
+                "Agentic loop completed for WI-{WorkItemId}: {Rounds} rounds, {ToolCalls} tool calls, {Files} files modified, completed={Completed}",
+                task.WorkItemId, agenticResult.RoundsExecuted, agenticResult.ToolCalls.Count,
+                filesModified, agenticResult.CompletedNaturally);
+
+            // Track modified files as code artifacts
+            foreach (var file in toolExecutor.ModifiedFiles)
+                state.Artifacts.Code.Add(file);
+
+            if (filesModified == 0)
             {
-                // Truncate very large files to avoid blowing token limits
-                var truncated = content.Length > 8000 ? content[..8000] + "\n// ... truncated ..." : content;
-                fileContents.Add($"### File: {filePath}\n```\n{truncated}\n```");
+                _logger.LogWarning("Agentic loop produced no file changes for WI-{WorkItemId}", task.WorkItemId);
+                await _activityLogger.LogAsync("Coding", task.WorkItemId,
+                    "Warning: agentic loop produced no file changes — proceeding to testing anyway",
+                    "warning", cancellationToken);
             }
-        }
-        var existingFileContents = fileContents.Count > 0
-            ? "## Existing File Contents (files mentioned in plan)\n" + string.Join("\n\n", fileContents)
-            : "";
 
-        // AI call: assess complexity AND generate code if simple
-        var systemPrompt = @"You are a senior software developer. Analyze the task complexity and generate code if it's simple enough.
+            // Commit all changes
+            if (filesModified > 0)
+            {
+                await _gitOps.CommitAndPushAsync(repoPath,
+                    $"[AI Coding] US-{workItem.Id}: Implemented via agentic loop ({filesModified} file(s), {agenticResult.RoundsExecuted} rounds)",
+                    cancellationToken);
+            }
 
-Respond ONLY with valid JSON in this exact format:
-{
-  ""complexity"": <number 1-5>,
-  ""reason"": ""<brief explanation of complexity assessment>"",
-  ""confidence"": <number 0-100>,
-  ""edits"": [
-    {
-      ""file"": ""relative/path/to/file"",
-      ""operation"": ""edit"",
-      ""search"": ""exact text to find in the existing file"",
-      ""replace"": ""exact replacement text""
-    }
-  ],
-  ""newFiles"": [
-    {
-      ""relativePath"": ""relative/path/to/new/file"",
-      ""content"": ""full file content""
-    }
-  ]
-}
+            // Post summary to ADO
+            var toolSummary = agenticResult.ToolCalls.Count > 0
+                ? string.Join("<br/>", agenticResult.ToolCalls
+                    .GroupBy(t => t.ToolName)
+                    .Select(g => $"• {g.Key}: {g.Count()} call(s)"))
+                : "No tool calls";
 
-COMPLEXITY SCALE:
-1 = Trivial (fix a typo, change a constant, update a CSS value)
-2 = Simple (small bug fix, change a few lines in 1-2 files, add a simple method)
-3 = Moderate (modify multiple files, add a new feature with several components)
-4 = Complex (architectural changes, refactoring, cross-cutting concerns)
-5 = Major (large-scale redesign, new subsystem, significant infrastructure changes)
+            var fileSummary = filesModified > 0
+                ? string.Join("<br/>", toolExecutor.ModifiedFiles.Select(f => $"• {f}"))
+                : "No files modified";
 
-RULES:
-- If complexity is 1 or 2: provide ALL edits needed in the ""edits"" array and any new files in ""newFiles""
-- If complexity is 3+: set edits and newFiles to empty arrays [] — a human will do the coding
-- For edits: ""search"" must be the EXACT text currently in the file (include enough context to be unique — at least 3 lines)
-- For edits: ""replace"" is what replaces the search text
-- Do NOT generate test files (the testing agent handles that)";
+            await _adoClient.AddWorkItemCommentAsync(workItem.Id,
+                $"<b>🤖 AI Coding Agent Complete (Agentic Loop)</b><br/>" +
+                $"Rounds: {agenticResult.RoundsExecuted} | Tool calls: {agenticResult.ToolCalls.Count} | Files: {filesModified}<br/>" +
+                $"<b>Tool usage:</b><br/>{toolSummary}<br/>" +
+                $"<b>Files modified:</b><br/>{fileSummary}",
+                cancellationToken);
 
-        var userPrompt = $@"## Story
-**ID:** {workItem.Id}
-**Title:** {workItem.Title}
-**Description:** {workItem.Description ?? "N/A"}
+            // Update state and enqueue Testing
+            state.Agents["Coding"] = AgentStatus.Completed();
+            state.Agents["Coding"].AdditionalData = new Dictionary<string, object>
+            {
+                ["mode"] = "agentic",
+                ["rounds"] = agenticResult.RoundsExecuted,
+                ["toolCalls"] = agenticResult.ToolCalls.Count,
+                ["filesModified"] = filesModified,
+                ["completedNaturally"] = agenticResult.CompletedNaturally
+            };
+            state.CurrentState = "AI Test";
+            await context.SaveStateAsync(state, cancellationToken);
 
-## Implementation Plan
-{plan}
+            try { await _adoClient.UpdateWorkItemFieldAsync(workItem.Id, CustomFieldNames.Paths.LastAgent, "Coding", cancellationToken); }
+            catch { /* field may not exist yet */ }
 
-## Repository File Listing
-{fileListSummary}
+            await _adoClient.UpdateWorkItemStateAsync(workItem.Id, "AI Test", cancellationToken);
 
-{existingFileContents}
+            var nextTask = new AgentTask
+            {
+                WorkItemId = task.WorkItemId,
+                AgentType = AgentType.Testing,
+                CorrelationId = task.CorrelationId
+            };
+            await _taskQueue.EnqueueAsync(nextTask, cancellationToken);
 
-{await _codebaseContext.LoadRelevantContextAsync(repoPath, workItem.Title, workItem.Description, cancellationToken)}
+            await _activityLogger.LogAsync("Coding", task.WorkItemId,
+                $"Agentic loop complete: {filesModified} files modified in {agenticResult.RoundsExecuted} rounds, enqueued Testing",
+                "info", cancellationToken);
 
-Assess complexity and generate code edits if this is simple enough (complexity 1-2).";
+            _logger.LogInformation("Coding agent completed for WI-{WorkItemId}, enqueued Testing agent", task.WorkItemId);
 
-        var aiResult = await aiClient.CompleteAsync(systemPrompt, userPrompt,
-            new AICompletionOptions { MaxTokens = 8192, Temperature = 0.2 }, cancellationToken);
-        state.TokenUsage.RecordUsage("Coding", aiResult.Usage);
-
-        // Parse the AI response
-        var codingDecision = ParseCodingDecision(aiResult.Content);
-
-        _logger.LogInformation(
-            "Coding agent for WI-{WorkItemId}: complexity={Complexity}, confidence={Confidence}, reason={Reason}",
-            task.WorkItemId, codingDecision.Complexity, codingDecision.Confidence, codingDecision.Reason);
-
-        // Decision: auto-code or handoff?
-        if (codingDecision.Complexity < AutoComplexityThreshold && codingDecision.Confidence >= 70)
-        {
-            // === AUTO MODE: Apply edits and continue pipeline ===
-            return await AutoCodeAsync(task, workItem, repoPath, context, state, codingDecision, cancellationToken);
-        }
-        else
-        {
-            // === HANDOFF MODE: Pause for human developer ===
-            return await HandoffAsync(task, workItem, context, state, plan, codingDecision, cancellationToken);
-        }
+            return AgentResult.Ok();
         }
         catch (HttpRequestException ex) when (ex.StatusCode == HttpStatusCode.TooManyRequests)
         {
@@ -191,148 +197,59 @@ Assess complexity and generate code edits if this is simple enough (complexity 1
     }
 
     /// <summary>
-    /// Auto mode: AI generates edits, apply them, commit, and continue pipeline.
+    /// Build system prompt for the agentic coding loop.
     /// </summary>
-    private async Task<AgentResult> AutoCodeAsync(
-        AgentTask task, StoryWorkItem workItem, string repoPath,
-        IStoryContext context, StoryState state, CodingDecision decision,
-        CancellationToken cancellationToken)
-    {
-        var filesModified = 0;
+    internal static string BuildSystemPrompt() =>
+        """
+        You are an expert software developer implementing code changes for a user story.
+        You have access to tools that let you read, write, edit, list, and search files in the repository.
 
-        // Apply search/replace edits to existing files
-        foreach (var edit in decision.Edits)
-        {
-            var currentContent = await _gitOps.ReadFileAsync(repoPath, edit.File, cancellationToken);
-            if (currentContent is null)
-            {
-                _logger.LogWarning("Edit target file not found: {File}", edit.File);
-                continue;
-            }
+        YOUR WORKFLOW:
+        1. First, use list_files to understand the project structure
+        2. Use read_file to examine existing code mentioned in the plan
+        3. Use search_code to find relevant patterns, imports, or existing implementations
+        4. Implement the changes using write_file (for new files) or edit_file (for modifying existing files)
+        5. After writing/editing, use read_file to verify your changes look correct
+        6. When all changes are complete, respond with a summary of what you did
 
-            if (!currentContent.Contains(edit.Search))
-            {
-                _logger.LogWarning("Search text not found in {File}, skipping edit", edit.File);
-                continue;
-            }
+        RULES:
+        - Follow the implementation plan closely
+        - Match existing code style, naming conventions, and patterns
+        - Use edit_file for surgical changes to existing files (preferred over write_file for edits)
+        - Use write_file only for creating new files or when edit_file can't express the change
+        - Do NOT create or modify test files — the Testing agent handles that
+        - Do NOT modify infrastructure files (Terraform, CI/CD pipelines) unless explicitly asked
+        - Ensure all new code compiles and is syntactically correct
+        - Add appropriate imports/usings when adding new dependencies
+        - Keep changes minimal and focused on the story requirements
 
-            var newContent = currentContent.Replace(edit.Search, edit.Replace);
-            await _gitOps.WriteFileAsync(repoPath, edit.File, newContent, cancellationToken);
-            state.Artifacts.Code.Add(edit.File);
-            filesModified++;
-            _logger.LogInformation("Edited: {FilePath}", edit.File);
-        }
-
-        // Create new files
-        foreach (var newFile in decision.NewFiles)
-        {
-            await _gitOps.WriteFileAsync(repoPath, newFile.RelativePath, newFile.Content, cancellationToken);
-            state.Artifacts.Code.Add(newFile.RelativePath);
-            filesModified++;
-            _logger.LogInformation("Created: {FilePath}", newFile.RelativePath);
-        }
-
-        if (filesModified == 0)
-        {
-            _logger.LogWarning("AI said complexity was low but produced no valid edits for WI-{WorkItemId}, falling back to handoff", task.WorkItemId);
-            // Fall back to handoff if no edits were applied
-            var plan = await context.ReadArtifactAsync("PLAN.md", cancellationToken) ?? "";
-            return await HandoffAsync(task, workItem, context, state, plan, decision, cancellationToken);
-        }
-
-        // Commit
-        await _gitOps.CommitAndPushAsync(repoPath,
-            $"[AI Coding] US-{workItem.Id}: Auto-generated {filesModified} edit(s) (complexity {decision.Complexity}/5)",
-            cancellationToken);
-
-        // Update ADO
-        await _adoClient.AddWorkItemCommentAsync(workItem.Id,
-            $"<b>🤖 AI Coding Agent Complete (Auto)</b><br/>Complexity: {decision.Complexity}/5 — {decision.Reason}<br/>Files modified: {filesModified}<br/>" +
-            string.Join("<br/>", state.Artifacts.Code.Select(f => $"• {f}")),
-            cancellationToken);
-
-        // Update state and enqueue next
-        state.Agents["Coding"] = AgentStatus.Completed();
-        state.Agents["Coding"].AdditionalData = new Dictionary<string, object>
-        {
-            ["mode"] = "auto",
-            ["complexity"] = decision.Complexity,
-            ["filesModified"] = filesModified
-        };
-        state.CurrentState = "AI Test";
-        await context.SaveStateAsync(state, cancellationToken);
-
-        try { await _adoClient.UpdateWorkItemFieldAsync(workItem.Id, CustomFieldNames.Paths.LastAgent, "Coding", cancellationToken); }
-        catch { /* field may not exist yet */ }
-
-        await _adoClient.UpdateWorkItemStateAsync(workItem.Id, "AI Test", cancellationToken);
-
-        var nextTask = new AgentTask
-        {
-            WorkItemId = task.WorkItemId,
-            AgentType = AgentType.Testing,
-            CorrelationId = task.CorrelationId
-        };
-        await _taskQueue.EnqueueAsync(nextTask, cancellationToken);
-
-        _logger.LogInformation("Coding agent (auto) completed for WI-{WorkItemId}, enqueued Testing agent", task.WorkItemId);
-
-        return AgentResult.Ok();
-    }
+        When you're done, provide a brief summary of all changes made.
+        """;
 
     /// <summary>
-    /// Handoff mode: Set "Awaiting Code" and wait for human to call /api/resume.
+    /// Build user prompt with story context for the agentic loop.
     /// </summary>
-    private async Task<AgentResult> HandoffAsync(
-        AgentTask task, StoryWorkItem workItem,
-        IStoryContext context, StoryState state, string plan, CodingDecision decision,
-        CancellationToken cancellationToken)
+    internal static string BuildUserPrompt(StoryWorkItem workItem, string plan, string fileList, string codebaseContext)
     {
-        // Post detailed comment to ADO with the plan
-        var comment = $@"<b>🤖 AI Coding Agent — Awaiting Human Code</b><br/>
-<b>Complexity:</b> {decision.Complexity}/5 — {decision.Reason}<br/>
-<b>Branch:</b> <code>feature/US-{workItem.Id}</code><br/>
-<b>Plan:</b> See PLAN.md on the feature branch<br/><br/>
-<b>To continue the pipeline after coding:</b><br/>
-<code>POST /api/resume</code> with body <code>{{""workItemId"": {workItem.Id}}}</code><br/>
-Or use the Resume button on the dashboard.";
+        var prompt = $"""
+            ## Story
+            **ID:** {workItem.Id}
+            **Title:** {workItem.Title}
+            **Description:** {workItem.Description ?? "N/A"}
 
-        await _adoClient.AddWorkItemCommentAsync(workItem.Id, comment, cancellationToken);
+            ## Implementation Plan
+            {plan}
 
-        // Update state — mark Coding as completed with handoff mode
-        state.Agents["Coding"] = AgentStatus.Completed();
-        state.Agents["Coding"].AdditionalData = new Dictionary<string, object>
-        {
-            ["mode"] = "handoff",
-            ["complexity"] = decision.Complexity,
-            ["reason"] = decision.Reason
-        };
-        state.CurrentState = "Awaiting Code";
-        await context.SaveStateAsync(state, cancellationToken);
+            ## Repository File Listing
+            {fileList}
+            """;
 
-        try { await _adoClient.UpdateWorkItemFieldAsync(workItem.Id, CustomFieldNames.Paths.LastAgent, "Coding", cancellationToken); }
-        catch { /* field may not exist yet */ }
+        if (!string.IsNullOrWhiteSpace(codebaseContext))
+            prompt += $"\n\n## Additional Codebase Context\n{codebaseContext}";
 
-        // Update ADO state to Awaiting Code
-        try { await _adoClient.UpdateWorkItemStateAsync(workItem.Id, "Awaiting Code", cancellationToken); }
-        catch
-        {
-            // If "Awaiting Code" state doesn't exist in ADO, keep it at AI Code
-            _logger.LogWarning("Could not set 'Awaiting Code' state in ADO for WI-{WorkItemId}", task.WorkItemId);
-        }
+        prompt += "\n\nPlease implement the changes described in the plan. Start by reading the relevant files, then make the necessary edits.";
 
-        _logger.LogInformation(
-            "Coding agent (handoff) completed for WI-{WorkItemId}: complexity {Complexity}/5, awaiting human code",
-            task.WorkItemId, decision.Complexity);
-
-        // Log activity for dashboard detection — "Awaiting human" is the key phrase
-        await _activityLogger.LogAsync(
-            "Coding", task.WorkItemId,
-            $"Awaiting human developer — complexity {decision.Complexity}/5: {decision.Reason}",
-            "info", cancellationToken);
-
-        // Do NOT enqueue Testing — the /api/resume endpoint will do that
-        return AgentResult.Ok();
+        return prompt;
     }
 
     /// <summary>
@@ -367,94 +284,4 @@ Or use the Resume button on the dashboard.";
 
         return referenced.ToList();
     }
-
-    /// <summary>
-    /// Parse the AI response into a structured coding decision.
-    /// </summary>
-    internal static CodingDecision ParseCodingDecision(string aiResponse)
-    {
-        var json = aiResponse.Trim();
-        if (json.StartsWith("```"))
-        {
-            var firstNewline = json.IndexOf('\n');
-            var lastFence = json.LastIndexOf("```");
-            if (firstNewline > 0 && lastFence > firstNewline)
-                json = json[(firstNewline + 1)..lastFence].Trim();
-        }
-
-        try
-        {
-            using var doc = JsonDocument.Parse(json);
-            var root = doc.RootElement;
-
-            var decision = new CodingDecision
-            {
-                Complexity = root.TryGetProperty("complexity", out var c) ? c.GetInt32() : 5,
-                Reason = root.TryGetProperty("reason", out var r) ? r.GetString() ?? "Unknown" : "Unknown",
-                Confidence = root.TryGetProperty("confidence", out var conf) ? conf.GetInt32() : 0
-            };
-
-            // Parse edits
-            if (root.TryGetProperty("edits", out var edits) && edits.ValueKind == JsonValueKind.Array)
-            {
-                foreach (var edit in edits.EnumerateArray())
-                {
-                    if (edit.ValueKind != JsonValueKind.Object) continue;
-                    var file = edit.TryGetProperty("file", out var f) ? f.GetString() : null;
-                    var search = edit.TryGetProperty("search", out var s) ? s.GetString() : null;
-                    var replace = edit.TryGetProperty("replace", out var rp) ? rp.GetString() : null;
-
-                    if (file is not null && search is not null && replace is not null)
-                    {
-                        decision.Edits.Add(new CodeEdit { File = file, Search = search, Replace = replace });
-                    }
-                }
-            }
-
-            // Parse new files
-            if (root.TryGetProperty("newFiles", out var newFiles) && newFiles.ValueKind == JsonValueKind.Array)
-            {
-                foreach (var nf in newFiles.EnumerateArray())
-                {
-                    if (nf.ValueKind != JsonValueKind.Object) continue;
-                    var path = nf.TryGetProperty("relativePath", out var p) ? p.GetString() : null;
-                    var content = nf.TryGetProperty("content", out var ct) ? ct.GetString() : null;
-
-                    if (path is not null && content is not null)
-                    {
-                        decision.NewFiles.Add(new CodeFile { RelativePath = path, Content = content, IsNew = true });
-                    }
-                }
-            }
-
-            return decision;
-        }
-        catch (Exception)
-        {
-            // If we can't parse, assume complex → handoff
-            return new CodingDecision
-            {
-                Complexity = 5,
-                Reason = "AI response could not be parsed — defaulting to human handoff",
-                Confidence = 0
-            };
-        }
-    }
-
-    internal sealed class CodingDecision
-    {
-        public int Complexity { get; set; } = 5;
-        public string Reason { get; set; } = "";
-        public int Confidence { get; set; }
-        public List<CodeEdit> Edits { get; set; } = [];
-        public List<CodeFile> NewFiles { get; set; } = [];
-    }
-
-    internal sealed class CodeEdit
-    {
-        public string File { get; set; } = "";
-        public string Search { get; set; } = "";
-        public string Replace { get; set; } = "";
-    }
-
 }

@@ -10,8 +10,8 @@ using Moq;
 namespace AIAgents.Functions.Tests.Agents;
 
 /// <summary>
-/// Tests for CodingAgentService covering complexity assessment,
-/// auto-code mode, handoff mode, parsing, and error handling.
+/// Tests for CodingAgentService covering agentic tool-use loop,
+/// state transitions, prompt building, and error handling.
 /// </summary>
 public sealed class CodingAgentServiceTests
 {
@@ -42,7 +42,7 @@ public sealed class CodingAgentServiceTests
             _activityLoggerMock.Object);
     }
 
-    private void SetupHappyPath(string? aiResponse = null)
+    private void SetupHappyPath(AgenticResult? agenticResult = null)
     {
         var wi = MockAIResponses.SampleWorkItem();
         var state = MockAIResponses.SampleState(wi.Id, "AI Code");
@@ -50,9 +50,11 @@ public sealed class CodingAgentServiceTests
         _adoMock.Setup(a => a.GetWorkItemAsync(wi.Id, It.IsAny<CancellationToken>())).ReturnsAsync(wi);
         _gitMock.Setup(g => g.EnsureBranchAsync(It.IsAny<string>(), It.IsAny<CancellationToken>())).ReturnsAsync(@"C:\repos\test");
         _gitMock.Setup(g => g.ListFilesAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new List<string> { "src/Program.cs" });
+            .ReturnsAsync(new List<string> { "src/Program.cs", "dashboard/index.html" });
         _gitMock.Setup(g => g.ReadFileAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync("Console.WriteLine(\"Hello\");");
+        _gitMock.Setup(g => g.WriteFileAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
 
         _contextMock.Setup(c => c.LoadStateAsync(It.IsAny<CancellationToken>())).ReturnsAsync(state);
         _contextMock.Setup(c => c.SaveStateAsync(It.IsAny<StoryState>(), It.IsAny<CancellationToken>()))
@@ -60,56 +62,59 @@ public sealed class CodingAgentServiceTests
         _contextMock.Setup(c => c.ReadArtifactAsync("PLAN.md", It.IsAny<CancellationToken>()))
             .ReturnsAsync("# Plan\nModify `src/Program.cs`.\nSome plan content.");
 
-        _aiClientMock.Setup(a => a.CompleteAsync(
+        _aiClientMock.Setup(a => a.CompleteWithToolsAsync(
                 It.IsAny<string>(), It.IsAny<string>(),
-                It.IsAny<AICompletionOptions?>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new AICompletionResult
+                It.IsAny<IReadOnlyList<ToolDefinition>>(),
+                It.IsAny<Func<ToolCall, CancellationToken, Task<string>>>(),
+                It.IsAny<AgenticOptions?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(agenticResult ?? new AgenticResult
             {
-                Content = aiResponse ?? MockAIResponses.ValidCodingResponse,
-                Usage = new TokenUsageData
+                FinalResponse = "I've implemented the changes. Modified src/Program.cs to update the greeting.",
+                RoundsExecuted = 3,
+                CompletedNaturally = true,
+                ToolCalls =
+                [
+                    new ToolCallLog { ToolName = "read_file", Input = "{\"path\":\"src/Program.cs\"}", Round = 1 },
+                    new ToolCallLog { ToolName = "edit_file", Input = "{\"path\":\"src/Program.cs\",\"search\":\"Hello\",\"replace\":\"Hello World\"}", Round = 2 },
+                    new ToolCallLog { ToolName = "read_file", Input = "{\"path\":\"src/Program.cs\"}", Round = 3 }
+                ],
+                TotalUsage = new TokenUsageData
                 {
-                    InputTokens = 1500, OutputTokens = 3000, TotalTokens = 4500,
-                    EstimatedCost = 0.03m, Model = "claude-sonnet-4-20250514"
+                    InputTokens = 5000, OutputTokens = 2000, TotalTokens = 7000,
+                    EstimatedCost = 0.05m, Model = "claude-sonnet-4-20250514"
                 }
             });
+
+        // Simulate that the tool executor modifies files — but since we mock CompleteWithToolsAsync,
+        // the real executor won't run. So WriteFileAsync won't be called by the executor.
+        // The service checks toolExecutor.ModifiedFiles, which will be empty in tests
+        // unless we structure tests differently. For integration-level behavior, we test state transitions.
 
         _codebaseMock.Setup(c => c.LoadRelevantContextAsync(
                 It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync("");
     }
 
-    // ========== AUTO MODE TESTS ==========
+    // ========== AGENTIC LOOP TESTS ==========
 
     [Fact]
-    public async Task ExecuteAsync_AutoMode_CreatesNewFiles()
-    {
-        SetupHappyPath(); // ValidCodingResponse: complexity=2, 2 new files
-        var service = CreateService();
-
-        await service.ExecuteAsync(new AgentTask { WorkItemId = 12345, AgentType = AgentType.Coding });
-
-        // Should write 2 new files
-        _gitMock.Verify(g => g.WriteFileAsync(
-            It.IsAny<string>(), "src/Services/RegistrationService.cs", It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
-        _gitMock.Verify(g => g.WriteFileAsync(
-            It.IsAny<string>(), "src/Models/User.cs", It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
-    }
-
-    [Fact]
-    public async Task ExecuteAsync_AutoMode_TracksArtifacts()
+    public async Task ExecuteAsync_CallsCompleteWithToolsAsync()
     {
         SetupHappyPath();
         var service = CreateService();
 
         await service.ExecuteAsync(new AgentTask { WorkItemId = 12345, AgentType = AgentType.Coding });
 
-        Assert.Equal(2, _capturedState.Artifacts.Code.Count);
-        Assert.Contains("src/Services/RegistrationService.cs", _capturedState.Artifacts.Code);
-        Assert.Contains("src/Models/User.cs", _capturedState.Artifacts.Code);
+        _aiClientMock.Verify(a => a.CompleteWithToolsAsync(
+            It.IsAny<string>(), It.IsAny<string>(),
+            It.Is<IReadOnlyList<ToolDefinition>>(tools => tools.Count == 5),
+            It.IsAny<Func<ToolCall, CancellationToken, Task<string>>>(),
+            It.Is<AgenticOptions>(o => o.MaxRounds == 25),
+            It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
-    public async Task ExecuteAsync_AutoMode_TransitionsToAITest()
+    public async Task ExecuteAsync_TransitionsToAITest()
     {
         SetupHappyPath();
         var service = CreateService();
@@ -121,7 +126,7 @@ public sealed class CodingAgentServiceTests
     }
 
     [Fact]
-    public async Task ExecuteAsync_AutoMode_EnqueuesTestingAgent()
+    public async Task ExecuteAsync_EnqueuesTestingAgent()
     {
         SetupHappyPath();
         var service = CreateService();
@@ -133,33 +138,18 @@ public sealed class CodingAgentServiceTests
     }
 
     [Fact]
-    public async Task ExecuteAsync_AutoMode_TracksAutoModeInState()
+    public async Task ExecuteAsync_TracksAgenticModeInState()
     {
         SetupHappyPath();
         var service = CreateService();
 
         await service.ExecuteAsync(new AgentTask { WorkItemId = 12345, AgentType = AgentType.Coding });
 
-        Assert.Equal("auto", _capturedState.Agents["Coding"].AdditionalData!["mode"]);
+        Assert.Equal("agentic", _capturedState.Agents["Coding"].AdditionalData!["mode"]);
     }
 
     [Fact]
-    public async Task ExecuteAsync_AutoMode_AppliesSearchReplaceEdits()
-    {
-        SetupHappyPath(aiResponse: MockAIResponses.ValidCodingResponseWithEdits);
-        var service = CreateService();
-
-        await service.ExecuteAsync(new AgentTask { WorkItemId = 12345, AgentType = AgentType.Coding });
-
-        // Should write the edited file (replacing search text)
-        _gitMock.Verify(g => g.WriteFileAsync(
-            It.IsAny<string>(), "src/Program.cs",
-            It.Is<string>(content => content.Contains("Hello World")),
-            It.IsAny<CancellationToken>()), Times.Once);
-    }
-
-    [Fact]
-    public async Task ExecuteAsync_HappyPath_TracksTokens()
+    public async Task ExecuteAsync_TracksTokenUsage()
     {
         SetupHappyPath();
         var service = CreateService();
@@ -167,75 +157,32 @@ public sealed class CodingAgentServiceTests
         await service.ExecuteAsync(new AgentTask { WorkItemId = 12345, AgentType = AgentType.Coding });
 
         Assert.True(_capturedState.TokenUsage.Agents.ContainsKey("Coding"));
-        Assert.Equal(4500, _capturedState.TokenUsage.Agents["Coding"].TotalTokens);
-    }
-
-    // ========== HANDOFF MODE TESTS ==========
-
-    [Fact]
-    public async Task ExecuteAsync_HandoffMode_SetsAwaitingCodeState()
-    {
-        SetupHappyPath(aiResponse: MockAIResponses.ComplexCodingResponse);
-        var service = CreateService();
-
-        await service.ExecuteAsync(new AgentTask { WorkItemId = 12345, AgentType = AgentType.Coding });
-
-        Assert.Equal("Awaiting Code", _capturedState.CurrentState);
-        Assert.Equal("completed", _capturedState.Agents["Coding"].Status);
+        Assert.Equal(7000, _capturedState.TokenUsage.Agents["Coding"].TotalTokens);
     }
 
     [Fact]
-    public async Task ExecuteAsync_HandoffMode_DoesNotEnqueueTesting()
+    public async Task ExecuteAsync_PostsAdoComment()
     {
-        SetupHappyPath(aiResponse: MockAIResponses.ComplexCodingResponse);
-        var service = CreateService();
-
-        await service.ExecuteAsync(new AgentTask { WorkItemId = 12345, AgentType = AgentType.Coding });
-
-        _taskQueueMock.Verify(q => q.EnqueueAsync(
-            It.IsAny<AgentTask>(), It.IsAny<CancellationToken>()), Times.Never);
-    }
-
-    [Fact]
-    public async Task ExecuteAsync_HandoffMode_TracksHandoffModeInState()
-    {
-        SetupHappyPath(aiResponse: MockAIResponses.ComplexCodingResponse);
-        var service = CreateService();
-
-        await service.ExecuteAsync(new AgentTask { WorkItemId = 12345, AgentType = AgentType.Coding });
-
-        Assert.Equal("handoff", _capturedState.Agents["Coding"].AdditionalData!["mode"]);
-    }
-
-    [Fact]
-    public async Task ExecuteAsync_HandoffMode_PostsAdoComment()
-    {
-        SetupHappyPath(aiResponse: MockAIResponses.ComplexCodingResponse);
+        SetupHappyPath();
         var service = CreateService();
 
         await service.ExecuteAsync(new AgentTask { WorkItemId = 12345, AgentType = AgentType.Coding });
 
         _adoMock.Verify(a => a.AddWorkItemCommentAsync(12345,
-            It.Is<string>(c => c.Contains("Awaiting Human Code")), It.IsAny<CancellationToken>()), Times.Once);
+            It.Is<string>(c => c.Contains("Agentic Loop") && c.Contains("Tool calls")),
+            It.IsAny<CancellationToken>()), Times.Once);
     }
 
-    // ========== MALFORMED RESPONSE TESTS ==========
-
     [Fact]
-    public async Task ExecuteAsync_MalformedResponse_HandsOffToHuman()
+    public async Task ExecuteAsync_TracksRoundCountInState()
     {
-        SetupHappyPath(aiResponse: MockAIResponses.MalformedCodingResponse);
+        SetupHappyPath();
         var service = CreateService();
 
         await service.ExecuteAsync(new AgentTask { WorkItemId = 12345, AgentType = AgentType.Coding });
 
-        // Malformed JSON → complexity defaults to 5 → handoff
-        Assert.Equal("Awaiting Code", _capturedState.CurrentState);
-        _taskQueueMock.Verify(q => q.EnqueueAsync(
-            It.IsAny<AgentTask>(), It.IsAny<CancellationToken>()), Times.Never);
+        Assert.Equal(3, _capturedState.Agents["Coding"].AdditionalData!["rounds"]);
     }
-
-    // ========== EDGE CASES ==========
 
     [Fact]
     public async Task ExecuteAsync_NoPlan_StillRuns()
@@ -250,37 +197,94 @@ public sealed class CodingAgentServiceTests
         Assert.Equal("AI Test", _capturedState.CurrentState);
     }
 
-    // ========== PARSING UNIT TESTS ==========
-
     [Fact]
-    public void ParseCodingDecision_ValidJson_ParsesCorrectly()
+    public async Task ExecuteAsync_ZeroFilesModified_StillTransitionsToTest()
     {
-        var decision = CodingAgentService.ParseCodingDecision(MockAIResponses.ValidCodingResponse);
+        // Even with no files modified, should proceed to testing
+        SetupHappyPath(new AgenticResult
+        {
+            FinalResponse = "No changes were needed.",
+            RoundsExecuted = 1,
+            CompletedNaturally = true,
+            ToolCalls = [],
+            TotalUsage = new TokenUsageData { InputTokens = 100, OutputTokens = 50, TotalTokens = 150, Model = "test" }
+        });
 
-        Assert.Equal(2, decision.Complexity);
-        Assert.Equal(90, decision.Confidence);
-        Assert.Equal(2, decision.NewFiles.Count);
-        Assert.Empty(decision.Edits);
+        var service = CreateService();
+        await service.ExecuteAsync(new AgentTask { WorkItemId = 12345, AgentType = AgentType.Coding });
+
+        Assert.Equal("AI Test", _capturedState.CurrentState);
+        _taskQueueMock.Verify(q => q.EnqueueAsync(
+            It.Is<AgentTask>(t => t.AgentType == AgentType.Testing), It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
-    public void ParseCodingDecision_MalformedJson_DefaultsToHandoff()
+    public async Task ExecuteAsync_MaxRoundsExceeded_StillCompletes()
     {
-        var decision = CodingAgentService.ParseCodingDecision(MockAIResponses.MalformedCodingResponse);
+        SetupHappyPath(new AgenticResult
+        {
+            FinalResponse = null,
+            RoundsExecuted = 25,
+            CompletedNaturally = false,
+            ToolCalls = [new ToolCallLog { ToolName = "read_file", Input = "{}", Round = 25 }],
+            TotalUsage = new TokenUsageData { InputTokens = 50000, OutputTokens = 20000, TotalTokens = 70000, Model = "test" }
+        });
 
-        Assert.Equal(5, decision.Complexity);
-        Assert.Equal(0, decision.Confidence);
+        var service = CreateService();
+        await service.ExecuteAsync(new AgentTask { WorkItemId = 12345, AgentType = AgentType.Coding });
+
+        Assert.Equal("AI Test", _capturedState.CurrentState);
+        Assert.False((bool)_capturedState.Agents["Coding"].AdditionalData!["completedNaturally"]);
     }
 
     [Fact]
-    public void ParseCodingDecision_WithEdits_ParsesEdits()
+    public async Task ExecuteAsync_ReturnsOk()
     {
-        var decision = CodingAgentService.ParseCodingDecision(MockAIResponses.ValidCodingResponseWithEdits);
+        SetupHappyPath();
+        var service = CreateService();
 
-        Assert.Equal(1, decision.Complexity);
-        Assert.Single(decision.Edits);
-        Assert.Equal("src/Program.cs", decision.Edits[0].File);
+        var result = await service.ExecuteAsync(new AgentTask { WorkItemId = 12345, AgentType = AgentType.Coding });
+
+        Assert.True(result.Success);
     }
+
+    // ========== PROMPT BUILDING TESTS ==========
+
+    [Fact]
+    public void BuildSystemPrompt_ContainsToolInstructions()
+    {
+        var prompt = CodingAgentService.BuildSystemPrompt();
+
+        Assert.Contains("read_file", prompt);
+        Assert.Contains("write_file", prompt);
+        Assert.Contains("edit_file", prompt);
+        Assert.Contains("list_files", prompt);
+        Assert.Contains("search_code", prompt);
+        Assert.Contains("Do NOT create or modify test files", prompt);
+    }
+
+    [Fact]
+    public void BuildUserPrompt_IncludesStoryDetails()
+    {
+        var wi = MockAIResponses.SampleWorkItem();
+        var prompt = CodingAgentService.BuildUserPrompt(wi, "# Plan\nDo stuff", "src/Program.cs", "");
+
+        Assert.Contains("12345", prompt);
+        Assert.Contains(wi.Title, prompt);
+        Assert.Contains("Do stuff", prompt);
+        Assert.Contains("src/Program.cs", prompt);
+    }
+
+    [Fact]
+    public void BuildUserPrompt_IncludesCodebaseContext()
+    {
+        var wi = MockAIResponses.SampleWorkItem();
+        var prompt = CodingAgentService.BuildUserPrompt(wi, "Plan", "files", "Some context about the codebase");
+
+        Assert.Contains("Some context about the codebase", prompt);
+    }
+
+    // ========== EXTRACTED REFERENCED FILES (kept from old tests) ==========
 
     [Fact]
     public void ExtractReferencedFiles_FindsFilesInPlan()
