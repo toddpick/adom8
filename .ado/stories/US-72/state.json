@@ -1,8 +1,8 @@
 {
   "workItemId": 72,
-  "currentState": "AI Test",
+  "currentState": "AI Review",
   "createdAt": "2026-02-16T08:33:04.3423826Z",
-  "updatedAt": "2026-02-16T08:34:25.9909304Z",
+  "updatedAt": "2026-02-16T08:34:45.1848552Z",
   "agents": {
     "Planning": {
       "status": "in_progress",
@@ -13,6 +13,12 @@
     "Testing": {
       "status": "in_progress",
       "startedAt": "2026-02-16T08:34:25.9909271Z",
+      "completedAt": null,
+      "additionalData": null
+    },
+    "Review": {
+      "status": "in_progress",
+      "startedAt": "2026-02-16T08:34:45.1848511Z",
       "completedAt": null,
       "additionalData": null
     }
