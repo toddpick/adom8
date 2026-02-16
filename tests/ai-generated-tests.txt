@@ -2,162 +2,100 @@
 {
   "testCases": [
     {
-      "name": "GetCurrentStatus_WithActiveWorkItem_ReturnsAutonomyLevel",
-      "type": "Integration",
+      "name": "UpdateFooterBackground_DarkTheme_MatchesSidebar",
+      "type": "Unit",
       "priority": "High", 
-      "description": "Verify GetCurrentStatus returns autonomy level for active work item",
-      "expectedResult": "Autonomy level matches work item field"
+      "description": "Verify footer background color matches dark sidebar theme",
+      "expectedResult": "Footer background is #1e1e2e with light text color #aaa"
     },
     {
-      "name": "GetCurrentStatus_NoActiveWorkItem_ReturnsDefaultDash",
-      "type": "Integration", 
+      "name": "FooterTextReadability_DarkBackground_LightText", 
+      "type": "Unit",
       "priority": "High",
-      "description": "Verify dashboard shows dash when no work item is active",
-      "expectedResult": "Autonomy level displays as -"
+      "description": "Ensure footer text is readable on dark background",
+      "expectedResult": "Text color is light (#aaa) for good contrast"
     },
     {
-      "name": "CurrentWorkItemInfo_AutonomyLevel_Mapping",
-      "type": "Unit",
-      "priority": "Medium", 
-      "description": "Test mapping of autonomy level from work item to CurrentWorkItemInfo",
-      "expectedResult": "AutonomyLevel property correctly populated"
-    },
-    {
-      "name": "CurrentWorkItemInfo_NullAutonomyLevel_Handling",
-      "type": "Unit",
+      "name": "FooterStyling_ConsistentWithDashboardTheme_NoLayoutBreaks",
+      "type": "Integration", 
       "priority": "Medium",
-      "description": "Verify graceful handling of null/missing autonomy level",
-      "expectedResult": "Default value or null is handled without errors"
+      "description": "Validate footer styling maintains dashboard layout integrity",
+      "expectedResult": "Footer looks visually consistent, no layout disruptions"
     }
   ],
   "testFiles": [
     {
-      "relativePath": "tests/AIAgents.Functions.Tests/Functions/GetCurrentStatusTests.cs",
-      "content": "using System;
-using System.Threading.Tasks;
-using Xunit;
-using Moq;
-using AIAgents.Functions.Models;
-using AIAgents.Core.Services;
-
-namespace AIAgents.Functions.Tests.Functions
-{
-    public class GetCurrentStatusTests
-    {
-        private readonly Mock<IAzureDevOpsClient> _mockAdoClient;
-
-        public GetCurrentStatusTests()
-        {
-            _mockAdoClient = new Mock<IAzureDevOpsClient>();
-        }
-
-        [Fact]
-        public async Task GetCurrentStatus_WithActiveWorkItem_ReturnsAutonomyLevel()
-        {
-            // Arrange
-            var workItem = new StoryWorkItem 
-            { 
-                Id = 123, 
-                Fields = new Dictionary<string, object> 
-                { 
-                    { \"CustomFieldNames.AutonomyLevel\", 5 } 
-                }
-            };
-            _mockAdoClient.Setup(x => x.GetActiveWorkItemAsync(It.IsAny<CancellationToken>()))
-                .ReturnsAsync(workItem);
-
-            var function = new GetCurrentStatusFunction(_mockAdoClient.Object);
-
-            // Act
-            var result = await function.GetCurrentStatusAsync(CancellationToken.None);
-
-            // Assert
-            Assert.NotNull(result.CurrentWorkItem);
-            Assert.Equal(5, result.CurrentWorkItem.AutonomyLevel);
-        }
-
-        [Fact]
-        public async Task GetCurrentStatus_NoActiveWorkItem_ReturnsDefaultDash()
-        {
-            // Arrange
-            _mockAdoClient.Setup(x => x.GetActiveWorkItemAsync(It.IsAny<CancellationToken>()))
-                .ReturnsAsync((StoryWorkItem)null);
-
-            var function = new GetCurrentStatusFunction(_mockAdoClient.Object);
-
-            // Act
-            var result = await function.GetCurrentStatusAsync(CancellationToken.None);
-
-            // Assert
-            Assert.Null(result.CurrentWorkItem);
-        }
-
-        [Fact]
-        public void CurrentWorkItemInfo_NullAutonomyLevel_Handling()
-        {
-            // Arrange
-            var workItem = new StoryWorkItem 
-            { 
-                Id = 123, 
-                Fields = new Dictionary<string, object>() 
-            };
-
-            // Act
-            var currentWorkItem = new CurrentWorkItemInfo(workItem);
-
-            // Assert
-            Assert.Null(currentWorkItem.AutonomyLevel);
-        }
-    }
-}",
-      "isNew": true
-    },
-    {
-      "relativePath": "tests/AIAgents.Functions.Tests/Models/CurrentWorkItemInfoTests.cs", 
+      "relativePath": "tests/Dashboard/FooterStyleTests.cs",
       "content": "using System;
 using Xunit;
-using AIAgents.Functions.Models;
-using AIAgents.Core.Services;
+using System.IO;
+using System.Text.RegularExpressions;
 
-namespace AIAgents.Functions.Tests.Models
+namespace AIAgents.Dashboard.Tests 
 {
-    public class CurrentWorkItemInfoTests
+    public class FooterStyleTests
     {
+        private readonly string _dashboardPath = Path.Combine(
+            AppContext.BaseDirectory, 
+            \"..\\..\\..\\..\\dashboard\\index.html\"
+        );
+
         [Fact]
-        public void CurrentWorkItemInfo_AutonomyLevel_Mapping()
+        public void Footer_BackgroundColor_MatchesDarkTheme()
         {
             // Arrange
-            var workItem = new StoryWorkItem 
-            { 
-                Id = 123, 
-                Fields = new Dictionary<string, object> 
-                { 
-                    { \"CustomFieldNames.AutonomyLevel\", 3 } 
-                }
-            };
-
+            var htmlContent = File.ReadAllText(_dashboardPath);
+            var footerStylePattern = new Regex(@"footer\s*style=""([^""]+)""");
+            
             // Act
-            var currentWorkItem = new CurrentWorkItemInfo(workItem);
-
+            var match = footerStylePattern.Match(htmlContent);
+            
             // Assert
-            Assert.Equal(3, currentWorkItem.AutonomyLevel);
+            Assert.True(match.Success, \"Footer style attribute not found\");
+            
+            var styleContent = match.Groups[1].Value;
+            Assert.Contains(\"background-color: #1e1e2e\", styleContent, 
+                StringComparison.OrdinalIgnoreCase);
         }
 
         [Fact]
-        public void CurrentWorkItemInfo_MissingAutonomyLevel_ReturnsNull()
+        public void Footer_TextColor_ReadableOnDarkBackground()
         {
             // Arrange
-            var workItem = new StoryWorkItem 
-            { 
-                Id = 123, 
-                Fields = new Dictionary<string, object>() 
-            };
-
+            var htmlContent = File.ReadAllText(_dashboardPath);
+            var footerStylePattern = new Regex(@"footer\s*style=""([^""]+)""");
+            
             // Act
-            var currentWorkItem = new CurrentWorkItemInfo(workItem);
-
+            var match = footerStylePattern.Match(htmlContent);
+            
             // Assert
-            Assert.Null(currentWorkItem.AutonomyLevel);
+            Assert.True(match.Success, \"Footer style attribute not found\");
+            
+            var styleContent = match.Groups[1].Value;
+            Assert.Contains(\"color: #aaa\", styleContent, 
+                StringComparison.OrdinalIgnoreCase);
+        }
+
+        [Fact]
+        public void Footer_VisualConsistency_NoLayoutIssues()
+        {
+            // Arrange
+            var htmlContent = File.ReadAllText(_dashboardPath);
+            var footerStylePattern = new Regex(@"footer\s*style=""([^""]+)""");
+            
+            // Act
+            var match = footerStylePattern.Match(htmlContent);
+            
+            // Assert
+            Assert.True(match.Success, \"Footer style attribute not found\");
+            
+            var styleContent = match.Groups[1].Value;
+            Assert.Contains(\"text-align: center\", styleContent, 
+                StringComparison.OrdinalIgnoreCase);
+            Assert.Contains(\"padding: 10px\", styleContent, 
+                StringComparison.OrdinalIgnoreCase);
+            Assert.Contains(\"margin-top: 20px\", styleContent, 
+                StringComparison.OrdinalIgnoreCase);
         }
     }
 }",
@@ -167,20 +105,17 @@ namespace AIAgents.Functions.Tests.Models
 }
 ```
 
-The test suite covers the key scenarios for the US-76 story:
-1. Verifying autonomy level is returned for active work items
-2. Handling cases with no active work item 
-3. Testing null/missing autonomy level scenarios
-4. Ensuring correct mapping of autonomy level from work item fields
+The test suite focuses on three key aspects of the footer styling update:
+1. Verifying the background color matches the dark sidebar theme (#1e1e2e)
+2. Ensuring text color provides good readability on the dark background (#aaa)
+3. Checking that the footer maintains visual consistency and layout integrity
 
-The tests use xUnit and Moq to mock dependencies and test the implementation. They focus on:
-- Integration tests for the GetCurrentStatus function
-- Unit tests for CurrentWorkItemInfo model 
-- Edge case handling for null/missing data
-- Verifying correct data mapping
+The tests use regex pattern matching to validate the inline style attributes directly in the `index.html` file. This approach allows for precise verification of the specific style changes required by the user story.
 
-The test files follow the project's coding standards with:
-- Descriptive test method names
-- Arrange-Act-Assert pattern
-- Mocking of external dependencies
-- Comprehensive coverage of different scenarios
+The test cases cover:
+- Background color matching
+- Text color readability 
+- Visual consistency checks
+- No layout disruption
+
+The implementation follows the project's testing conventions, using xUnit and focusing on the specific requirements outlined in the story's acceptance criteria.
