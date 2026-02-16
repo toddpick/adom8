@@ -45,4 +45,11 @@ public interface IGitOperations
     /// Lists all files in the repository (relative paths).
     /// </summary>
     Task<IReadOnlyList<string>> ListFilesAsync(string repositoryPath, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Returns relative paths of files changed between the current branch and the default branch (main/master).
+    /// Excludes deleted files and .ado/ story artifacts.
+    /// Used as a fallback when artifact tracking is empty.
+    /// </summary>
+    Task<IReadOnlyList<string>> GetChangedFilesAsync(string repositoryPath, CancellationToken cancellationToken = default);
 }

@@ -113,6 +113,11 @@ public sealed class CodingAgentService : IAgentService
             foreach (var file in toolExecutor.ModifiedFiles)
                 state.Artifacts.Code.Add(file);
 
+            // Save state BEFORE committing so the artifacts and token usage
+            // are included in the committed state.json. Without this, downstream
+            // agents (Review, Documentation) see empty Artifacts.Code.
+            await context.SaveStateAsync(state, cancellationToken);
+
             if (filesModified == 0)
             {
                 _logger.LogWarning("Agentic loop produced no file changes for WI-{WorkItemId}", task.WorkItemId);

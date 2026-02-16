@@ -148,4 +148,55 @@ public sealed class ReviewAgentServiceTests
         Assert.True(_capturedState.TokenUsage.Agents.ContainsKey("Review"));
         Assert.Equal(4000, _capturedState.TokenUsage.Agents["Review"].TotalTokens);
     }
+
+    [Fact]
+    public async Task ExecuteAsync_EmptyArtifacts_FallsBackToGitDiff()
+    {
+        // Set up the same as happy path but with empty artifacts
+        var wi = MockAIResponses.SampleWorkItem(state: "AI Review");
+        var state = MockAIResponses.SampleState(wi.Id, "AI Review");
+        // Intentionally leave state.Artifacts.Code empty
+
+        _adoMock.Setup(a => a.GetWorkItemAsync(wi.Id, It.IsAny<CancellationToken>())).ReturnsAsync(wi);
+        _gitMock.Setup(g => g.EnsureBranchAsync(It.IsAny<string>(), It.IsAny<CancellationToken>())).ReturnsAsync(@"C:\repos\test");
+        _gitMock.Setup(g => g.ReadFileAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync("public class Test { }");
+        _gitMock.Setup(g => g.GetChangedFilesAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new List<string> { "src/Services/MyService.cs", "src/Models/MyModel.cs" });
+
+        _contextMock.Setup(c => c.LoadStateAsync(It.IsAny<CancellationToken>())).ReturnsAsync(state);
+        _contextMock.Setup(c => c.SaveStateAsync(It.IsAny<StoryState>(), It.IsAny<CancellationToken>()))
+            .Callback<StoryState, CancellationToken>((s, _) => _capturedState = s).Returns(Task.CompletedTask);
+
+        _aiClientMock.Setup(a => a.CompleteAsync(
+                It.IsAny<string>(), It.IsAny<string>(),
+                It.IsAny<AICompletionOptions?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new AICompletionResult
+            {
+                Content = MockAIResponses.ValidReviewResponse(),
+                Usage = new TokenUsageData
+                {
+                    InputTokens = 3000, OutputTokens = 1000, TotalTokens = 4000,
+                    EstimatedCost = 0.02m, Model = "gpt-4o"
+                }
+            });
+
+        _templateMock.Setup(t => t.RenderAsync(It.IsAny<string>(), It.IsAny<IDictionary<string, object?>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync("# Code Review");
+        _codebaseMock.Setup(c => c.LoadRelevantContextAsync(
+                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync("");
+
+        var service = CreateService();
+        await service.ExecuteAsync(new AgentTask { WorkItemId = 12345, AgentType = AgentType.Review });
+
+        // Verify git diff was called as fallback
+        _gitMock.Verify(g => g.GetChangedFilesAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
+        // Verify files from git diff were read
+        _gitMock.Verify(g => g.ReadFileAsync(It.IsAny<string>(), "src/Services/MyService.cs", It.IsAny<CancellationToken>()), Times.Once);
+        _gitMock.Verify(g => g.ReadFileAsync(It.IsAny<string>(), "src/Models/MyModel.cs", It.IsAny<CancellationToken>()), Times.Once);
+        // Verify review still completed
+        Assert.Equal("AI Docs", _capturedState.CurrentState);
+        Assert.Equal(85, _capturedState.Agents["Review"].AdditionalData!["score"]);
+    }
 }

@@ -109,7 +109,7 @@ public sealed class CodingAgentServiceTests
             It.IsAny<string>(), It.IsAny<string>(),
             It.Is<IReadOnlyList<ToolDefinition>>(tools => tools.Count == 5),
             It.IsAny<Func<ToolCall, CancellationToken, Task<string>>>(),
-            It.Is<AgenticOptions>(o => o.MaxRounds == 25),
+            It.Is<AgenticOptions>(o => o.MaxRounds == 15),
             It.IsAny<CancellationToken>()), Times.Once);
     }
 

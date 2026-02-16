@@ -64,6 +64,24 @@ public sealed class ReviewAgentService : IAgentService
 
         // Read all code and test files
         var allPaths = state.Artifacts.Code.Concat(state.Artifacts.Tests).ToList();
+
+        // Fallback: if no artifacts tracked, detect changed files from git diff
+        if (allPaths.Count == 0)
+        {
+            _logger.LogWarning("No artifacts found in state for WI-{WorkItemId}, falling back to git diff", task.WorkItemId);
+            var changedFiles = await _gitOps.GetChangedFilesAsync(repoPath, cancellationToken);
+            allPaths = changedFiles
+                .Where(f => f.EndsWith(".cs", StringComparison.OrdinalIgnoreCase) ||
+                            f.EndsWith(".ts", StringComparison.OrdinalIgnoreCase) ||
+                            f.EndsWith(".js", StringComparison.OrdinalIgnoreCase) ||
+                            f.EndsWith(".html", StringComparison.OrdinalIgnoreCase) ||
+                            f.EndsWith(".css", StringComparison.OrdinalIgnoreCase) ||
+                            f.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
+                .ToList();
+            _logger.LogInformation("Git diff fallback found {Count} reviewable files for WI-{WorkItemId}",
+                allPaths.Count, task.WorkItemId);
+        }
+
         var fileContents = new List<string>();
         foreach (var path in allPaths)
         {

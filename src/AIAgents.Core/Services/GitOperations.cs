@@ -190,6 +190,50 @@ public sealed class GitOperations : IGitOperations
         return Task.FromResult<IReadOnlyList<string>>(files);
     }
 
+    public Task<IReadOnlyList<string>> GetChangedFilesAsync(string repositoryPath, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            using var repo = new Repository(repositoryPath);
+
+            var currentBranch = repo.Head;
+
+            // Find the default branch (main or master) on origin
+            var defaultBranch = repo.Branches["origin/main"] ?? repo.Branches["origin/master"];
+            if (defaultBranch is null)
+            {
+                _logger.LogWarning("No origin/main or origin/master branch found for diff");
+                return Task.FromResult<IReadOnlyList<string>>(Array.Empty<string>());
+            }
+
+            var mergeBase = repo.ObjectDatabase.FindMergeBase(currentBranch.Tip, defaultBranch.Tip);
+            if (mergeBase is null)
+            {
+                _logger.LogWarning("No merge base found between {Current} and {Default}",
+                    currentBranch.FriendlyName, defaultBranch.FriendlyName);
+                return Task.FromResult<IReadOnlyList<string>>(Array.Empty<string>());
+            }
+
+            var changes = repo.Diff.Compare<TreeChanges>(mergeBase.Tree, currentBranch.Tip.Tree);
+            var files = changes
+                .Where(c => c.Status != ChangeKind.Deleted)
+                .Select(c => c.Path.Replace('\\', '/'))
+                .Where(p => !p.StartsWith(".ado/", StringComparison.OrdinalIgnoreCase))
+                .OrderBy(p => p)
+                .ToList();
+
+            _logger.LogInformation("Git diff found {Count} changed files on branch {Branch}",
+                files.Count, currentBranch.FriendlyName);
+
+            return Task.FromResult<IReadOnlyList<string>>(files);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to get changed files via git diff");
+            return Task.FromResult<IReadOnlyList<string>>(Array.Empty<string>());
+        }
+    }
+
     private static string SanitizeDirectoryName(string name)
     {
         return string.Concat(name.Select(c => Path.GetInvalidFileNameChars().Contains(c) ? '_' : c));
