@@ -87,7 +87,10 @@ public sealed class GitOperations : IGitOperations
                 repo.Refs.UpdateTarget(branch.Reference, remoteBranch.Tip.Id);
             }
 
-            Commands.Checkout(repo, branch);
+            Commands.Checkout(repo, branch, new CheckoutOptions
+            {
+                CheckoutModifiers = CheckoutModifiers.Force
+            });
             _logger.LogInformation("Checked out branch '{BranchName}'", branchName);
         }
 
