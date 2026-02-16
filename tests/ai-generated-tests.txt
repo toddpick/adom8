@@ -1,0 +1,172 @@
+```json
+{
+  "testCases": [
+    {
+      "name": "CostFormatting_MonitoringDashboard_DisplaysTwoDecimalPlaces",
+      "type": "Unit",
+      "priority": "High", 
+      "description": "Verify the main AI Cost stat in the dashboard banner displays cost with 2 decimal places",
+      "expectedResult": "Cost should be formatted as $X.XX"
+    },
+    {
+      "name": "CostFormatting_AgentSummary_DisplaysTwoDecimalPlaces", 
+      "type": "Unit",
+      "priority": "High",
+      "description": "Verify agent summary tooltips display cost with 2 decimal places",
+      "expectedResult": "Cost should be formatted as $X.XX"
+    },
+    {
+      "name": "CostFormatting_TokenUsageCard_DisplaysTwoDecimalPlaces",
+      "type": "Unit", 
+      "priority": "High",
+      "description": "Verify token usage card cost line displays 2 decimal places",
+      "expectedResult": "Cost should be formatted as $X.XX"
+    },
+    {
+      "name": "CostFormatting_StoryDetails_DisplaysTwoDecimalPlaces",
+      "type": "Unit",
+      "priority": "High", 
+      "description": "Verify story details token usage cost displays 2 decimal places",
+      "expectedResult": "Cost should be formatted as $X.XX"
+    },
+    {
+      "name": "CostFormatting_AgentCard_DisplaysTwoDecimalPlaces",
+      "type": "Unit",
+      "priority": "High",
+      "description": "Verify individual agent card cost displays 2 decimal places", 
+      "expectedResult": "Cost should be formatted as $X.XX"
+    },
+    {
+      "name": "CostFormatting_EdgeCase_ZeroCost",
+      "type": "Unit", 
+      "priority": "Medium",
+      "description": "Verify zero cost displays correctly with 2 decimal places",
+      "expectedResult": "Cost should display as $0.00"
+    },
+    {
+      "name": "CostFormatting_EdgeCase_SmallDecimalCost",
+      "type": "Unit",
+      "priority": "Medium", 
+      "description": "Verify small decimal costs round and display correctly",
+      "expectedResult": "Cost should display as $0.01 for values like 0.005"
+    },
+    {
+      "name": "CostFormatting_EdgeCase_LargeCost",
+      "type": "Unit",
+      "priority": "Medium",
+      "description": "Verify large cost values display with 2 decimal places",
+      "expectedResult": "Cost should display as $1234.56"
+    }
+  ],
+  "testFiles": [
+    {
+      "relativePath": "tests/Dashboard/CostFormattingTests.js",
+      "content": `
+// Cost Formatting Tests for Dashboard
+import { expect } from 'chai';
+import { formatCost } from '../src/dashboard/costUtils';
+
+describe('Dashboard Cost Formatting', () => {
+  // Test cases for .toFixed(2) formatting
+  it('should format main AI Cost stat with 2 decimal places', () => {
+    const cost = 123.456;
+    const formattedCost = formatCost(cost);
+    expect(formattedCost).to.equal('$123.46');
+  });
+
+  it('should handle zero cost', () => {
+    const cost = 0;
+    const formattedCost = formatCost(cost);
+    expect(formattedCost).to.equal('$0.00');
+  });
+
+  it('should round small decimal values', () => {
+    const cost = 0.005;
+    const formattedCost = formatCost(cost);
+    expect(formattedCost).to.equal('$0.01');
+  });
+
+  it('should handle large cost values', () => {
+    const cost = 1234.567;
+    const formattedCost = formatCost(cost);
+    expect(formattedCost).to.equal('$1234.57');
+  });
+
+  // Verify all locations use consistent formatting
+  const testLocations = [
+    'mainBanner', 
+    'agentSummary', 
+    'tokenUsageCard', 
+    'storyDetails', 
+    'agentCard'
+  ];
+
+  testLocations.forEach(location => {
+    it(`should use 2 decimal places in ${location}`, () => {
+      const costElement = document.querySelector(`#${location}-cost`);
+      const costText = costElement.textContent;
+      expect(costText).to.match(/^\$\d+\.\d{2}$/);
+    });
+  });
+});
+      `,
+      "isNew": true
+    },
+    {
+      "relativePath": "tests/Dashboard/CostUtilsTests.cs",
+      "content": `
+using System;
+using Xunit;
+using YourNamespace.Dashboard;
+
+public class CostUtilsTests
+{
+    [Theory]
+    [InlineData(123.456, "$123.46")]
+    [InlineData(0, "$0.00")]
+    [InlineData(0.005, "$0.01")]
+    [InlineData(1234.567, "$1234.57")]
+    public void FormatCost_ShouldRoundAndFormatCorrectly(decimal cost, string expected)
+    {
+        // Arrange & Act
+        var formattedCost = CostUtils.FormatCost(cost);
+
+        // Assert
+        Assert.Equal(expected, formattedCost);
+    }
+
+    [Fact]
+    public void FormatCost_NegativeCost_ShouldHandleCorrectly()
+    {
+        // Arrange
+        decimal cost = -50.123m;
+
+        // Act
+        var formattedCost = CostUtils.FormatCost(cost);
+
+        // Assert
+        Assert.Equal("-$50.12", formattedCost);
+    }
+}
+      `,
+      "isNew": true
+    }
+  ]
+}
+```
+
+The test suite covers:
+1. Unit tests for cost formatting
+2. JavaScript tests for dashboard cost display
+3. C# tests for cost utility methods
+4. Edge cases like zero, small decimals, large values
+5. Verification of formatting across different dashboard locations
+
+Key testing strategies:
+- Use theory/parameterized tests for multiple input scenarios
+- Check rounding behavior
+- Verify consistent formatting
+- Test edge cases
+- Validate display across different UI components
+
+The tests ensure the cost formatting meets the story's acceptance criteria of displaying costs with 2 decimal places consistently.
