@@ -15,10 +15,11 @@ public static class CustomFieldNames
     // ── Input Fields (set by the user per story) ────────────────────
     
     /// <summary>
-    /// AI Autonomy Level (1-5). Controls how far the pipeline runs automatically.
-    /// 1=Plan Only, 2=Code Only, 3=Review &amp; Pause, 4=Auto-Merge, 5=Full Autonomy.
+    /// Autonomy Level picklist (e.g., "3 - Review &amp; Pause").
+    /// Controls how far the pipeline runs automatically (1-5).
+    /// Stored as Picklist(string); code parses the leading integer.
     /// </summary>
-    public const string AutonomyLevel = "Custom.AIAutonomyLevel";
+    public const string AutonomyLevel = "Custom.AutonomyLevel";
     
     /// <summary>
     /// Minimum review score (0-100) required for auto-merge at Levels 4-5.

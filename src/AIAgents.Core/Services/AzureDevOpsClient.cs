@@ -163,8 +163,9 @@ public sealed class AzureDevOpsClient : IAzureDevOpsClient, IDisposable
             ChangedDate = GetField<DateTime>(fields, "System.ChangedDate"),
 
             // AI Input Fields
-            AutonomyLevel = GetField<double?>(fields, CustomFieldNames.AutonomyLevel) is double al
-                ? (int)al : 3,
+            AutonomyLevel = ParseAutonomyLevel(
+                GetField<string>(fields, CustomFieldNames.AutonomyLevel)
+                ?? GetField<double?>(fields, "Custom.AIAutonomyLevel")?.ToString()),
             MinimumReviewScore = GetField<double?>(fields, CustomFieldNames.MinimumReviewScore) is double mrs
                 ? (int)mrs : 85,
 
@@ -214,5 +215,30 @@ public sealed class AzureDevOpsClient : IAzureDevOpsClient, IDisposable
             string s => s,
             _ => value?.ToString()
         };
+    }
+
+    /// <summary>
+    /// Parses an autonomy level from a picklist string (e.g., "3 - Review &amp; Pause")
+    /// or a plain numeric string/double. Returns the leading integer, defaulting to 3.
+    /// Also handles legacy integer field values that come through as doubles.
+    /// </summary>
+    internal static int ParseAutonomyLevel(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return 3;
+
+        // Try parsing leading integer (handles "3 - Review & Pause" and plain "3")
+        var span = value.AsSpan().TrimStart();
+        var end = 0;
+        while (end < span.Length && char.IsDigit(span[end])) end++;
+
+        if (end > 0 && int.TryParse(span[..end], out var level) && level >= 1 && level <= 5)
+            return level;
+
+        // Fallback: try parsing as double (legacy integer field returned as JSON number)
+        if (double.TryParse(value, out var d) && d >= 1 && d <= 5)
+            return (int)d;
+
+        return 3; // Default
     }
 }

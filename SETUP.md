@@ -182,10 +182,11 @@ The AI pipeline uses **20 custom fields** organized into three groups: **Input F
 
 1. Click the **Layout** tab
 2. Click **+ New field** to add the first field:
-   - **Name:** `AI Autonomy Level`
-   - **Type:** Integer
-   - **Default:** `3`
-   - **Description:** Controls how far the AI pipeline goes automatically (1-5)
+   - **Name:** `Autonomy Level`
+   - **Type:** Picklist (string)
+   - **Items:** `1 - Plan Only`, `2 - Code Only`, `3 - Review & Pause`, `4 - Auto-Merge`, `5 - Full Autonomy`
+   - **Default:** `3 - Review & Pause`
+   - **Description:** Controls how far the AI pipeline goes automatically
    - **Group:** Select **"Create new group"** → name it **AI Agent Settings**
    - **Page:** Details
 
@@ -360,7 +361,7 @@ These fields are written automatically by the agents during processing. They sho
 
 | Group | Field | Example Value |
 |-------|-------|---------------|
-| AI Agent Settings | AI Autonomy Level | 3 |
+| AI Agent Settings | Autonomy Level | 3 - Review & Pause |
 | AI Agent Settings | AI Minimum Review Score | 85 |
 | AI Model Settings | AI Model Tier | *(blank = Standard)* |
 | AI Model Settings | AI Planning Model | *(blank = use default)* |
@@ -392,15 +393,15 @@ These fields are written automatically by the agents during processing. They sho
 
 > **Tip:** 99% of the time, just leave the Model Settings fields blank and the system defaults are used. Set `AI Model Tier = "Premium"` when you have a complex story that needs heavier models. Use the per-agent fields when you want surgical control (e.g., trying Opus on just the Coding agent for one story).
 
-**Autonomy Level reference:**
+**Autonomy Level reference (picklist values):**
 
-| Level | Name | Pipeline Stops After |
-|-------|------|---------------------|
-| 1 | Plan Only | Planning agent — generates plan, no code |
-| 2 | Code Only | Testing agent — generates code + tests, no review/merge |
-| 3 | Review & Pause | All agents run → pauses at "Code Review" for human approval |
-| 4 | Auto-Merge | All agents run → auto-merges PR if review score meets threshold |
-| 5 | Full Autonomy | All agents run → auto-merges + triggers deployment pipeline |
+| Picklist Value | Pipeline Stops After |
+|---------------|---------------------|
+| `1 - Plan Only` | Planning agent — generates plan, no code |
+| `2 - Code Only` | Testing agent — generates code + tests, no review/merge |
+| `3 - Review & Pause` | All agents run → pauses at "Code Review" for human approval |
+| `4 - Auto-Merge` | All agents run → auto-merges PR if review score meets threshold |
+| `5 - Full Autonomy` | All agents run → auto-merges + triggers deployment pipeline |
 
 > **Tip:** If you skip the AI Tracking fields, the pipeline still works — it just won't display the values on the work item. The agents gracefully handle missing fields. But you MUST add the two AI Agent Settings fields (Autonomy Level and Minimum Review Score) for the pipeline to function correctly. The AI Model Settings fields are entirely optional — skip them if you don't need per-story model control.
 
@@ -734,7 +735,7 @@ This connects Azure DevOps to your Function App. When a work item's state change
    - **Title:** `Create a hello world REST API endpoint`
    - **Description:** `Build a simple GET /hello endpoint that returns { "message": "Hello, World!" } with proper error handling and logging.`
    - **Acceptance Criteria:** `Given a GET request to /hello, When the server is running, Then it returns 200 with the hello message`
-   - *(Optional)* **AI Autonomy Level:** `3` (default)
+   - *(Optional)* **Autonomy Level:** `3 - Review & Pause` (default)
    - *(Optional)* **AI Minimum Review Score:** `85` (default)
 3. Change the state to **`Story Planning`**
 4. **Watch the pipeline work:**

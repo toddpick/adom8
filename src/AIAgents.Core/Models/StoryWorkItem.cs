@@ -20,7 +20,8 @@ public sealed record StoryWorkItem
     public DateTime ChangedDate { get; init; }
 
     /// <summary>
-    /// AI autonomy level (1-5). Read from custom field Custom.AIAutonomyLevel.
+    /// AI autonomy level (1-5). Parsed from picklist field Custom.AutonomyLevel
+    /// (e.g., "3 - Review &amp; Pause") or legacy integer field Custom.AIAutonomyLevel.
     /// 1=Plan Only, 2=Code Only, 3=Review &amp; Pause, 4=Auto-Merge, 5=Full Autonomy.
     /// </summary>
     public int AutonomyLevel { get; init; } = 3;
