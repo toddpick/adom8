@@ -34,8 +34,8 @@ var host = new HostBuilder()
         services.AddHttpClient("AIClient")
         .AddStandardResilienceHandler(options =>
         {
-            options.AttemptTimeout.Timeout = TimeSpan.FromSeconds(120);
-            options.TotalRequestTimeout.Timeout = TimeSpan.FromMinutes(5);
+            options.AttemptTimeout.Timeout = TimeSpan.FromSeconds(180);
+            options.TotalRequestTimeout.Timeout = TimeSpan.FromMinutes(9);
             options.Retry.MaxRetryAttempts = 3;
             options.Retry.Delay = TimeSpan.FromSeconds(2);
             options.CircuitBreaker.SamplingDuration = TimeSpan.FromSeconds(240);
