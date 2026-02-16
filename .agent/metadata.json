@@ -1,0 +1,22 @@
+{
+  "generatedAt": "2026-02-15T22:00:00Z",
+  "generatedBy": "manual",
+  "version": "1.0.0",
+  "documents": [
+    "CONTEXT_INDEX.md",
+    "TECH_STACK.md",
+    "ARCHITECTURE.md",
+    "CODING_STANDARDS.md",
+    "COMMON_PATTERNS.md",
+    "TESTING_STRATEGY.md",
+    "DEPLOYMENT.md",
+    "API_REFERENCE.md"
+  ],
+  "codebaseStats": {
+    "totalFiles": 98,
+    "language": "C#",
+    "framework": ".NET 8",
+    "testFiles": 20,
+    "projects": 4
+  }
+}
