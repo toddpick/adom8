@@ -62,29 +62,39 @@ public sealed class ReviewAgentService : IAgentService
         state.Agents["Review"] = AgentStatus.InProgress();
         await context.SaveStateAsync(state, cancellationToken);
 
-        // Read all code and test files
-        var allPaths = state.Artifacts.Code.Concat(state.Artifacts.Tests).ToList();
+        // Review ONLY coding artifacts — do NOT include test files or non-code artifacts.
+        // This keeps the review focused and avoids sending excessive content to the AI.
+        var allPaths = state.Artifacts.Code.ToList();
 
-        // Fallback: if no artifacts tracked, detect changed files from git diff
+        // Fallback: if no code artifacts tracked, detect changed files from git diff.
+        // Filter to only source code files — skip test files, generated docs, configs, etc.
         if (allPaths.Count == 0)
         {
-            _logger.LogWarning("No artifacts found in state for WI-{WorkItemId}, falling back to git diff", task.WorkItemId);
+            _logger.LogWarning("No code artifacts found in state for WI-{WorkItemId}, falling back to git diff", task.WorkItemId);
             var changedFiles = await _gitOps.GetChangedFilesAsync(repoPath, cancellationToken);
             allPaths = changedFiles
-                .Where(f => f.EndsWith(".cs", StringComparison.OrdinalIgnoreCase) ||
-                            f.EndsWith(".ts", StringComparison.OrdinalIgnoreCase) ||
-                            f.EndsWith(".js", StringComparison.OrdinalIgnoreCase) ||
-                            f.EndsWith(".html", StringComparison.OrdinalIgnoreCase) ||
-                            f.EndsWith(".css", StringComparison.OrdinalIgnoreCase) ||
-                            f.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
+                .Where(f => (f.EndsWith(".cs", StringComparison.OrdinalIgnoreCase) ||
+                             f.EndsWith(".ts", StringComparison.OrdinalIgnoreCase) ||
+                             f.EndsWith(".js", StringComparison.OrdinalIgnoreCase) ||
+                             f.EndsWith(".html", StringComparison.OrdinalIgnoreCase) ||
+                             f.EndsWith(".css", StringComparison.OrdinalIgnoreCase)) &&
+                            // Exclude test files, generated docs, and pipeline artifacts
+                            !f.Contains("Test", StringComparison.OrdinalIgnoreCase) &&
+                            !f.Contains(".test.", StringComparison.OrdinalIgnoreCase) &&
+                            !f.Contains(".spec.", StringComparison.OrdinalIgnoreCase) &&
+                            !f.EndsWith(".md", StringComparison.OrdinalIgnoreCase) &&
+                            !f.StartsWith(".ado/", StringComparison.OrdinalIgnoreCase))
                 .ToList();
-            _logger.LogInformation("Git diff fallback found {Count} reviewable files for WI-{WorkItemId}",
+            _logger.LogInformation("Git diff fallback found {Count} reviewable source files for WI-{WorkItemId}",
                 allPaths.Count, task.WorkItemId);
         }
 
-        // Cap total code size to avoid Claude API timeouts on large payloads
-        const int MaxCodeChars = 40_000; // ~10K tokens, keeps API response fast
-        const int MaxFileChars = 15_000; // Per-file cap
+        _logger.LogInformation("Reviewing {Count} files for WI-{WorkItemId}: {Files}",
+            allPaths.Count, task.WorkItemId, string.Join(", ", allPaths.Take(10)));
+
+        // Cap total code size to control cost — only send what's needed for review
+        const int MaxCodeChars = 30_000; // ~7.5K tokens, keeps cost under control
+        const int MaxFileChars = 10_000; // Per-file cap — truncate large files
 
         var fileContents = new List<string>();
         var totalChars = 0;
@@ -131,10 +141,10 @@ Respond ONLY with valid JSON:
 }
 Check for: SQL injection, XSS, hardcoded secrets, null reference, race conditions, error handling, SOLID violations, and performance issues.";
 
-        // Skip extra codebase context for large payloads to keep prompt manageable
-        var codebaseCtx = totalChars < 20_000
-            ? await _codebaseContext.LoadRelevantContextAsync(repoPath, workItem.Title, workItem.Description, cancellationToken)
-            : "";
+        // Skip codebase context entirely for review — the review agent only needs
+        // the actual code being reviewed, not broader codebase documentation.
+        // This prevents sending excessive context to the AI and controls costs.
+        var codebaseCtx = "";
 
         var userPrompt = $@"## Story
 **ID:** {workItem.Id}

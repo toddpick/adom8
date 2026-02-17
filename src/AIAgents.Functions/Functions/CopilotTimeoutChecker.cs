@@ -14,13 +14,18 @@ using Microsoft.Extensions.Options;
 namespace AIAgents.Functions.Functions;
 
 /// <summary>
-/// Timer-triggered Azure Function that checks for timed-out Copilot delegations.
+/// Timer-triggered Azure Function that checks for completed or timed-out Copilot delegations.
 /// 
-/// Runs every 5 minutes. If a Copilot delegation has been pending longer than
-/// <see cref="CopilotOptions.TimeoutMinutes"/>, it re-enqueues the story for
-/// coding with a "forceAgentic" flag so the built-in loop handles it instead.
+/// Runs every 2 minutes. For each pending delegation:
+/// 1. Checks if Copilot has created a PR with commits (including draft PRs).
+///    If found, performs full file reconciliation from Copilot's PR branch onto the
+///    pipeline branch, then marks the delegation complete and enqueues the Testing agent.
+/// 2. If no completed PR is found and the delegation exceeds
+///    <see cref="CopilotOptions.TimeoutMinutes"/>, falls back to the built-in agentic
+///    coding loop.
 /// 
-/// This is a safety net — ensures no story gets stuck waiting for Copilot forever.
+/// This is the primary mechanism for detecting Copilot completion since Copilot creates
+/// draft PRs (which the webhook ignores) and does not close its own GitHub Issues.
 /// </summary>
 public sealed class CopilotTimeoutChecker
 {
@@ -57,9 +62,10 @@ public sealed class CopilotTimeoutChecker
     }
 
     /// <summary>
-    /// Runs every 5 minutes to check for completed or timed-out Copilot delegations.
-    /// First checks if Copilot has finished (PR exists with commits) and auto-closes
-    /// the issue to trigger the bridge webhook. If truly timed out, falls back to agentic.
+    /// Runs every 2 minutes to check for completed or timed-out Copilot delegations.
+    /// First checks if Copilot has finished (PR exists with commits, including drafts)
+    /// and performs full file reconciliation + pipeline resumption inline.
+    /// If truly timed out, falls back to the built-in agentic loop.
     /// </summary>
     [Function("CopilotTimeoutChecker")]
     public async Task RunAsync(
@@ -116,7 +122,8 @@ public sealed class CopilotTimeoutChecker
     /// <summary>
     /// Checks if Copilot has finished coding by looking for a PR with commits.
     /// Copilot doesn't close its GitHub Issue when done, so we detect completion
-    /// by finding a matching PR and auto-closing the issue to trigger the bridge webhook.
+    /// by finding a matching PR (including drafts) and auto-closing the issue.
+    /// When a completed PR is found, reconciles files and resumes the pipeline inline.
     /// </summary>
     private async Task CheckForCompletionAsync(CopilotDelegation delegation, CancellationToken cancellationToken)
     {
@@ -128,13 +135,22 @@ public sealed class CopilotTimeoutChecker
             return;
         }
 
+        _logger.LogInformation(
+            "Checking Copilot completion for WI-{WorkItemId} (Issue #{IssueNumber}, {Elapsed:F0}m elapsed)",
+            delegation.WorkItemId, delegation.IssueNumber, elapsed);
+
         using var httpClient = CreateGitHubClient();
 
-        // Check if the issue is already closed (webhook should handle it)
+        // Check if the issue is already closed (webhook should handle it, but may have missed)
         var issueResponse = await httpClient.GetAsync(
             $"repos/{_githubOptions.Owner}/{_githubOptions.Repo}/issues/{delegation.IssueNumber}",
             cancellationToken);
-        if (!issueResponse.IsSuccessStatusCode) return;
+        if (!issueResponse.IsSuccessStatusCode)
+        {
+            _logger.LogWarning("Failed to fetch Issue #{IssueNumber} for WI-{WorkItemId} (status {StatusCode})",
+                delegation.IssueNumber, delegation.WorkItemId, issueResponse.StatusCode);
+            return;
+        }
 
         var issueJson = await issueResponse.Content.ReadAsStringAsync(cancellationToken);
         using var issueDoc = JsonDocument.Parse(issueJson);
@@ -151,11 +167,16 @@ public sealed class CopilotTimeoutChecker
             return;
         }
 
-        // Look for a PR created by Copilot for this work item
+        // Look for a PR created by Copilot for this work item (includes draft PRs)
         var prResponse = await httpClient.GetAsync(
-            $"repos/{_githubOptions.Owner}/{_githubOptions.Repo}/pulls?state=all&sort=created&direction=desc&per_page=10",
+            $"repos/{_githubOptions.Owner}/{_githubOptions.Repo}/pulls?state=all&sort=created&direction=desc&per_page=20",
             cancellationToken);
-        if (!prResponse.IsSuccessStatusCode) return;
+        if (!prResponse.IsSuccessStatusCode)
+        {
+            _logger.LogWarning("Failed to fetch PRs for WI-{WorkItemId} (status {StatusCode})",
+                delegation.WorkItemId, prResponse.StatusCode);
+            return;
+        }
 
         var prJson = await prResponse.Content.ReadAsStringAsync(cancellationToken);
         using var prDoc = JsonDocument.Parse(prJson);
@@ -165,19 +186,32 @@ public sealed class CopilotTimeoutChecker
             var prTitle = pr.GetProperty("title").GetString() ?? "";
             var prBody = pr.TryGetProperty("body", out var bProp) ? bProp.GetString() ?? "" : "";
             var prCreated = pr.GetProperty("created_at").GetDateTime();
+            var prBaseBranch = pr.TryGetProperty("base", out var baseProp)
+                ? baseProp.TryGetProperty("ref", out var baseRef) ? baseRef.GetString() ?? "" : ""
+                : "";
 
             if (prCreated < delegation.DelegatedAt.AddMinutes(-1)) continue;
 
-            // Check if this PR references our work item
-            if (!prTitle.Contains($"US-{delegation.WorkItemId}", StringComparison.OrdinalIgnoreCase) &&
-                !prBody.Contains($"US-{delegation.WorkItemId}", StringComparison.OrdinalIgnoreCase) &&
-                !prTitle.Contains(delegation.WorkItemId.ToString()) &&
-                !prBody.Contains($"#{delegation.IssueNumber}"))
+            // Check if this PR references our work item via title, body, or base branch
+            var matchesById = prTitle.Contains($"US-{delegation.WorkItemId}", StringComparison.OrdinalIgnoreCase) ||
+                              prBody.Contains($"US-{delegation.WorkItemId}", StringComparison.OrdinalIgnoreCase) ||
+                              prTitle.Contains(delegation.WorkItemId.ToString());
+            var matchesByIssue = delegation.IssueNumber > 0 &&
+                                 prBody.Contains($"#{delegation.IssueNumber}");
+            var matchesByBranch = !string.IsNullOrEmpty(delegation.BranchName) &&
+                                  string.Equals(prBaseBranch, delegation.BranchName, StringComparison.OrdinalIgnoreCase);
+
+            if (!matchesById && !matchesByIssue && !matchesByBranch)
             {
                 continue;
             }
 
             var prNumber = pr.GetProperty("number").GetInt32();
+            var isDraft = pr.TryGetProperty("draft", out var draftProp) && draftProp.GetBoolean();
+
+            _logger.LogInformation(
+                "Found candidate PR #{PrNumber} for WI-{WorkItemId} (draft={IsDraft}, title=\"{Title}\", matchById={ById}, matchByIssue={ByIssue}, matchByBranch={ByBranch})",
+                prNumber, delegation.WorkItemId, isDraft, prTitle, matchesById, matchesByIssue, matchesByBranch);
 
             // The PR list endpoint does NOT return 'commits' — must fetch individual PR detail
             var prDetailResponse = await httpClient.GetAsync(
@@ -189,26 +223,30 @@ public sealed class CopilotTimeoutChecker
             using var prDetailDoc = JsonDocument.Parse(prDetailJson);
             var prCommits = prDetailDoc.RootElement.GetProperty("commits").GetInt32();
 
+            _logger.LogInformation(
+                "PR #{PrNumber} detail: {Commits} commits, draft={IsDraft} for WI-{WorkItemId}",
+                prNumber, prCommits, isDraft, delegation.WorkItemId);
+
             if (prCommits > 0)
             {
                 _logger.LogInformation(
-                    "Copilot completed! PR #{PrNumber} has {Commits} commits for WI-{WorkItemId} (Issue #{IssueNumber}) — completing inline",
+                    "Copilot completed! PR #{PrNumber} has {Commits} commits for WI-{WorkItemId} (Issue #{IssueNumber}) — reconciling and completing inline",
                     prNumber, prCommits, delegation.WorkItemId, delegation.IssueNumber);
 
-                // Close the issue
+                // Close the issue so it won't trigger again
                 var closeBody = JsonSerializer.Serialize(new { state = "closed" });
                 var closeContent = new StringContent(closeBody, Encoding.UTF8, "application/json");
                 await httpClient.PatchAsync(
                     $"repos/{_githubOptions.Owner}/{_githubOptions.Repo}/issues/{delegation.IssueNumber}",
                     closeContent, cancellationToken);
 
-                // Complete delegation and enqueue next agent — don't rely on any webhook
+                // Complete delegation with full file reconciliation and enqueue next agent
                 await CompleteDelegationAndResume(delegation, prNumber, prCommits, cancellationToken);
                 return;
             }
         }
 
-        _logger.LogDebug("No completed PR found yet for WI-{WorkItemId} ({Elapsed:F0}m elapsed)",
+        _logger.LogInformation("No completed PR found yet for WI-{WorkItemId} ({Elapsed:F0}m elapsed)",
             delegation.WorkItemId, elapsed);
     }
 
@@ -219,7 +257,7 @@ public sealed class CopilotTimeoutChecker
     private async Task FindPrAndCompleteDelegation(HttpClient httpClient, CopilotDelegation delegation, CancellationToken cancellationToken)
     {
         var prResponse = await httpClient.GetAsync(
-            $"repos/{_githubOptions.Owner}/{_githubOptions.Repo}/pulls?state=all&sort=created&direction=desc&per_page=10",
+            $"repos/{_githubOptions.Owner}/{_githubOptions.Repo}/pulls?state=all&sort=created&direction=desc&per_page=20",
             cancellationToken);
         if (!prResponse.IsSuccessStatusCode)
         {
@@ -235,13 +273,19 @@ public sealed class CopilotTimeoutChecker
             var prTitle = pr.GetProperty("title").GetString() ?? "";
             var prBody = pr.TryGetProperty("body", out var bProp) ? bProp.GetString() ?? "" : "";
             var prCreated = pr.GetProperty("created_at").GetDateTime();
+            var prBaseBranch = pr.TryGetProperty("base", out var baseProp)
+                ? baseProp.TryGetProperty("ref", out var baseRef) ? baseRef.GetString() ?? "" : ""
+                : "";
 
             if (prCreated < delegation.DelegatedAt.AddMinutes(-1)) continue;
 
+            // Match by work item ID, issue number reference, or base branch
             if (!prTitle.Contains($"US-{delegation.WorkItemId}", StringComparison.OrdinalIgnoreCase) &&
                 !prBody.Contains($"US-{delegation.WorkItemId}", StringComparison.OrdinalIgnoreCase) &&
                 !prTitle.Contains(delegation.WorkItemId.ToString()) &&
-                !prBody.Contains($"#{delegation.IssueNumber}"))
+                !(delegation.IssueNumber > 0 && prBody.Contains($"#{delegation.IssueNumber}")) &&
+                !(!string.IsNullOrEmpty(delegation.BranchName) &&
+                  string.Equals(prBaseBranch, delegation.BranchName, StringComparison.OrdinalIgnoreCase)))
             {
                 continue;
             }
@@ -278,18 +322,161 @@ public sealed class CopilotTimeoutChecker
     }
 
     /// <summary>
-    /// Completes a Copilot delegation end-to-end: marks delegation done, updates ADO state,
-    /// adds completion comment, and enqueues the next agent. Does NOT rely on any webhook.
+    /// Completes a Copilot delegation end-to-end: reconciles code from Copilot's PR branch
+    /// onto the pipeline branch, marks delegation done, updates ADO state, and enqueues
+    /// the next agent. Does NOT rely on any webhook — fully self-contained.
     /// </summary>
     private async Task CompleteDelegationAndResume(CopilotDelegation delegation, int prNumber, int prCommits, CancellationToken cancellationToken)
     {
-        // 1. Mark delegation as completed
+        var elapsed = (DateTime.UtcNow - delegation.DelegatedAt).TotalMinutes;
+        var reconciledFileCount = 0;
+        var linesAdded = 0;
+        var linesDeleted = 0;
+
+        // 1. Reconcile files from Copilot's PR onto the pipeline branch
+        if (prNumber > 0)
+        {
+            try
+            {
+                using var httpClient = CreateGitHubClient();
+
+                // Fetch PR detail to get the source branch name and diff stats
+                var prDetailResponse = await httpClient.GetAsync(
+                    $"repos/{_githubOptions.Owner}/{_githubOptions.Repo}/pulls/{prNumber}",
+                    cancellationToken);
+
+                if (prDetailResponse.IsSuccessStatusCode)
+                {
+                    var prDetailJson = await prDetailResponse.Content.ReadAsStringAsync(cancellationToken);
+                    using var prDetailDoc = JsonDocument.Parse(prDetailJson);
+                    var prRoot = prDetailDoc.RootElement;
+                    var copilotBranch = prRoot.GetProperty("head").GetProperty("ref").GetString() ?? "";
+                    linesAdded = prRoot.GetProperty("additions").GetInt32();
+                    linesDeleted = prRoot.GetProperty("deletions").GetInt32();
+
+                    if (!string.IsNullOrEmpty(copilotBranch))
+                    {
+                        // Fetch changed file list from the PR
+                        var filesResponse = await httpClient.GetAsync(
+                            $"repos/{_githubOptions.Owner}/{_githubOptions.Repo}/pulls/{prNumber}/files?per_page=100",
+                            cancellationToken);
+
+                        if (filesResponse.IsSuccessStatusCode)
+                        {
+                            var filesJson = await filesResponse.Content.ReadAsStringAsync(cancellationToken);
+                            using var filesDoc = JsonDocument.Parse(filesJson);
+
+                            // Check out the pipeline branch
+                            var repoPath = await _gitOps.EnsureBranchAsync(delegation.BranchName, cancellationToken);
+                            var reconciledFiles = new List<string>();
+
+                            foreach (var file in filesDoc.RootElement.EnumerateArray())
+                            {
+                                var filename = file.GetProperty("filename").GetString() ?? "";
+                                var status = file.GetProperty("status").GetString() ?? "";
+
+                                if (status == "removed" || string.IsNullOrEmpty(filename))
+                                    continue;
+
+                                // Fetch raw file content from Copilot's branch
+                                var content = await FetchFileContentAsync(httpClient, filename, copilotBranch, cancellationToken);
+                                if (content is not null)
+                                {
+                                    await _gitOps.WriteFileAsync(repoPath, filename, content, cancellationToken);
+                                    reconciledFiles.Add(filename);
+                                }
+                            }
+
+                            reconciledFileCount = reconciledFiles.Count;
+
+                            // Update state.json with coding artifacts
+                            await using var context = _contextFactory.Create(delegation.WorkItemId, repoPath);
+                            var state = await context.LoadStateAsync(cancellationToken);
+
+                            foreach (var file in reconciledFiles)
+                                state.Artifacts.Code.Add(file);
+
+                            state.TokenUsage.RecordUsage("Coding", new TokenUsageData
+                            {
+                                InputTokens = 0,
+                                OutputTokens = 0,
+                                TotalTokens = 0,
+                                EstimatedCost = 0m,
+                                Model = "copilot-coding-agent"
+                            });
+
+                            state.Agents["Coding"] = AgentStatus.Completed();
+                            state.Agents["Coding"].AdditionalData = new Dictionary<string, object>
+                            {
+                                ["mode"] = "copilot",
+                                ["copilotPrNumber"] = prNumber,
+                                ["issueNumber"] = delegation.IssueNumber,
+                                ["filesChanged"] = reconciledFileCount,
+                                ["linesAdded"] = linesAdded,
+                                ["linesDeleted"] = linesDeleted,
+                                ["durationMinutes"] = elapsed,
+                                ["commitCount"] = prCommits,
+                                ["reconciledByTimer"] = true
+                            };
+                            state.CurrentState = "AI Review"; // Skip Testing — Copilot already tested
+                            state.Agents["Testing"] = AgentStatus.Skipped("Copilot coding agent already runs tests");
+                            await context.SaveStateAsync(state, cancellationToken);
+
+                            // Commit reconciled changes to pipeline branch
+                            if (reconciledFileCount > 0)
+                            {
+                                await _gitOps.CommitAndPushAsync(repoPath,
+                                    $"[AI Coding] US-{delegation.WorkItemId}: Copilot implementation (PR #{prNumber}, {reconciledFileCount} files)",
+                                    cancellationToken);
+                            }
+
+                            // Close Copilot's PR — changes are on the pipeline branch now
+                            try
+                            {
+                                var closeComment = JsonSerializer.Serialize(new
+                                {
+                                    body = $"Changes incorporated into pipeline branch `{delegation.BranchName}`. Pipeline continuing via ADO-Agent."
+                                });
+                                var closeCommentContent = new StringContent(closeComment, Encoding.UTF8, "application/json");
+                                await httpClient.PostAsync(
+                                    $"repos/{_githubOptions.Owner}/{_githubOptions.Repo}/issues/{prNumber}/comments",
+                                    closeCommentContent, cancellationToken);
+
+                                var closePrBody = JsonSerializer.Serialize(new { state = "closed" });
+                                var closePrContent = new StringContent(closePrBody, Encoding.UTF8, "application/json");
+                                await httpClient.PatchAsync(
+                                    $"repos/{_githubOptions.Owner}/{_githubOptions.Repo}/pulls/{prNumber}",
+                                    closePrContent, cancellationToken);
+
+                                _logger.LogInformation("Closed Copilot PR #{PrNumber} after reconciliation", prNumber);
+                            }
+                            catch (Exception ex)
+                            {
+                                _logger.LogWarning(ex, "Failed to close Copilot PR #{PrNumber} — may need manual cleanup", prNumber);
+                            }
+
+                            _logger.LogInformation(
+                                "Reconciled {FileCount} files from Copilot PR #{PrNumber} onto branch {Branch} for WI-{WorkItemId}",
+                                reconciledFileCount, prNumber, delegation.BranchName, delegation.WorkItemId);
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex,
+                    "Failed to reconcile files from Copilot PR #{PrNumber} for WI-{WorkItemId} — completing delegation without file reconciliation",
+                    prNumber, delegation.WorkItemId);
+            }
+        }
+
+        // 2. Mark delegation as completed
         delegation.Status = "Completed";
         delegation.CopilotPrNumber = prNumber;
         delegation.CompletedAt = DateTime.UtcNow;
         await _delegationService.UpdateAsync(delegation, cancellationToken);
 
-        // 2. Update ADO work item state and fields
+        // 3. Update ADO work item state and fields
         try
         {
             await _adoClient.UpdateWorkItemFieldAsync(
@@ -297,35 +484,62 @@ public sealed class CopilotTimeoutChecker
         }
         catch { /* field may not exist yet */ }
 
+        // Skip Testing — Copilot coding agent already runs tests during its session.
+        // Go directly to AI Review state.
         await _adoClient.UpdateWorkItemStateAsync(
-            delegation.WorkItemId, "AI Test", cancellationToken);
+            delegation.WorkItemId, "AI Review", cancellationToken);
 
-        // 3. Add completion comment to ADO
-        var elapsed = (DateTime.UtcNow - delegation.DelegatedAt).TotalMinutes;
-        var prInfo = prNumber > 0 ? $"PR #{prNumber}, {prCommits} commits" : "no PR found";
+        // 4. Add completion comment to ADO
+        var prInfo = prNumber > 0
+            ? $"PR #{prNumber}, {prCommits} commits, {reconciledFileCount} files reconciled, +{linesAdded}/-{linesDeleted} lines"
+            : "no PR found";
         await _adoClient.AddWorkItemCommentAsync(delegation.WorkItemId,
             $"<b>\U0001f916 AI Coding Agent Complete (GitHub Copilot)</b><br/>" +
             $"Strategy: Copilot coding agent<br/>" +
             $"{prInfo}<br/>" +
-            $"Duration: {elapsed:F1} minutes (1 premium credit)",
+            $"Duration: {elapsed:F1} minutes (1 premium credit)<br/>" +
+            $"Skipping Testing agent (Copilot already validated code)",
             cancellationToken);
 
-        // 4. Enqueue Testing agent to resume pipeline (dispatcher handles autonomy level)
+        // 5. Enqueue Review agent — skip Testing since Copilot handles testing in its process
         var nextTask = new AgentTask
         {
             WorkItemId = delegation.WorkItemId,
-            AgentType = AgentType.Testing,
+            AgentType = AgentType.Review,
             CorrelationId = delegation.CorrelationId
         };
         await _taskQueue.EnqueueAsync(nextTask, cancellationToken);
 
         await _activityLogger.LogAsync("Coding", delegation.WorkItemId,
-            $"Copilot completed ({prInfo}, {elapsed:F1}m) — enqueued Testing agent (1 premium credit)",
+            $"Copilot completed ({prInfo}, {elapsed:F1}m) — skipping Testing, enqueued Review agent (1 premium credit)",
             "info", cancellationToken);
 
         _logger.LogInformation(
-            "Copilot delegation completed for WI-{WorkItemId} — PR #{PrNumber}, pipeline resumed",
-            delegation.WorkItemId, prNumber);
+            "Copilot delegation completed for WI-{WorkItemId} — PR #{PrNumber}, {FileCount} files reconciled, pipeline resumed (Testing skipped → Review)",
+            delegation.WorkItemId, prNumber, reconciledFileCount);
+    }
+
+    /// <summary>
+    /// Fetches raw file content from a specific branch via GitHub API.
+    /// </summary>
+    private async Task<string?> FetchFileContentAsync(HttpClient httpClient, string filePath, string branch, CancellationToken cancellationToken)
+    {
+        // Use a separate client or clear/re-add accept header for raw content
+        using var request = new HttpRequestMessage(HttpMethod.Get,
+            $"repos/{_githubOptions.Owner}/{_githubOptions.Repo}/contents/{Uri.EscapeDataString(filePath)}?ref={branch}");
+        request.Headers.Accept.Clear();
+        request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/vnd.github.raw+json"));
+
+        var response = await httpClient.SendAsync(request, cancellationToken);
+
+        if (!response.IsSuccessStatusCode)
+        {
+            _logger.LogWarning("Failed to fetch {File} from branch {Branch}: {Status}",
+                filePath, branch, response.StatusCode);
+            return null;
+        }
+
+        return await response.Content.ReadAsStringAsync(cancellationToken);
     }
 
     private async Task HandleTimeoutAsync(CopilotDelegation delegation, CancellationToken cancellationToken)

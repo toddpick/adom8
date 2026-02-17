@@ -28,4 +28,10 @@ public sealed class AgentStatus
         CompletedAt = DateTime.UtcNow,
         AdditionalData = reason is not null ? new() { ["error"] = reason } : null
     };
+    public static AgentStatus Skipped(string? reason = null) => new()
+    {
+        Status = "skipped",
+        CompletedAt = DateTime.UtcNow,
+        AdditionalData = reason is not null ? new() { ["reason"] = reason } : null
+    };
 }

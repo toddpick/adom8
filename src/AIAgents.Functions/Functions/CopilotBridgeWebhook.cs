@@ -365,7 +365,8 @@ public sealed class CopilotBridgeWebhook
             ["durationMinutes"] = metrics.DurationMinutes,
             ["commitCount"] = metrics.CommitCount
         };
-        state.CurrentState = "AI Test";
+        state.CurrentState = "AI Review"; // Skip Testing — Copilot already tested
+        state.Agents["Testing"] = AgentStatus.Skipped("Copilot coding agent already runs tests");
         await context.SaveStateAsync(state, cancellationToken);
 
         // Commit reconciled changes
@@ -398,20 +399,23 @@ public sealed class CopilotBridgeWebhook
         try { await _adoClient.UpdateWorkItemFieldAsync(workItemId, CustomFieldNames.Paths.LastAgent, "Coding", cancellationToken); }
         catch { /* field may not exist yet */ }
 
-        await _adoClient.UpdateWorkItemStateAsync(workItemId, "AI Test", cancellationToken);
+        // Skip Testing — Copilot coding agent already runs tests during its session.
+        // Go directly to AI Review state.
+        await _adoClient.UpdateWorkItemStateAsync(workItemId, "AI Review", cancellationToken);
 
         await _adoClient.AddWorkItemCommentAsync(workItemId,
             $"<b>🤖 AI Coding Agent Complete (GitHub Copilot)</b><br/>" +
             $"Strategy: Copilot coding agent<br/>" +
             $"PR: #{prNumber} | Files: {metrics.FilesChanged} | +{metrics.LinesAdded}/-{metrics.LinesDeleted} lines<br/>" +
-            $"Duration: {metrics.DurationMinutes:F1} minutes | Commits: {metrics.CommitCount}",
+            $"Duration: {metrics.DurationMinutes:F1} minutes | Commits: {metrics.CommitCount}<br/>" +
+            $"Skipping Testing agent (Copilot already validated code)",
             cancellationToken);
 
-        // Enqueue Testing agent to resume pipeline
+        // Enqueue Review agent — skip Testing since Copilot handles testing in its process
         var nextTask = new AgentTask
         {
             WorkItemId = workItemId,
-            AgentType = AgentType.Testing,
+            AgentType = AgentType.Review,
             CorrelationId = delegation.CorrelationId
         };
         await _taskQueue.EnqueueAsync(nextTask, cancellationToken);
@@ -421,11 +425,11 @@ public sealed class CopilotBridgeWebhook
         var tokensForLog = 1;
         var costForLog = 0m; // No direct API cost — included in GitHub subscription
         await _activityLogger.LogAsync("Coding", workItemId,
-            $"Copilot coding agent completed successfully — {metrics.FilesChanged} files, +{metrics.LinesAdded}/-{metrics.LinesDeleted} lines, {metrics.DurationMinutes:F1}m, {metrics.CommitCount} commits. (1 premium credit)",
+            $"Copilot coding agent completed successfully — {metrics.FilesChanged} files, +{metrics.LinesAdded}/-{metrics.LinesDeleted} lines, {metrics.DurationMinutes:F1}m, {metrics.CommitCount} commits. Skipping Testing → Review. (1 premium credit)",
             tokensForLog, costForLog, "info", cancellationToken);
 
         _logger.LogInformation(
-            "Copilot bridge reconciled PR #{PrNumber} for WI-{WorkItemId} — {Files} files, pipeline resumed",
+            "Copilot bridge reconciled PR #{PrNumber} for WI-{WorkItemId} — {Files} files, pipeline resumed (Testing skipped → Review)",
             prNumber, workItemId, reconciledFiles.Count);
     }
 
