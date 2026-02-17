@@ -260,6 +260,7 @@
             box-shadow: 0 4px 20px rgba(0,0,0,0.4);
         }
         body.dark-mode .agent-card.completed {
+            border-left-color: #4caf50;
             background: #1e2a4a;
         }
         body.dark-mode .agent-card.failed {
@@ -592,9 +593,9 @@
         }
 
         .agent-card.completed {
-            border-left-color: #0078d4; /* BUG: Should be #4caf50 (green) */
-            opacity: 0.8;               /* BUG: Should be 1.0 */
-            background: #deecf9;        /* BUG: Should be #e8f5e9 (light green) */
+            border-left-color: #4caf50;
+            opacity: 1.0;
+            background: #e8f5e9;
         }
 
         .agent-card.failed {
