@@ -82,14 +82,39 @@ public sealed class ReviewAgentService : IAgentService
                 allPaths.Count, task.WorkItemId);
         }
 
+        // Cap total code size to avoid Claude API timeouts on large payloads
+        const int MaxCodeChars = 40_000; // ~10K tokens, keeps API response fast
+        const int MaxFileChars = 15_000; // Per-file cap
+
         var fileContents = new List<string>();
+        var totalChars = 0;
+        var truncatedFiles = 0;
         foreach (var path in allPaths)
         {
+            if (totalChars >= MaxCodeChars)
+            {
+                truncatedFiles++;
+                continue;
+            }
             var content = await _gitOps.ReadFileAsync(repoPath, path, cancellationToken);
-            if (content is not null)
-                fileContents.Add($"// File: {path}\n{content}");
+            if (content is null) continue;
+
+            if (content.Length > MaxFileChars)
+            {
+                content = content[..MaxFileChars] + $"\n\n// ... truncated ({content.Length:N0} chars total, showing first {MaxFileChars:N0})";
+                _logger.LogInformation("Truncated large file {Path} ({OrigLen} chars) for Review on WI-{WorkItemId}",
+                    path, content.Length, task.WorkItemId);
+            }
+            fileContents.Add($"// File: {path}\n{content}");
+            totalChars += content.Length;
         }
         var allCode = string.Join("\n\n---\n\n", fileContents);
+        if (truncatedFiles > 0)
+        {
+            allCode += $"\n\n// Note: {truncatedFiles} additional file(s) omitted due to size limits.";
+            _logger.LogInformation("Omitted {Count} files from review due to size cap for WI-{WorkItemId}",
+                truncatedFiles, task.WorkItemId);
+        }
 
         // AI review
         var systemPrompt = @"You are a senior code reviewer performing a thorough security and quality review.
@@ -106,6 +131,11 @@ Respond ONLY with valid JSON:
 }
 Check for: SQL injection, XSS, hardcoded secrets, null reference, race conditions, error handling, SOLID violations, and performance issues.";
 
+        // Skip extra codebase context for large payloads to keep prompt manageable
+        var codebaseCtx = totalChars < 20_000
+            ? await _codebaseContext.LoadRelevantContextAsync(repoPath, workItem.Title, workItem.Description, cancellationToken)
+            : "";
+
         var userPrompt = $@"## Story
 **ID:** {workItem.Id}
 **Title:** {workItem.Title}
@@ -113,7 +143,7 @@ Check for: SQL injection, XSS, hardcoded secrets, null reference, race condition
 ## Code to Review
 {allCode}
 
-{await _codebaseContext.LoadRelevantContextAsync(repoPath, workItem.Title, workItem.Description, cancellationToken)}
+{codebaseCtx}
 
 Perform a comprehensive code review.";
 
