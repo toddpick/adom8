@@ -64,6 +64,26 @@ public sealed class CopilotCodingStrategy : ICodingStrategy
             "Delegating coding for WI-{WorkItemId} to GitHub Copilot coding agent",
             context.WorkItemId);
 
+        // Guard against duplicate triggers — if a delegation already exists for this work item,
+        // return immediately instead of creating another GitHub Issue + Copilot agent run.
+        var existingDelegation = await _delegationService.GetByWorkItemIdAsync(context.WorkItemId, cancellationToken);
+        if (existingDelegation is not null && existingDelegation.Status == "Pending")
+        {
+            _logger.LogWarning(
+                "Duplicate Copilot delegation detected for WI-{WorkItemId} (Issue #{IssueNumber}) — skipping",
+                context.WorkItemId, existingDelegation.IssueNumber);
+
+            return new CodingResult
+            {
+                Success = true,
+                Mode = "copilot-delegated",
+                ModifiedFiles = [],
+                Tokens = 0,
+                Cost = 0m,
+                Summary = $"Already delegated to Copilot (Issue #{existingDelegation.IssueNumber}). Pipeline waiting."
+            };
+        }
+
         int issueNumber = 0;
 
         if (_copilotOptions.CreateIssue)
