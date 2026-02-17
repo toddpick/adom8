@@ -1,8 +1,8 @@
 {
   "workItemId": 78,
-  "currentState": "AI Code",
+  "currentState": "AI Test",
   "createdAt": "2026-02-17T04:26:13.4735087Z",
-  "updatedAt": "2026-02-17T05:27:01.6668156Z",
+  "updatedAt": "2026-02-17T05:27:05.3749518Z",
   "agents": {
     "Planning": {
       "status": "in_progress",
@@ -11,14 +11,18 @@
       "additionalData": null
     },
     "Coding": {
-      "status": "in_progress",
-      "startedAt": "2026-02-17T05:27:01.6664305Z",
-      "completedAt": null,
+      "status": "completed",
+      "startedAt": null,
+      "completedAt": "2026-02-17T05:27:05.3743988Z",
       "additionalData": {
-        "mode": "copilot-delegated",
+        "mode": "copilot",
+        "copilotPrNumber": 35,
         "issueNumber": 36,
-        "delegatedAt": "2026-02-17T05:27:01.6664344Z",
-        "agent": "copilot"
+        "filesChanged": 8,
+        "linesAdded": 544,
+        "linesDeleted": 66,
+        "durationMinutes": 0.04261227333333333,
+        "commitCount": 28
       }
     },
     "Testing": {
@@ -42,7 +46,15 @@
   },
   "artifacts": {
     "code": [
-      "dashboard/index.html"
+      "dashboard/index.html",
+      ".ado/stories/US-78/CODE_REVIEW.md",
+      ".ado/stories/US-78/DOCUMENTATION.md",
+      ".ado/stories/US-78/PLAN.md",
+      ".ado/stories/US-78/TASKS.md",
+      ".ado/stories/US-78/TEST_PLAN.md",
+      ".ado/stories/US-78/state.json",
+      "dashboard/index.html",
+      "tests/ai-generated-tests.txt"
     ],
     "tests": [],
     "docs": []
@@ -62,7 +74,7 @@
         "totalTokens": 0,
         "estimatedCost": 0,
         "model": "copilot-coding-agent",
-        "callCount": 2
+        "callCount": 3
       }
     }
   }
