@@ -100,6 +100,7 @@ Click **Fine-grained tokens** → **Generate new token**:
 |------------|--------|-----|
 | **Contents** | Read and Write | Push code to feature branches |
 | **Pull requests** | Read and Write | Create PRs for code review |
+| **Issues** | Read and Write | Create Issues for Copilot coding agent (if using Copilot integration) |
 | **Actions** | Read and Write | Trigger workflow_dispatch (Level 5 autonomy) |
 | **Metadata** | Read | Auto-granted, required |
 
@@ -655,7 +656,7 @@ The Coding agent supports a **hybrid strategy**: for complex stories it can dele
 
 - GitHub Copilot Business or Enterprise plan with the Copilot coding agent enabled
 - Repository must have Copilot coding agent enabled in **Settings → Copilot → Coding agent**
-- GitHub PAT must have `repo` scope (already required for basic setup)
+- GitHub PAT must have `repo` scope (classic token) **or** `Issues: Read and Write` permission (fine-grained token) — the PAT needs to create Issues and assign them to `@copilot`
 
 **Step 1: Add Copilot configuration settings:**
 
