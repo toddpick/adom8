@@ -177,11 +177,35 @@ public sealed class TableStorageCopilotDelegationService : ICopilotDelegationSer
         IssueNumber = entity.GetInt32("IssueNumber") ?? 0,
         CorrelationId = entity.GetString("CorrelationId") ?? "",
         BranchName = entity.GetString("BranchName") ?? "",
-        DelegatedAt = entity.GetDateTimeOffset("DelegatedAt")?.UtcDateTime
-            ?? (DateTime.TryParse(entity.GetString("DelegatedAt"), out var da) ? da.ToUniversalTime() : DateTime.UtcNow),
+        DelegatedAt = ParseDateTimeProperty(entity, "DelegatedAt") ?? DateTime.UtcNow,
         Status = entity.GetString("Status") ?? "Pending",
         CopilotPrNumber = entity.GetInt32("CopilotPrNumber") is > 0 ? entity.GetInt32("CopilotPrNumber") : null,
-        CompletedAt = entity.GetDateTimeOffset("CompletedAt")?.UtcDateTime
-            ?? (DateTime.TryParse(entity.GetString("CompletedAt"), out var ca) ? ca.ToUniversalTime() : null)
+        CompletedAt = ParseDateTimeProperty(entity, "CompletedAt")
     };
+
+    /// <summary>
+    /// Safely reads a datetime property that may be stored as either a native DateTimeOffset
+    /// or an ISO-8601 string (from older records). GetDateTimeOffset() throws if the property
+    /// exists but is stored as a string type, so we must catch and fall back.
+    /// </summary>
+    private static DateTime? ParseDateTimeProperty(TableEntity entity, string propertyName)
+    {
+        try
+        {
+            var dto = entity.GetDateTimeOffset(propertyName);
+            if (dto.HasValue) return dto.Value.UtcDateTime;
+        }
+        catch (InvalidOperationException)
+        {
+            // Property exists but is stored as string — fall back to string parsing
+        }
+
+        var str = entity.GetString(propertyName);
+        if (!string.IsNullOrEmpty(str) && DateTime.TryParse(str, null, System.Globalization.DateTimeStyles.RoundtripKind, out var parsed))
+        {
+            return parsed.ToUniversalTime();
+        }
+
+        return null;
+    }
 }
