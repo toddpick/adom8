@@ -1912,7 +1912,7 @@
         }
 
         .story-card.expanded .story-card-body {
-            max-height: 3000px;
+            max-height: 5000px; /* Large enough for extensive agent details */
         }
 
         .story-card-content {
@@ -3420,6 +3420,13 @@
          */
         function updateStoryAgents(stories) {
             allStories = stories;
+            
+            // Restore filter state on first render
+            if (!window.filterStateRestored) {
+                restoreFilterState();
+                window.filterStateRestored = true;
+            }
+            
             renderFilteredStories();
         }
 
@@ -3729,14 +3736,14 @@
         }
 
         /**
-         * Restores filter state from localStorage on page load.
+         * Restores filter state from localStorage.
          * Checks for element existence before attempting to restore state.
-         * Should be called after DOM is fully loaded and initial data is fetched.
+         * Called from updateStoryAgents on first render to ensure DOM is ready.
          */
         function restoreFilterState() {
             const searchInput = document.getElementById('story-search');
             if (!searchInput) {
-                // DOM not ready yet, will be restored on next data update
+                // DOM not ready yet, skip restoration
                 return;
             }
             
@@ -3752,11 +3759,6 @@
                 handleStatusFilter(savedStatus);
             }
         }
-
-        // Call restore after a short delay to ensure DOM is ready
-        window.addEventListener('DOMContentLoaded', () => {
-            setTimeout(restoreFilterState, 100);
-        });
 
         function updateAgents(agents) {
             const container = document.getElementById('agents-container');
