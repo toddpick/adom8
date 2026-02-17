@@ -1804,6 +1804,8 @@
                 this.unreadCount = 0;
                 this.audioContext = null;
                 this.permissionRequested = false;
+                this.audioInitialized = false;
+                this.MAX_VOLUME_MULTIPLIER = 0.3;
                 this.initAudioContext();
                 this.updateBadge();
                 this.renderHistory();
@@ -1838,12 +1840,13 @@
             initAudioContext() {
                 // Initialize on first user interaction to comply with autoplay policies
                 const initOnInteraction = () => {
-                    if (!this.audioContext) {
+                    if (!this.audioInitialized) {
+                        this.audioInitialized = true;
                         this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                        document.removeEventListener('click', initOnInteraction);
                     }
-                    document.removeEventListener('click', initOnInteraction);
                 };
-                document.addEventListener('click', initOnInteraction);
+                document.addEventListener('click', initOnInteraction, { once: true });
             }
 
             async requestBrowserPermission() {
@@ -1901,7 +1904,7 @@
                 }
                 
                 // Store current data for next comparison
-                this.previousData = JSON.parse(JSON.stringify(newData));
+                this.previousData = structuredClone ? structuredClone(newData) : JSON.parse(JSON.stringify(newData));
                 
                 // Process changes
                 changes.forEach(change => this.handleChange(change));
@@ -2046,7 +2049,7 @@
                 try {
                     const ctx = this.audioContext;
                     const now = ctx.currentTime;
-                    const volume = this.settings.volume / 100 * 0.3; // Max 0.3 to avoid being too loud
+                    const volume = this.settings.volume / 100 * this.MAX_VOLUME_MULTIPLIER;
                     
                     // Pleasant success chime (C major chord arpeggio)
                     const frequencies = [523.25, 659.25, 783.99]; // C5, E5, G5
@@ -2081,7 +2084,7 @@
                 try {
                     const ctx = this.audioContext;
                     const now = ctx.currentTime;
-                    const volume = this.settings.volume / 100 * 0.3;
+                    const volume = this.settings.volume / 100 * this.MAX_VOLUME_MULTIPLIER;
                     
                     // Warning tone (descending frequencies)
                     const frequencies = [440, 370, 330]; // A4 to E4 (dissonant)
@@ -2133,7 +2136,7 @@
                     const unreadClass = notif.read ? '' : 'unread';
                     
                     return `
-                        <div class="notif-item ${unreadClass}" onclick="notificationManager.markAsRead(${notif.id})">
+                        <div class="notif-item ${unreadClass}" onclick="notificationManager.markAsRead(${notif.id})" tabindex="0" role="button" onkeydown="if(event.key==='Enter'||event.key===' ')notificationManager.markAsRead(${notif.id})">
                             <span class="notif-item-icon">${notif.icon}</span>
                             <div class="notif-item-content">
                                 <div class="notif-item-title">${notif.title}</div>
