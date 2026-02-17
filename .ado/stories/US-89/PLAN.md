@@ -1,0 +1,115 @@
+# Planning Analysis for US-89
+
+## Story Overview
+
+**ID:** US-89  
+**Title:** Add auto-refresh toggle with interval selector to dashboard  
+**State:** Story Planning  
+**Created:** 2026-02-17
+
+### Description
+Add a user-configurable auto-refresh control to the dashboard. Requirements: (1) Replace the current fixed polling interval with a dropdown/toggle that lets users choose between 5s, 10s, 30s, and 60s refresh intervals. (2) Add a pause/resume toggle button next to the interval selector to completely stop/start auto-refresh. (3) Show a visual countdown timer or progress bar indicating time until next refresh. (4) Persist the user's preferred interval in localStorage so it survives page reloads. (5) Add a manual refresh button that triggers an immediate data fetch regardless of auto-refresh state. (6) Style all controls to match existing dashboard theme including dark mode support. Technical: all changes in dashboard/index.html, integrate with existing polling loop, no external dependencies.
+
+### Acceptance Criteria
+Interval selector with 5s/10s/30s/60s options. Pause/resume toggle works correctly. Countdown indicator shows time until next refresh. Manual refresh button triggers immediate fetch. Settings persist in localStorage across reloads. All controls styled for light and dark mode. No external dependencies.
+
+---
+
+## Technical Analysis
+
+### Problem Analysis
+The dashboard currently has a fixed polling interval for data refresh. Users need configurable auto-refresh controls with multiple interval options (5s, 10s, 30s, 60s), pause/resume functionality, visual countdown feedback, persistence across sessions, and manual refresh capability. All changes must be contained within dashboard/index.html with no external dependencies and support both light/dark themes.
+
+### Recommended Approach
+Implement a comprehensive refresh control system within the existing single-file SPA. Create UI controls for interval selection (dropdown), pause/resume toggle, countdown display, and manual refresh button. Integrate with the existing polling mechanism by replacing fixed intervals with user-configurable ones. Use localStorage for persistence and CSS variables for theme-aware styling. Implement a countdown timer using setInterval that updates the UI every second and triggers data fetches at the selected interval.
+
+### Affected Files
+
+- `dashboard/index.html`
+
+
+### Complexity Estimate
+**Story Points:** 8
+
+### Architecture Considerations
+Single-file SPA modification with vanilla JavaScript. The refresh control system will consist of: (1) UI components for user controls, (2) RefreshManager class to handle timing logic, (3) localStorage integration for persistence, (4) CSS styling for theme support, (5) Integration points with existing data fetching functions. All functionality self-contained within the existing HTML structure.
+
+---
+
+## Implementation Plan
+
+### Sub-Tasks
+
+1. Create HTML structure for refresh controls (dropdown, toggle, countdown, manual button)
+
+2. Implement RefreshManager class to handle interval timing and state management
+
+3. Add localStorage persistence for user preferences
+
+4. Create countdown timer display with progress indication
+
+5. Integrate controls with existing data fetching mechanism
+
+6. Add CSS styling for light/dark theme support
+
+7. Implement manual refresh functionality
+
+8. Add event handlers for all user interactions
+
+9. Test all interval options and state transitions
+
+10. Verify localStorage persistence across page reloads
+
+
+### Dependencies
+
+
+- Existing dashboard polling mechanism in dashboard/index.html
+
+- Current theme system and CSS variables for styling
+
+- Existing data fetch functions that need to be triggered
+
+
+
+---
+
+## Risk Assessment
+
+### Identified Risks
+
+- Potential interference with existing polling logic if not properly integrated
+
+- Browser localStorage limitations or disabled storage
+
+- Performance impact of frequent countdown updates (every second)
+
+- Theme styling conflicts with existing dashboard components
+
+- Race conditions between manual refresh and auto-refresh timing
+
+
+---
+
+## Assumptions Made
+
+- Dashboard already has a working data fetching mechanism to integrate with
+
+- Current theme system uses CSS variables that can be leveraged
+
+- localStorage is available and enabled in target browsers
+
+- Existing polling mechanism can be modified without breaking other functionality
+
+- Dashboard has sufficient space for additional UI controls
+
+
+---
+
+## Testing Strategy
+Manual testing of all interval options (5s, 10s, 30s, 60s) to verify correct timing. Test pause/resume functionality in various states. Verify countdown display accuracy and visual feedback. Test localStorage persistence by refreshing page and checking restored settings. Test manual refresh button triggers immediate data fetch. Verify all controls work in both light and dark themes. Test edge cases like rapid clicking, switching intervals while paused, and browser storage disabled scenarios.
+
+---
+
+*Generated by Planning Agent*  
+*Timestamp: 2026-02-17T07:25:00.7884935Z*
