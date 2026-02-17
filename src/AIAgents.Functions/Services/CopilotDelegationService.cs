@@ -137,17 +137,22 @@ public sealed class TableStorageCopilotDelegationService : ICopilotDelegationSer
     public async Task<IReadOnlyList<CopilotDelegation>> GetTimedOutAsync(TimeSpan timeout, CancellationToken cancellationToken = default)
     {
         var cutoff = DateTime.UtcNow.Subtract(timeout);
-        var cutoffIso = cutoff.ToString("O");
-
         var results = new List<CopilotDelegation>();
 
+        // Query all Pending delegations then filter in-memory.
+        // DelegatedAt was previously stored as a string which broke datetime queries;
+        // in-memory filtering is safe given the tiny row count and avoids type issues.
         var query = _tableClient.QueryAsync<TableEntity>(
-            filter: $"PartitionKey eq '{PartitionKey}' and Status eq 'Pending' and DelegatedAt lt datetime'{cutoffIso}'",
+            filter: $"PartitionKey eq '{PartitionKey}' and Status eq 'Pending'",
             cancellationToken: cancellationToken);
 
         await foreach (var entity in query)
         {
-            results.Add(FromEntity(entity));
+            var delegation = FromEntity(entity);
+            if (delegation.DelegatedAt < cutoff)
+            {
+                results.Add(delegation);
+            }
         }
 
         return results;
@@ -158,10 +163,12 @@ public sealed class TableStorageCopilotDelegationService : ICopilotDelegationSer
         ["IssueNumber"] = delegation.IssueNumber,
         ["CorrelationId"] = delegation.CorrelationId,
         ["BranchName"] = delegation.BranchName,
-        ["DelegatedAt"] = delegation.DelegatedAt.ToString("O"),
+        ["DelegatedAt"] = new DateTimeOffset(DateTime.SpecifyKind(delegation.DelegatedAt, DateTimeKind.Utc)),
         ["Status"] = delegation.Status,
         ["CopilotPrNumber"] = delegation.CopilotPrNumber ?? 0,
-        ["CompletedAt"] = delegation.CompletedAt?.ToString("O") ?? ""
+        ["CompletedAt"] = delegation.CompletedAt.HasValue
+            ? new DateTimeOffset(DateTime.SpecifyKind(delegation.CompletedAt.Value, DateTimeKind.Utc))
+            : (DateTimeOffset?)null
     };
 
     private static CopilotDelegation FromEntity(TableEntity entity) => new()
@@ -170,9 +177,11 @@ public sealed class TableStorageCopilotDelegationService : ICopilotDelegationSer
         IssueNumber = entity.GetInt32("IssueNumber") ?? 0,
         CorrelationId = entity.GetString("CorrelationId") ?? "",
         BranchName = entity.GetString("BranchName") ?? "",
-        DelegatedAt = DateTime.TryParse(entity.GetString("DelegatedAt"), out var da) ? da : DateTime.UtcNow,
+        DelegatedAt = entity.GetDateTimeOffset("DelegatedAt")?.UtcDateTime
+            ?? (DateTime.TryParse(entity.GetString("DelegatedAt"), out var da) ? da.ToUniversalTime() : DateTime.UtcNow),
         Status = entity.GetString("Status") ?? "Pending",
         CopilotPrNumber = entity.GetInt32("CopilotPrNumber") is > 0 ? entity.GetInt32("CopilotPrNumber") : null,
-        CompletedAt = DateTime.TryParse(entity.GetString("CompletedAt"), out var ca) ? ca : null
+        CompletedAt = entity.GetDateTimeOffset("CompletedAt")?.UtcDateTime
+            ?? (DateTime.TryParse(entity.GetString("CompletedAt"), out var ca) ? ca.ToUniversalTime() : null)
     };
 }

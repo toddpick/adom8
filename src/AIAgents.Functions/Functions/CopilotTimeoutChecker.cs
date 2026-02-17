@@ -95,6 +95,16 @@ public sealed class CopilotTimeoutChecker
     {
         var elapsed = (DateTime.UtcNow - delegation.DelegatedAt).TotalMinutes;
 
+        // Safety guard: if the delegation is NOT actually past the timeout,
+        // skip it. This protects against query bugs returning recent delegations.
+        if (elapsed < _copilotOptions.TimeoutMinutes)
+        {
+            _logger.LogDebug(
+                "Delegation for WI-{WorkItemId} only {Elapsed:F0}m old (timeout={Timeout}m) — skipping",
+                delegation.WorkItemId, elapsed, _copilotOptions.TimeoutMinutes);
+            return;
+        }
+
         _logger.LogWarning(
             "Copilot delegation timed out for WI-{WorkItemId} (waited {Elapsed:F0}m, timeout={Timeout}m)",
             delegation.WorkItemId, elapsed, _copilotOptions.TimeoutMinutes);
