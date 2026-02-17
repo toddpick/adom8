@@ -1002,6 +1002,591 @@
             background: #fff3e0;
             color: #e65100;
         }
+
+        /* ========== NOTIFICATION SYSTEM ========== */
+        
+        /* Toast Notifications Container */
+        .toast-container {
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            z-index: 9999;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            pointer-events: none;
+        }
+
+        /* Toast Notification */
+        .toast {
+            background: #fff;
+            border-radius: 8px;
+            padding: 16px 20px;
+            box-shadow: 0 6px 24px rgba(0,0,0,0.25);
+            min-width: 320px;
+            max-width: 420px;
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+            animation: slideInRight 0.3s ease-out;
+            pointer-events: auto;
+            border-left: 4px solid #0078d4;
+            position: relative;
+        }
+
+        .toast.hiding {
+            animation: slideOutRight 0.3s ease-in forwards;
+        }
+
+        .toast.success {
+            border-left-color: #4caf50;
+        }
+
+        .toast.error {
+            border-left-color: #f44336;
+        }
+
+        .toast.warning {
+            border-left-color: #ff9800;
+        }
+
+        .toast.info {
+            border-left-color: #0078d4;
+        }
+
+        .toast-icon {
+            font-size: 24px;
+            flex-shrink: 0;
+            line-height: 1;
+        }
+
+        .toast-content {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .toast-title {
+            font-weight: 700;
+            font-size: 0.95rem;
+            color: #333;
+            margin-bottom: 4px;
+            line-height: 1.3;
+        }
+
+        .toast-message {
+            font-size: 0.85rem;
+            color: #666;
+            line-height: 1.4;
+        }
+
+        .toast-close {
+            background: none;
+            border: none;
+            color: #999;
+            font-size: 20px;
+            cursor: pointer;
+            padding: 0;
+            line-height: 1;
+            flex-shrink: 0;
+            transition: color 0.2s;
+        }
+
+        .toast-close:hover {
+            color: #333;
+        }
+
+        /* Dark mode toasts */
+        body.dark-mode .toast {
+            background: #2a2a3e;
+            box-shadow: 0 6px 24px rgba(0,0,0,0.5);
+        }
+
+        body.dark-mode .toast-title {
+            color: #e0e0e0;
+        }
+
+        body.dark-mode .toast-message {
+            color: #aaa;
+        }
+
+        body.dark-mode .toast-close {
+            color: #777;
+        }
+
+        body.dark-mode .toast-close:hover {
+            color: #e0e0e0;
+        }
+
+        /* Bell Icon & Badge */
+        .notif-bell {
+            position: relative;
+            background: none;
+            border: 1px solid #555;
+            border-radius: 6px;
+            color: #ccc;
+            font-size: 1.15rem;
+            cursor: pointer;
+            padding: 4px 8px;
+            line-height: 1;
+            transition: all 0.2s ease;
+        }
+
+        .notif-bell:hover {
+            border-color: #888;
+            color: #fff;
+            background: rgba(255,255,255,0.08);
+        }
+
+        .notif-badge {
+            position: absolute;
+            top: -6px;
+            right: -6px;
+            background: #f44336;
+            color: #fff;
+            border-radius: 10px;
+            padding: 2px 6px;
+            font-size: 0.7rem;
+            font-weight: 700;
+            min-width: 18px;
+            text-align: center;
+            animation: badgePulse 2s ease-in-out infinite;
+        }
+
+        @keyframes badgePulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+        }
+
+        /* Notification History Dropdown */
+        .notif-dropdown {
+            position: absolute;
+            top: 100%;
+            right: 0;
+            margin-top: 8px;
+            background: #fff;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+            width: 380px;
+            max-height: 500px;
+            display: none;
+            flex-direction: column;
+            z-index: 9998;
+        }
+
+        .notif-dropdown.show {
+            display: flex;
+        }
+
+        .notif-dropdown-header {
+            padding: 16px 20px;
+            border-bottom: 1px solid #eee;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            font-weight: 700;
+            font-size: 0.95rem;
+            color: #333;
+        }
+
+        .notif-clear-all {
+            background: none;
+            border: none;
+            color: #0078d4;
+            font-size: 0.8rem;
+            cursor: pointer;
+            padding: 4px 8px;
+            border-radius: 4px;
+            transition: background 0.2s;
+        }
+
+        .notif-clear-all:hover {
+            background: rgba(0,120,212,0.1);
+        }
+
+        .notif-list {
+            flex: 1;
+            overflow-y: auto;
+            max-height: 400px;
+        }
+
+        .notif-list::-webkit-scrollbar { width: 6px; }
+        .notif-list::-webkit-scrollbar-thumb { background: #ccc; border-radius: 3px; }
+
+        .notif-item {
+            padding: 14px 20px;
+            border-bottom: 1px solid #f0f0f0;
+            cursor: pointer;
+            transition: background 0.15s;
+            display: flex;
+            gap: 12px;
+            align-items: flex-start;
+        }
+
+        .notif-item:hover {
+            background: #f8f8f8;
+        }
+
+        .notif-item.unread {
+            background: #f0f7ff;
+        }
+
+        .notif-item.unread:hover {
+            background: #e3f2ff;
+        }
+
+        .notif-item-icon {
+            font-size: 20px;
+            flex-shrink: 0;
+        }
+
+        .notif-item-content {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .notif-item-title {
+            font-weight: 600;
+            font-size: 0.85rem;
+            color: #333;
+            margin-bottom: 2px;
+            line-height: 1.3;
+        }
+
+        .notif-item-message {
+            font-size: 0.8rem;
+            color: #666;
+            line-height: 1.3;
+            margin-bottom: 4px;
+        }
+
+        .notif-item-time {
+            font-size: 0.72rem;
+            color: #999;
+        }
+
+        .notif-empty {
+            padding: 48px 20px;
+            text-align: center;
+            color: #999;
+            font-size: 0.9rem;
+            font-style: italic;
+        }
+
+        /* Dark mode dropdown */
+        body.dark-mode .notif-dropdown {
+            background: #2a2a3e;
+            border-color: #444;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+        }
+
+        body.dark-mode .notif-dropdown-header {
+            border-bottom-color: #444;
+            color: #e0e0e0;
+        }
+
+        body.dark-mode .notif-clear-all {
+            color: #4da3ff;
+        }
+
+        body.dark-mode .notif-clear-all:hover {
+            background: rgba(77,163,255,0.2);
+        }
+
+        body.dark-mode .notif-item {
+            border-bottom-color: #3a3a50;
+        }
+
+        body.dark-mode .notif-item:hover {
+            background: rgba(255,255,255,0.05);
+        }
+
+        body.dark-mode .notif-item.unread {
+            background: rgba(0,120,212,0.15);
+        }
+
+        body.dark-mode .notif-item.unread:hover {
+            background: rgba(0,120,212,0.25);
+        }
+
+        body.dark-mode .notif-item-title {
+            color: #e0e0e0;
+        }
+
+        body.dark-mode .notif-item-message {
+            color: #aaa;
+        }
+
+        body.dark-mode .notif-item-time {
+            color: #777;
+        }
+
+        body.dark-mode .notif-empty {
+            color: #777;
+        }
+
+        /* Settings Gear Icon */
+        .notif-settings-btn {
+            background: none;
+            border: 1px solid #555;
+            border-radius: 6px;
+            color: #ccc;
+            font-size: 1.15rem;
+            cursor: pointer;
+            padding: 4px 8px;
+            line-height: 1;
+            transition: all 0.2s ease;
+        }
+
+        .notif-settings-btn:hover {
+            border-color: #888;
+            color: #fff;
+            background: rgba(255,255,255,0.08);
+        }
+
+        /* Settings Modal */
+        .notif-modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.6);
+            z-index: 10000;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            animation: fadeIn 0.2s ease-out;
+        }
+
+        .notif-modal-overlay.show {
+            display: flex;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        .notif-modal {
+            background: #fff;
+            border-radius: 12px;
+            box-shadow: 0 12px 48px rgba(0,0,0,0.3);
+            width: 480px;
+            max-width: 90vw;
+            max-height: 90vh;
+            display: flex;
+            flex-direction: column;
+            animation: slideInDown 0.3s ease-out;
+        }
+
+        @keyframes slideInDown {
+            from { transform: translateY(-50px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+
+        .notif-modal-header {
+            padding: 20px 24px;
+            border-bottom: 1px solid #eee;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .notif-modal-title {
+            font-size: 1.1rem;
+            font-weight: 700;
+            color: #333;
+        }
+
+        .notif-modal-close {
+            background: none;
+            border: none;
+            color: #999;
+            font-size: 24px;
+            cursor: pointer;
+            padding: 0;
+            line-height: 1;
+            transition: color 0.2s;
+        }
+
+        .notif-modal-close:hover {
+            color: #333;
+        }
+
+        .notif-modal-body {
+            padding: 24px;
+            overflow-y: auto;
+        }
+
+        .notif-setting-group {
+            margin-bottom: 24px;
+        }
+
+        .notif-setting-group:last-child {
+            margin-bottom: 0;
+        }
+
+        .notif-setting-label {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 12px 0;
+            cursor: pointer;
+        }
+
+        .notif-setting-text {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .notif-setting-name {
+            font-weight: 600;
+            font-size: 0.95rem;
+            color: #333;
+        }
+
+        .notif-setting-desc {
+            font-size: 0.8rem;
+            color: #666;
+        }
+
+        /* Toggle Switch */
+        .toggle-switch {
+            position: relative;
+            width: 48px;
+            height: 26px;
+            background: #ccc;
+            border-radius: 13px;
+            transition: background 0.3s;
+            cursor: pointer;
+        }
+
+        .toggle-switch.on {
+            background: #4caf50;
+        }
+
+        .toggle-slider {
+            position: absolute;
+            top: 3px;
+            left: 3px;
+            width: 20px;
+            height: 20px;
+            background: #fff;
+            border-radius: 50%;
+            transition: transform 0.3s;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+
+        .toggle-switch.on .toggle-slider {
+            transform: translateX(22px);
+        }
+
+        /* Volume Slider */
+        .volume-slider-container {
+            padding: 12px 0;
+        }
+
+        .volume-slider {
+            width: 100%;
+            height: 6px;
+            border-radius: 3px;
+            background: #e0e0e0;
+            outline: none;
+            -webkit-appearance: none;
+            appearance: none;
+        }
+
+        .volume-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background: #0078d4;
+            cursor: pointer;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+
+        .volume-slider::-moz-range-thumb {
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background: #0078d4;
+            cursor: pointer;
+            border: none;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+
+        .volume-value {
+            display: inline-block;
+            margin-left: 8px;
+            font-size: 0.85rem;
+            color: #666;
+            font-weight: 600;
+            min-width: 40px;
+        }
+
+        /* Dark mode modal */
+        body.dark-mode .notif-modal {
+            background: #2a2a3e;
+        }
+
+        body.dark-mode .notif-modal-header {
+            border-bottom-color: #444;
+        }
+
+        body.dark-mode .notif-modal-title {
+            color: #e0e0e0;
+        }
+
+        body.dark-mode .notif-modal-close {
+            color: #777;
+        }
+
+        body.dark-mode .notif-modal-close:hover {
+            color: #e0e0e0;
+        }
+
+        body.dark-mode .notif-setting-name {
+            color: #e0e0e0;
+        }
+
+        body.dark-mode .notif-setting-desc {
+            color: #aaa;
+        }
+
+        body.dark-mode .volume-slider {
+            background: #444;
+        }
+
+        body.dark-mode .volume-value {
+            color: #aaa;
+        }
+
+        /* Animations */
+        @keyframes slideInRight {
+            from {
+                transform: translateX(400px);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+
+        @keyframes slideOutRight {
+            from {
+                transform: translateX(0);
+                opacity: 1;
+            }
+            to {
+                transform: translateX(400px);
+                opacity: 0;
+            }
+        }
     </style>
 </head>
 <body>
@@ -1068,6 +1653,26 @@
             <span class="queue-badge" id="abort-queue-badge" style="display:none;">0</span>
         </button>
         <button class="dark-toggle" id="dark-toggle" onclick="toggleDarkMode()" title="Toggle dark mode">🌙</button>
+        
+        <!-- Notification Bell -->
+        <div style="position: relative;">
+            <button class="notif-bell" id="notif-bell" onclick="toggleNotificationDropdown()" title="Notification history">
+                🔔
+                <span class="notif-badge" id="notif-badge" style="display: none;">0</span>
+            </button>
+            <div class="notif-dropdown" id="notif-dropdown">
+                <div class="notif-dropdown-header">
+                    <span>Notifications</span>
+                    <button class="notif-clear-all" onclick="clearAllNotifications()">Clear All</button>
+                </div>
+                <div class="notif-list" id="notif-list">
+                    <div class="notif-empty">No notifications yet</div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Settings Gear -->
+        <button class="notif-settings-btn" id="notif-settings-btn" onclick="openNotificationSettings()" title="Notification settings">⚙️</button>
     </div>
 
     <div class="app-layout">
@@ -1188,6 +1793,473 @@
                 if (btn) { btn.textContent = '☀️'; btn.title = 'Switch to light mode'; }
             }
         })();
+
+        // ========== NOTIFICATION SYSTEM ==========
+        
+        class NotificationManager {
+            constructor() {
+                this.settings = this.loadSettings();
+                this.previousData = null;
+                this.history = this.loadHistory();
+                this.unreadCount = 0;
+                this.audioContext = null;
+                this.permissionRequested = false;
+                this.initAudioContext();
+                this.updateBadge();
+                this.renderHistory();
+            }
+
+            loadSettings() {
+                const defaults = {
+                    toasts: true,
+                    browser: false,
+                    sound: true,
+                    volume: 50
+                };
+                const saved = localStorage.getItem('notificationSettings');
+                return saved ? { ...defaults, ...JSON.parse(saved) } : defaults;
+            }
+
+            saveSettings() {
+                localStorage.setItem('notificationSettings', JSON.stringify(this.settings));
+            }
+
+            loadHistory() {
+                const saved = localStorage.getItem('notificationHistory');
+                return saved ? JSON.parse(saved) : [];
+            }
+
+            saveHistory() {
+                // Keep only last 50 notifications
+                const toSave = this.history.slice(0, 50);
+                localStorage.setItem('notificationHistory', JSON.stringify(toSave));
+            }
+
+            initAudioContext() {
+                // Initialize on first user interaction to comply with autoplay policies
+                const initOnInteraction = () => {
+                    if (!this.audioContext) {
+                        this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                    }
+                    document.removeEventListener('click', initOnInteraction);
+                };
+                document.addEventListener('click', initOnInteraction);
+            }
+
+            async requestBrowserPermission() {
+                if (this.permissionRequested || !('Notification' in window)) return;
+                this.permissionRequested = true;
+                
+                if (Notification.permission === 'default') {
+                    const permission = await Notification.requestPermission();
+                    if (permission === 'denied') {
+                        this.settings.browser = false;
+                        this.saveSettings();
+                        this.showToast('Browser notifications blocked', 'Please enable notifications in your browser settings.', 'warning');
+                    }
+                }
+            }
+
+            detectChanges(newData) {
+                if (!newData || !newData.stories) return;
+                
+                const changes = [];
+                
+                // Compare with previous data
+                if (this.previousData && this.previousData.stories) {
+                    newData.stories.forEach(newStory => {
+                        const oldStory = this.previousData.stories.find(s => s.workItemId === newStory.workItemId);
+                        
+                        if (!oldStory) {
+                            // New story detected
+                            changes.push({
+                                type: 'story_started',
+                                workItemId: newStory.workItemId,
+                                title: newStory.title || `US-${newStory.workItemId}`
+                            });
+                        } else {
+                            // Check each agent for status changes
+                            if (newStory.agents) {
+                                newStory.agents.forEach(newAgent => {
+                                    const oldAgent = oldStory.agents?.find(a => a.name === newAgent.name);
+                                    
+                                    if (oldAgent && oldAgent.status !== newAgent.status) {
+                                        changes.push({
+                                            type: 'agent_status_changed',
+                                            workItemId: newStory.workItemId,
+                                            agentName: newAgent.name,
+                                            emoji: newAgent.emoji || '⚡',
+                                            oldStatus: oldAgent.status,
+                                            newStatus: newAgent.status,
+                                            title: newStory.title || `US-${newStory.workItemId}`
+                                        });
+                                    }
+                                });
+                            }
+                        }
+                    });
+                }
+                
+                // Store current data for next comparison
+                this.previousData = JSON.parse(JSON.stringify(newData));
+                
+                // Process changes
+                changes.forEach(change => this.handleChange(change));
+            }
+
+            handleChange(change) {
+                let title, message, type, icon;
+                
+                if (change.type === 'story_started') {
+                    title = '🎯 Story Started';
+                    message = `${change.title} is now being processed`;
+                    type = 'info';
+                    icon = '🎯';
+                } else if (change.type === 'agent_status_changed') {
+                    const agentName = change.agentName.replace(' Agent', '');
+                    icon = change.emoji;
+                    
+                    if (change.newStatus === 'completed') {
+                        title = `${icon} ${agentName} Completed`;
+                        message = `US-${change.workItemId}: ${agentName} agent finished successfully`;
+                        type = 'success';
+                        if (this.settings.sound) this.playSuccessSound();
+                    } else if (change.newStatus === 'failed') {
+                        title = `${icon} ${agentName} Failed`;
+                        message = `US-${change.workItemId}: ${agentName} agent encountered an error`;
+                        type = 'error';
+                        if (this.settings.sound) this.playFailureSound();
+                    } else if (change.newStatus === 'in_progress' || change.newStatus === 'active') {
+                        title = `${icon} ${agentName} Started`;
+                        message = `US-${change.workItemId}: ${agentName} agent is now working`;
+                        type = 'info';
+                    } else if (change.newStatus === 'awaiting_code') {
+                        title = `${icon} ${agentName} Awaiting Code`;
+                        message = `US-${change.workItemId}: Manual code review needed`;
+                        type = 'warning';
+                    } else if (change.newStatus === 'copilot_delegated') {
+                        title = `${icon} ${agentName} Delegated`;
+                        message = `US-${change.workItemId}: Copilot agent is now working`;
+                        type = 'info';
+                    } else {
+                        return; // Skip other status changes
+                    }
+                }
+                
+                // Add to history
+                const notification = {
+                    id: Date.now() + Math.random(),
+                    title,
+                    message,
+                    type,
+                    icon,
+                    timestamp: Date.now(),
+                    read: false
+                };
+                
+                this.history.unshift(notification);
+                this.unreadCount++;
+                this.saveHistory();
+                this.updateBadge();
+                this.renderHistory();
+                
+                // Show toast
+                if (this.settings.toasts) {
+                    this.showToast(title, message, type, icon);
+                }
+                
+                // Show browser notification if tab is not focused
+                if (this.settings.browser && document.hidden) {
+                    this.showBrowserNotification(title, message, icon);
+                }
+            }
+
+            showToast(title, message, type = 'info', icon = null) {
+                const container = document.getElementById('toast-container');
+                const toast = document.createElement('div');
+                toast.className = `toast ${type}`;
+                
+                const displayIcon = icon || (type === 'success' ? '✅' : type === 'error' ? '❌' : type === 'warning' ? '⚠️' : 'ℹ️');
+                
+                toast.innerHTML = `
+                    <span class="toast-icon">${displayIcon}</span>
+                    <div class="toast-content">
+                        <div class="toast-title">${title}</div>
+                        <div class="toast-message">${message}</div>
+                    </div>
+                    <button class="toast-close" onclick="notificationManager.removeToast(this)">×</button>
+                `;
+                
+                container.appendChild(toast);
+                
+                // Auto-dismiss after 5 seconds
+                setTimeout(() => {
+                    toast.classList.add('hiding');
+                    setTimeout(() => {
+                        if (toast.parentNode) {
+                            toast.remove();
+                        }
+                    }, 300);
+                }, 5000);
+            }
+
+            removeToast(btn) {
+                const toast = btn.closest('.toast');
+                toast.classList.add('hiding');
+                setTimeout(() => {
+                    if (toast.parentNode) {
+                        toast.remove();
+                    }
+                }, 300);
+            }
+
+            showBrowserNotification(title, message, icon) {
+                if (!('Notification' in window) || Notification.permission !== 'granted') {
+                    return;
+                }
+                
+                try {
+                    const notification = new Notification(title, {
+                        body: message,
+                        icon: `/favicon.ico`,
+                        badge: `/favicon.ico`,
+                        tag: 'ado-agent-notification',
+                        requireInteraction: false
+                    });
+                    
+                    // Auto-close after 5 seconds
+                    setTimeout(() => notification.close(), 5000);
+                    
+                    // Focus window when clicked
+                    notification.onclick = () => {
+                        window.focus();
+                        notification.close();
+                    };
+                } catch (e) {
+                    console.warn('Browser notification failed:', e);
+                }
+            }
+
+            playSuccessSound() {
+                if (!this.audioContext) return;
+                
+                try {
+                    const ctx = this.audioContext;
+                    const now = ctx.currentTime;
+                    const volume = this.settings.volume / 100 * 0.3; // Max 0.3 to avoid being too loud
+                    
+                    // Pleasant success chime (C major chord arpeggio)
+                    const frequencies = [523.25, 659.25, 783.99]; // C5, E5, G5
+                    
+                    frequencies.forEach((freq, i) => {
+                        const osc = ctx.createOscillator();
+                        const gain = ctx.createGain();
+                        
+                        osc.connect(gain);
+                        gain.connect(ctx.destination);
+                        
+                        osc.frequency.value = freq;
+                        osc.type = 'sine';
+                        
+                        const startTime = now + (i * 0.1);
+                        const endTime = startTime + 0.3;
+                        
+                        gain.gain.setValueAtTime(volume, startTime);
+                        gain.gain.exponentialRampToValueAtTime(0.01, endTime);
+                        
+                        osc.start(startTime);
+                        osc.stop(endTime);
+                    });
+                } catch (e) {
+                    console.warn('Sound playback failed:', e);
+                }
+            }
+
+            playFailureSound() {
+                if (!this.audioContext) return;
+                
+                try {
+                    const ctx = this.audioContext;
+                    const now = ctx.currentTime;
+                    const volume = this.settings.volume / 100 * 0.3;
+                    
+                    // Warning tone (descending frequencies)
+                    const frequencies = [440, 370, 330]; // A4 to E4 (dissonant)
+                    
+                    frequencies.forEach((freq, i) => {
+                        const osc = ctx.createOscillator();
+                        const gain = ctx.createGain();
+                        
+                        osc.connect(gain);
+                        gain.connect(ctx.destination);
+                        
+                        osc.frequency.value = freq;
+                        osc.type = 'square';
+                        
+                        const startTime = now + (i * 0.15);
+                        const endTime = startTime + 0.2;
+                        
+                        gain.gain.setValueAtTime(volume, startTime);
+                        gain.gain.exponentialRampToValueAtTime(0.01, endTime);
+                        
+                        osc.start(startTime);
+                        osc.stop(endTime);
+                    });
+                } catch (e) {
+                    console.warn('Sound playback failed:', e);
+                }
+            }
+
+            updateBadge() {
+                const badge = document.getElementById('notif-badge');
+                if (this.unreadCount > 0) {
+                    badge.textContent = this.unreadCount > 99 ? '99+' : this.unreadCount;
+                    badge.style.display = 'block';
+                } else {
+                    badge.style.display = 'none';
+                }
+            }
+
+            renderHistory() {
+                const list = document.getElementById('notif-list');
+                
+                if (this.history.length === 0) {
+                    list.innerHTML = '<div class="notif-empty">No notifications yet</div>';
+                    return;
+                }
+                
+                list.innerHTML = this.history.map(notif => {
+                    const time = this.formatTimestamp(notif.timestamp);
+                    const unreadClass = notif.read ? '' : 'unread';
+                    
+                    return `
+                        <div class="notif-item ${unreadClass}" onclick="notificationManager.markAsRead(${notif.id})">
+                            <span class="notif-item-icon">${notif.icon}</span>
+                            <div class="notif-item-content">
+                                <div class="notif-item-title">${notif.title}</div>
+                                <div class="notif-item-message">${notif.message}</div>
+                                <div class="notif-item-time">${time}</div>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+            }
+
+            formatTimestamp(timestamp) {
+                const now = Date.now();
+                const diff = now - timestamp;
+                const seconds = Math.floor(diff / 1000);
+                const minutes = Math.floor(seconds / 60);
+                const hours = Math.floor(minutes / 60);
+                const days = Math.floor(hours / 24);
+                
+                if (seconds < 60) return 'Just now';
+                if (minutes < 60) return `${minutes}m ago`;
+                if (hours < 24) return `${hours}h ago`;
+                if (days < 7) return `${days}d ago`;
+                
+                const date = new Date(timestamp);
+                return date.toLocaleDateString();
+            }
+
+            markAsRead(notifId) {
+                const notif = this.history.find(n => n.id === notifId);
+                if (notif && !notif.read) {
+                    notif.read = true;
+                    this.unreadCount = Math.max(0, this.unreadCount - 1);
+                    this.saveHistory();
+                    this.updateBadge();
+                    this.renderHistory();
+                }
+            }
+
+            clearAll() {
+                this.history = [];
+                this.unreadCount = 0;
+                this.saveHistory();
+                this.updateBadge();
+                this.renderHistory();
+            }
+        }
+
+        // Initialize notification manager
+        let notificationManager = new NotificationManager();
+
+        // ========== NOTIFICATION UI FUNCTIONS ==========
+        
+        function toggleNotificationDropdown() {
+            const dropdown = document.getElementById('notif-dropdown');
+            dropdown.classList.toggle('show');
+            
+            // Mark all as read when opening
+            if (dropdown.classList.contains('show')) {
+                notificationManager.history.forEach(n => n.read = true);
+                notificationManager.unreadCount = 0;
+                notificationManager.saveHistory();
+                notificationManager.updateBadge();
+                notificationManager.renderHistory();
+            }
+            
+            // Close when clicking outside
+            if (dropdown.classList.contains('show')) {
+                setTimeout(() => {
+                    const closeOnClickOutside = (e) => {
+                        if (!dropdown.contains(e.target) && !document.getElementById('notif-bell').contains(e.target)) {
+                            dropdown.classList.remove('show');
+                            document.removeEventListener('click', closeOnClickOutside);
+                        }
+                    };
+                    document.addEventListener('click', closeOnClickOutside);
+                }, 0);
+            }
+        }
+
+        function clearAllNotifications() {
+            if (confirm('Clear all notifications?')) {
+                notificationManager.clearAll();
+            }
+        }
+
+        function openNotificationSettings() {
+            const modal = document.getElementById('notif-modal-overlay');
+            modal.classList.add('show');
+            
+            // Update toggle states
+            document.getElementById('toggle-toasts').classList.toggle('on', notificationManager.settings.toasts);
+            document.getElementById('toggle-browser').classList.toggle('on', notificationManager.settings.browser);
+            document.getElementById('toggle-sound').classList.toggle('on', notificationManager.settings.sound);
+            document.getElementById('volume-slider').value = notificationManager.settings.volume;
+            document.getElementById('volume-value').textContent = notificationManager.settings.volume + '%';
+        }
+
+        function closeNotificationSettings() {
+            document.getElementById('notif-modal-overlay').classList.remove('show');
+        }
+
+        function closeNotificationSettingsIfOverlay(event) {
+            if (event.target.id === 'notif-modal-overlay') {
+                closeNotificationSettings();
+            }
+        }
+
+        function toggleSetting(setting) {
+            const toggle = document.getElementById(`toggle-${setting}`);
+            const newValue = !notificationManager.settings[setting];
+            notificationManager.settings[setting] = newValue;
+            notificationManager.saveSettings();
+            toggle.classList.toggle('on', newValue);
+            
+            // Request browser permission if enabling browser notifications
+            if (setting === 'browser' && newValue) {
+                notificationManager.requestBrowserPermission();
+            }
+        }
+
+        function updateVolume(value) {
+            notificationManager.settings.volume = parseInt(value);
+            notificationManager.saveSettings();
+            document.getElementById('volume-value').textContent = value + '%';
+        }
 
         // ========== Configuration ==========
         const API_URL = 'https://ai-agents-func-todd.azurewebsites.net/api/status';
@@ -1600,6 +2672,9 @@
                 isConnected = true;
                 document.getElementById('connecting-overlay').classList.remove('show');
 
+                // Detect changes for notifications
+                notificationManager.detectChanges(data);
+
                 updateDashboard(data);
             } catch (err) {
                 if (!isConnected) {
@@ -1814,5 +2889,66 @@
     <footer style="background-color: #1e1e2e; text-align: center; font-size: 12px; padding: 10px; color: #aaa; margin-top: 20px;">
         AI Agent Pipeline Monitor v1.0 | Powered by Azure Functions
     </footer>
+
+    <!-- Notification Settings Modal -->
+    <div class="notif-modal-overlay" id="notif-modal-overlay" onclick="closeNotificationSettingsIfOverlay(event)">
+        <div class="notif-modal" onclick="event.stopPropagation()">
+            <div class="notif-modal-header">
+                <h2 class="notif-modal-title">⚙️ Notification Settings</h2>
+                <button class="notif-modal-close" onclick="closeNotificationSettings()">×</button>
+            </div>
+            <div class="notif-modal-body">
+                <div class="notif-setting-group">
+                    <label class="notif-setting-label" onclick="toggleSetting('toasts')">
+                        <div class="notif-setting-text">
+                            <div class="notif-setting-name">Toast Notifications</div>
+                            <div class="notif-setting-desc">Show slide-in notifications for agent state changes</div>
+                        </div>
+                        <div class="toggle-switch" id="toggle-toasts">
+                            <div class="toggle-slider"></div>
+                        </div>
+                    </label>
+                </div>
+                
+                <div class="notif-setting-group">
+                    <label class="notif-setting-label" onclick="toggleSetting('browser')">
+                        <div class="notif-setting-text">
+                            <div class="notif-setting-name">Browser Notifications</div>
+                            <div class="notif-setting-desc">Desktop alerts when tab is unfocused</div>
+                        </div>
+                        <div class="toggle-switch" id="toggle-browser">
+                            <div class="toggle-slider"></div>
+                        </div>
+                    </label>
+                </div>
+                
+                <div class="notif-setting-group">
+                    <label class="notif-setting-label" onclick="toggleSetting('sound')">
+                        <div class="notif-setting-text">
+                            <div class="notif-setting-name">Sound Alerts</div>
+                            <div class="notif-setting-desc">Play audio chimes for agent completions</div>
+                        </div>
+                        <div class="toggle-switch" id="toggle-sound">
+                            <div class="toggle-slider"></div>
+                        </div>
+                    </label>
+                </div>
+                
+                <div class="notif-setting-group">
+                    <div class="notif-setting-text" style="margin-bottom: 8px;">
+                        <div class="notif-setting-name">Volume</div>
+                        <div class="notif-setting-desc">Adjust sound effect volume</div>
+                    </div>
+                    <div class="volume-slider-container">
+                        <input type="range" min="0" max="100" value="50" class="volume-slider" id="volume-slider" oninput="updateVolume(this.value)">
+                        <span class="volume-value" id="volume-value">50%</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notification Container -->
+    <div class="toast-container" id="toast-container"></div>
 </body>
 </html>
