@@ -82,20 +82,33 @@ public sealed class CopilotBridgeWebhook
             return req.CreateResponse(HttpStatusCode.Unauthorized);
         }
 
-        // Only process pull_request events
-        if (!req.Headers.TryGetValues("X-GitHub-Event", out var eventTypes) ||
-            !eventTypes.Contains("pull_request"))
+        // Process pull_request events and issues events (Copilot closes the issue when done)
+        if (!req.Headers.TryGetValues("X-GitHub-Event", out var eventTypes))
         {
-            _logger.LogDebug("Ignoring non-pull_request event");
+            _logger.LogDebug("No X-GitHub-Event header");
             return req.CreateResponse(HttpStatusCode.OK);
         }
+
+        var eventType = eventTypes.First();
 
         using var doc = JsonDocument.Parse(body);
         var root = doc.RootElement;
 
-        // Process: opened (non-draft), ready_for_review, or synchronize (code push)
+        // ── Issues event: Copilot closes the issue when it finishes coding ──
+        if (eventType == "issues")
+        {
+            return await HandleIssueEventAsync(req, root, cancellationToken);
+        }
+
+        if (eventType != "pull_request")
+        {
+            _logger.LogDebug("Ignoring event type: {EventType}", eventType);
+            return req.CreateResponse(HttpStatusCode.OK);
+        }
+
+        // ── Pull Request event: handle opened (non-draft) and ready_for_review ──
         var action = root.GetProperty("action").GetString();
-        if (action is not ("opened" or "ready_for_review" or "synchronize"))
+        if (action is not ("opened" or "ready_for_review"))
         {
             _logger.LogDebug("Ignoring pull_request action: {Action}", action);
             return req.CreateResponse(HttpStatusCode.OK);
@@ -107,15 +120,14 @@ public sealed class CopilotBridgeWebhook
         var prBody = pr.GetProperty("body").GetString() ?? "";
         var prBranch = pr.GetProperty("head").GetProperty("ref").GetString() ?? "";
 
-        // Skip draft PRs ONLY on the 'opened' action.
-        // Copilot creates a draft PR first (0 files), then pushes code via commits.
-        // The 'synchronize' event fires when code is pushed — that's when we process.
-        // Copilot typically does NOT mark PRs as ready_for_review, so we can't wait for that.
+        // Skip draft PRs — Copilot opens a draft PR as a placeholder, then
+        // pushes code to it. We wait for the issue to close (Copilot finishes),
+        // then process the PR at that point.
         var isDraft = pr.TryGetProperty("draft", out var draftProp) && draftProp.GetBoolean();
-        if (isDraft && action == "opened")
+        if (isDraft)
         {
             _logger.LogInformation(
-                "Ignoring newly opened draft PR #{PrNumber} — waiting for code push (synchronize event)", prNumber);
+                "Ignoring draft PR #{PrNumber} — will process when Copilot closes the issue", prNumber);
             return req.CreateResponse(HttpStatusCode.OK);
         }
 
@@ -160,6 +172,122 @@ public sealed class CopilotBridgeWebhook
 
             return req.CreateResponse(HttpStatusCode.InternalServerError);
         }
+    }
+
+    /// <summary>
+    /// Handles GitHub Issues events. Copilot closes the issue when it finishes coding.
+    /// We detect this and then process the associated PR.
+    /// </summary>
+    private async Task<HttpResponseData> HandleIssueEventAsync(
+        HttpRequestData req, JsonElement root, CancellationToken cancellationToken)
+    {
+        var action = root.GetProperty("action").GetString();
+        if (action != "closed")
+        {
+            _logger.LogDebug("Ignoring issues action: {Action}", action);
+            return req.CreateResponse(HttpStatusCode.OK);
+        }
+
+        var issue = root.GetProperty("issue");
+        var issueNumber = issue.GetProperty("number").GetInt32();
+        var issueTitle = issue.GetProperty("title").GetString() ?? "";
+
+        _logger.LogInformation("Issue #{IssueNumber} closed: {Title}", issueNumber, issueTitle);
+
+        // Check if this issue has a pending delegation
+        var workItemId = ExtractWorkItemId(issueTitle, issue.TryGetProperty("body", out var bodyProp) ? bodyProp.GetString() ?? "" : "");
+        if (workItemId is null)
+        {
+            _logger.LogDebug("Issue #{IssueNumber} does not reference a US-{{id}} — ignoring", issueNumber);
+            return req.CreateResponse(HttpStatusCode.OK);
+        }
+
+        var delegation = await _delegationService.GetByWorkItemIdAsync(workItemId.Value, cancellationToken);
+        if (delegation is null || delegation.Status != "Pending")
+        {
+            _logger.LogDebug("No pending delegation for WI-{WorkItemId} (Issue #{IssueNumber})", workItemId, issueNumber);
+            return req.CreateResponse(HttpStatusCode.OK);
+        }
+
+        if (delegation.IssueNumber != issueNumber)
+        {
+            _logger.LogDebug("Issue #{IssueNumber} doesn't match delegation issue #{DelegationIssue}", issueNumber, delegation.IssueNumber);
+            return req.CreateResponse(HttpStatusCode.OK);
+        }
+
+        _logger.LogInformation(
+            "Copilot finished! Issue #{IssueNumber} closed for WI-{WorkItemId} — looking for PR to reconcile",
+            issueNumber, workItemId.Value);
+
+        // Find the Copilot PR associated with this delegation
+        var prInfo = await FindCopilotPrAsync(delegation, cancellationToken);
+        if (prInfo is null)
+        {
+            _logger.LogWarning("No PR found for Copilot delegation WI-{WorkItemId}. Will wait for timeout checker.", workItemId);
+            return req.CreateResponse(HttpStatusCode.OK);
+        }
+
+        try
+        {
+            await _activityLogger.LogAsync("Coding", workItemId.Value,
+                $"Copilot finished coding (Issue #{issueNumber} closed) — reconciling PR #{prInfo.Value.Number}", "info", cancellationToken);
+
+            await ReconcileAndResumeAsync(delegation, prInfo.Value.Number, prInfo.Value.Branch, cancellationToken);
+
+            var response = req.CreateResponse(HttpStatusCode.OK);
+            await response.WriteStringAsync($"Reconciled Copilot PR #{prInfo.Value.Number} for WI-{workItemId}", cancellationToken);
+            return response;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to reconcile after Copilot finished WI-{WorkItemId}", workItemId);
+            await _activityLogger.LogAsync("Coding", workItemId.Value,
+                $"Error reconciling Copilot PR: {ex.Message}", "error", cancellationToken);
+            return req.CreateResponse(HttpStatusCode.InternalServerError);
+        }
+    }
+
+    /// <summary>
+    /// Finds the Copilot PR for a delegation by searching open/closed PRs from Copilot branches.
+    /// </summary>
+    private async Task<(int Number, string Branch)?> FindCopilotPrAsync(
+        CopilotDelegation delegation, CancellationToken cancellationToken)
+    {
+        using var httpClient = CreateGitHubClient();
+
+        // Search for PRs targeting the pipeline branch or main
+        var searchUri = $"repos/{_githubOptions.Owner}/{_githubOptions.Repo}/pulls?state=all&sort=created&direction=desc&per_page=10";
+        var response = await httpClient.GetAsync(searchUri, cancellationToken);
+        if (!response.IsSuccessStatusCode) return null;
+
+        var json = await response.Content.ReadAsStringAsync(cancellationToken);
+        using var prs = JsonDocument.Parse(json);
+
+        foreach (var pr in prs.RootElement.EnumerateArray())
+        {
+            var prTitle = pr.GetProperty("title").GetString() ?? "";
+            var prBody = pr.TryGetProperty("body", out var bProp) ? bProp.GetString() ?? "" : "";
+            var prCreated = pr.GetProperty("created_at").GetDateTime();
+
+            // Must be created after delegation and reference the same work item
+            if (prCreated < delegation.DelegatedAt.AddMinutes(-1)) continue;
+
+            var prWorkItemId = ExtractWorkItemId(prTitle, prBody);
+            if (prWorkItemId != delegation.WorkItemId) continue;
+
+            var prNumber = pr.GetProperty("number").GetInt32();
+            var prBranch = pr.GetProperty("head").GetProperty("ref").GetString() ?? "";
+            var prFiles = pr.GetProperty("changed_files").GetInt32();
+
+            if (prFiles > 0)
+            {
+                _logger.LogInformation("Found Copilot PR #{PrNumber} with {Files} files for WI-{WorkItemId}",
+                    prNumber, prFiles, delegation.WorkItemId);
+                return (prNumber, prBranch);
+            }
+        }
+
+        return null;
     }
 
     /// <summary>
