@@ -93,9 +93,9 @@ public sealed class CopilotBridgeWebhook
         using var doc = JsonDocument.Parse(body);
         var root = doc.RootElement;
 
-        // Only process opened or ready_for_review actions
+        // Process: opened (non-draft), ready_for_review, or synchronize (code push)
         var action = root.GetProperty("action").GetString();
-        if (action is not ("opened" or "ready_for_review"))
+        if (action is not ("opened" or "ready_for_review" or "synchronize"))
         {
             _logger.LogDebug("Ignoring pull_request action: {Action}", action);
             return req.CreateResponse(HttpStatusCode.OK);
@@ -107,14 +107,15 @@ public sealed class CopilotBridgeWebhook
         var prBody = pr.GetProperty("body").GetString() ?? "";
         var prBranch = pr.GetProperty("head").GetProperty("ref").GetString() ?? "";
 
-        // Skip draft / [WIP] PRs — Copilot opens a draft PR first as a placeholder,
-        // then marks it ready_for_review once coding is complete. Processing drafts
-        // would kill the issue before Copilot has a chance to write code.
+        // Skip draft PRs ONLY on the 'opened' action.
+        // Copilot creates a draft PR first (0 files), then pushes code via commits.
+        // The 'synchronize' event fires when code is pushed — that's when we process.
+        // Copilot typically does NOT mark PRs as ready_for_review, so we can't wait for that.
         var isDraft = pr.TryGetProperty("draft", out var draftProp) && draftProp.GetBoolean();
-        if (isDraft)
+        if (isDraft && action == "opened")
         {
             _logger.LogInformation(
-                "Ignoring draft PR #{PrNumber} — waiting for ready_for_review event", prNumber);
+                "Ignoring newly opened draft PR #{PrNumber} — waiting for code push (synchronize event)", prNumber);
             return req.CreateResponse(HttpStatusCode.OK);
         }
 
@@ -178,6 +179,18 @@ public sealed class CopilotBridgeWebhook
 
         // Fetch PR file list and metrics from GitHub API
         var (changedFiles, metrics) = await FetchPrDetailsAsync(prNumber, delegation.DelegatedAt, cancellationToken);
+
+        // Safety check: don't reconcile if Copilot hasn't pushed any actual file changes yet.
+        // This prevents closing the issue and resuming the pipeline with 0 code changes.
+        if (changedFiles.Count == 0)
+        {
+            _logger.LogInformation(
+                "PR #{PrNumber} for WI-{WorkItemId} has no changed files yet — skipping reconciliation",
+                prNumber, workItemId);
+            await _activityLogger.LogAsync("Coding", workItemId,
+                $"Copilot PR #{prNumber} has no file changes yet — waiting for code", "info", cancellationToken);
+            return;
+        }
 
         // Check out the pipeline branch
         var repoPath = await _gitOps.EnsureBranchAsync(branchName, cancellationToken);
