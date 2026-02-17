@@ -75,10 +75,10 @@
 ## Technical Analysis
 
 ### Problem Analysis
-This is a UI refactoring task to relocate health status indicators from the dashboard header to the left sidebar. The story involves moving 5 health indicators (ADO, Queue, AI, Config, Git) plus a poison message counter from div.nav-health in the top navigation to a new 'System Health' section in the left sidebar below the existing Totals section. The change improves header cleanliness and better utilizes sidebar space. All existing functionality (60s polling, tooltips, styling) must be preserved.
+This is a UI refactoring task to move health status indicators from the dashboard header to the left sidebar. The story involves relocating 5 health indicators (ADO, Queue, AI, Config, Git) and a poison message counter from the top navigation to a new 'System Health' section in the sidebar. The change improves header cleanliness and better utilizes sidebar space. All existing functionality (polling, tooltips, styling) must be preserved.
 
 ### Recommended Approach
-This is a pure frontend change in the single-file SPA dashboard/index.html. The approach involves: 1) Remove the existing div.nav-health container from the header (lines 2314-2358), 2) Create a new 'System Health' section in the sidebar following the existing sidebar-stats pattern, 3) Adapt CSS from horizontal header layout (.nav-health with flex-row) to vertical sidebar layout (matching .sidebar-stats with flex-column), 4) Preserve all existing CSS classes for JavaScript compatibility, 5) Maintain responsive behavior where sidebar collapses at 900px breakpoint. No JavaScript changes needed since the existing fetchHealth() and updateHealthPanel() functions query by CSS class names.
+1. Remove the existing div.nav-health container from div.top-nav (lines 2314-2358). 2. Create a new 'System Health' section in aside.sidebar-left below the Totals section, following the sidebar-stats styling pattern. 3. Move all 5 health indicator elements (nh-ado, nh-queue, nh-ai, nh-config, nh-git) and the poison counter to the new sidebar location. 4. Adapt CSS from horizontal (flex-row) to vertical (flex-column) layout while preserving dot colors, labels, and tooltips. 5. Ensure JavaScript functions (fetchHealth, updateHealthPanel) continue working by maintaining CSS class names. 6. Verify responsive behavior follows existing sidebar collapse at 900px breakpoint.
 
 ### Affected Files
 
@@ -89,7 +89,7 @@ This is a pure frontend change in the single-file SPA dashboard/index.html. The 
 **Story Points:** 5
 
 ### Architecture Considerations
-Single-file SPA modification with HTML structure changes, CSS layout adaptation from horizontal to vertical, and preservation of existing JavaScript functionality through CSS class compatibility.
+Single-file SPA modification. The dashboard is entirely contained in dashboard/index.html (~4100 lines) with inline CSS, HTML, and JavaScript. No backend changes required - only DOM restructuring and CSS layout adjustments. The existing health polling mechanism (60s interval to /api/health) and JavaScript update logic remain unchanged.
 
 ---
 
@@ -97,33 +97,29 @@ Single-file SPA modification with HTML structure changes, CSS layout adaptation 
 
 ### Sub-Tasks
 
-1. Remove div.nav-health#nav-health container from header (lines 2314-2358)
+1. Remove div.nav-health#nav-health container from div.top-nav header section
 
-2. Create new 'System Health' section in left sidebar below Totals section
+2. Create new 'System Health' section in aside.sidebar-left below existing Totals section
 
-3. Adapt CSS classes from horizontal header layout to vertical sidebar layout
+3. Move all 5 health indicator elements (nh-ado, nh-queue, nh-ai, nh-config, nh-git) to new sidebar location
 
-4. Update .nav-health-item styling to match sidebar-stat-item pattern
+4. Move poison message counter span#nav-health-poison to sidebar
 
-5. Ensure poison message counter moves with health indicators
+5. Update CSS layout from horizontal (flex-row) to vertical (flex-column) for sidebar placement
 
-6. Verify responsive behavior follows existing 900px breakpoint
+6. Preserve all existing styling: dot colors (.healthy, .degraded, .unhealthy, .unknown), labels, and tooltips
 
-7. Test that JavaScript polling and DOM updates continue working
+7. Test that fetchHealth() and updateHealthPanel() JavaScript functions continue working
 
-8. Validate tooltip positioning works in new sidebar location
+8. Verify responsive behavior at 900px breakpoint (sidebar collapse)
+
+9. Validate visual appearance matches sidebar styling patterns (sidebar-stats, sidebar-header)
 
 
 ### Dependencies
 
 
-- Existing fetchHealth() JavaScript function must continue working
-
-- Existing updateHealthPanel() DOM queries by CSS class must remain compatible
-
-- Sidebar responsive behavior at 900px breakpoint must be preserved
-
-- Health API endpoint /api/health must remain unchanged
+- No external dependencies - self-contained dashboard modification
 
 
 
@@ -133,36 +129,32 @@ Single-file SPA modification with HTML structure changes, CSS layout adaptation 
 
 ### Identified Risks
 
-- CSS class name changes could break JavaScript functionality
+- Breaking existing JavaScript functionality if CSS selectors change
 
-- Tooltip positioning might need adjustment in sidebar context
+- Visual inconsistency if sidebar styling patterns aren't followed correctly
 
-- Responsive behavior could be affected if sidebar styling is modified incorrectly
-
-- Visual alignment with existing sidebar sections might require fine-tuning
+- Mobile responsive behavior could be affected if breakpoint handling changes
 
 
 ---
 
 ## Assumptions Made
 
-- The dashboard/index.html file structure matches the described line numbers
+- The dashboard/index.html file structure matches the described line numbers (~2314-2358 for header, ~2402+ for sidebar)
 
-- Existing JavaScript functions fetchHealth() and updateHealthPanel() work by CSS class selectors
+- Existing JavaScript uses CSS class selectors (.nav-health-item) that will be preserved
 
 - The sidebar has sufficient vertical space for 5 health indicators plus poison counter
 
-- Current tooltip implementation will work in the sidebar context without modification
-
-- The 60-second polling interval and /api/health endpoint remain unchanged
+- Current responsive breakpoint at 900px for sidebar collapse should be maintained
 
 
 ---
 
 ## Testing Strategy
-Manual testing approach: 1) Verify health indicators are removed from header and appear in sidebar, 2) Confirm all 5 indicators (ADO, Queue, AI, Config, Git) plus poison counter are present, 3) Test that colored dots maintain proper status colors (green/orange/red/gray), 4) Verify hover tooltips display correctly, 5) Confirm JavaScript polling continues every 60 seconds, 6) Test responsive behavior by resizing browser to <900px width, 7) Validate visual alignment with existing sidebar sections, 8) Check that header appears cleaner with only logo, project name, dark mode toggle, and emergency stop button remaining.
+1. Visual verification: Confirm health indicators appear in sidebar with proper styling and layout. 2. Functional testing: Verify all 5 indicators show correct status colors and hover tooltips work. 3. JavaScript testing: Confirm fetchHealth() polling continues and updateHealthPanel() updates the moved elements. 4. Responsive testing: Test sidebar collapse behavior at 900px breakpoint on mobile/tablet. 5. Cross-browser testing: Verify layout works in major browsers. 6. Header verification: Confirm header is cleaner with only logo, project name, dark mode toggle, and emergency stop button remaining.
 
 ---
 
 *Generated by Planning Agent*  
-*Timestamp: 2026-02-17T18:31:49.2298982Z*
+*Timestamp: 2026-02-17T19:09:30.9827942Z*
