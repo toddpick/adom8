@@ -91,87 +91,29 @@ public sealed class CopilotBridgeWebhook
 
         var eventType = eventTypes.First();
 
-        using var doc = JsonDocument.Parse(body);
-        var root = doc.RootElement;
-
-        // ── Issues event: Copilot closes the issue when it finishes coding ──
-        if (eventType == "issues")
-        {
-            return await HandleIssueEventAsync(req, root, cancellationToken);
-        }
-
-        if (eventType != "pull_request")
-        {
-            _logger.LogDebug("Ignoring event type: {EventType}", eventType);
-            return req.CreateResponse(HttpStatusCode.OK);
-        }
-
-        // ── Pull Request event: handle opened (non-draft) and ready_for_review ──
-        var action = root.GetProperty("action").GetString();
-        if (action is not ("opened" or "ready_for_review"))
-        {
-            _logger.LogDebug("Ignoring pull_request action: {Action}", action);
-            return req.CreateResponse(HttpStatusCode.OK);
-        }
-
-        var pr = root.GetProperty("pull_request");
-        var prNumber = pr.GetProperty("number").GetInt32();
-        var prTitle = pr.GetProperty("title").GetString() ?? "";
-        var prBody = pr.GetProperty("body").GetString() ?? "";
-        var prBranch = pr.GetProperty("head").GetProperty("ref").GetString() ?? "";
-
-        // Skip draft PRs — Copilot opens a draft PR as a placeholder, then
-        // pushes code to it. We wait for the issue to close (Copilot finishes),
-        // then process the PR at that point.
-        var isDraft = pr.TryGetProperty("draft", out var draftProp) && draftProp.GetBoolean();
-        if (isDraft)
-        {
-            _logger.LogInformation(
-                "Ignoring draft PR #{PrNumber} — will process when Copilot closes the issue", prNumber);
-            return req.CreateResponse(HttpStatusCode.OK);
-        }
-
-        _logger.LogInformation("Processing Copilot PR #{PrNumber}: {Title}", prNumber, prTitle);
-
-        // Try to match this PR to a pending delegation
-        var workItemId = ExtractWorkItemId(prTitle, prBody);
-        if (workItemId is null)
-        {
-            _logger.LogInformation("PR #{PrNumber} does not reference a US-{{id}} work item — ignoring", prNumber);
-            return req.CreateResponse(HttpStatusCode.OK);
-        }
-
-        var delegation = await _delegationService.GetByWorkItemIdAsync(workItemId.Value, cancellationToken);
-        if (delegation is null || delegation.Status != "Pending")
-        {
-            _logger.LogInformation(
-                "No pending delegation found for WI-{WorkItemId} (PR #{PrNumber}) — ignoring",
-                workItemId.Value, prNumber);
-            return req.CreateResponse(HttpStatusCode.OK);
-        }
-
+        // ── DISABLED: Webhook-based completion detection is unreliable ──
+        // Copilot sessions that are cancelled, fail, or time out ALSO close the
+        // GitHub Issue, making it impossible for the webhook to distinguish
+        // "finished successfully" from "cancelled mid-work." This caused the
+        // pipeline to advance with incomplete/missing code.
+        //
+        // Completion is now detected exclusively by the CopilotTimeoutChecker
+        // timer function (runs every 2 minutes). It verifies a PR exists with
+        // actual commits before reconciling, which is a reliable signal that
+        // Copilot produced real code.
+        //
+        // This webhook endpoint is kept alive for signature validation and
+        // logging — it acknowledges events but does NOT trigger reconciliation.
         _logger.LogInformation(
-            "Matched PR #{PrNumber} to Copilot delegation for WI-{WorkItemId}",
-            prNumber, workItemId.Value);
+            "Copilot bridge webhook received {EventType} event — acknowledged but not processing. " +
+            "Completion detection is handled by CopilotTimeoutChecker timer.",
+            eventType);
 
-        try
-        {
-            await ReconcileAndResumeAsync(delegation, prNumber, prBranch, cancellationToken);
-
-            var response = req.CreateResponse(HttpStatusCode.OK);
-            await response.WriteStringAsync($"Reconciled PR #{prNumber} for WI-{workItemId}", cancellationToken);
-            return response;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to reconcile Copilot PR #{PrNumber} for WI-{WorkItemId}",
-                prNumber, workItemId.Value);
-
-            await _activityLogger.LogAsync("Coding", workItemId.Value,
-                $"Error reconciling Copilot PR #{prNumber}: {ex.Message}", "error", cancellationToken);
-
-            return req.CreateResponse(HttpStatusCode.InternalServerError);
-        }
+        var response = req.CreateResponse(HttpStatusCode.OK);
+        await response.WriteStringAsync(
+            $"Acknowledged {eventType} event. Completion handled by timer-based polling.",
+            cancellationToken);
+        return response;
     }
 
     /// <summary>
