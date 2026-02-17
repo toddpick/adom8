@@ -53,8 +53,9 @@ public sealed class CopilotTimeoutChecker
     }
 
     /// <summary>
-    /// Runs every 5 minutes to check for timed-out Copilot delegations.
-    /// Only active when <see cref="CopilotOptions.Enabled"/> is true.
+    /// Runs every 5 minutes to check for completed or timed-out Copilot delegations.
+    /// First checks if Copilot has finished (PR exists with commits) and auto-closes
+    /// the issue to trigger the bridge webhook. If truly timed out, falls back to agentic.
     /// </summary>
     [Function("CopilotTimeoutChecker")]
     public async Task RunAsync(
@@ -66,6 +67,23 @@ public sealed class CopilotTimeoutChecker
             return; // Copilot not enabled — nothing to check
         }
 
+        // First, check ALL pending delegations for completion (Copilot doesn't close its own issues)
+        var pending = await _delegationService.GetPendingAsync(cancellationToken);
+        foreach (var delegation in pending)
+        {
+            try
+            {
+                await CheckForCompletionAsync(delegation, cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex,
+                    "Failed to check completion for Copilot delegation WI-{WorkItemId}",
+                    delegation.WorkItemId);
+            }
+        }
+
+        // Then check for actual timeouts (delegation may have been completed above via webhook)
         var timeout = TimeSpan.FromMinutes(_copilotOptions.TimeoutMinutes);
         var timedOut = await _delegationService.GetTimedOutAsync(timeout, cancellationToken);
 
@@ -89,6 +107,94 @@ public sealed class CopilotTimeoutChecker
                     delegation.WorkItemId);
             }
         }
+    }
+
+    /// <summary>
+    /// Checks if Copilot has finished coding by looking for a PR with commits.
+    /// Copilot doesn't close its GitHub Issue when done, so we detect completion
+    /// by finding a matching PR and auto-closing the issue to trigger the bridge webhook.
+    /// </summary>
+    private async Task CheckForCompletionAsync(CopilotDelegation delegation, CancellationToken cancellationToken)
+    {
+        var elapsed = (DateTime.UtcNow - delegation.DelegatedAt).TotalMinutes;
+
+        // Don't check too early — give Copilot at least 3 minutes to start
+        if (elapsed < 3)
+        {
+            return;
+        }
+
+        using var httpClient = CreateGitHubClient();
+
+        // Check if the issue is already closed (webhook should handle it)
+        var issueResponse = await httpClient.GetAsync(
+            $"repos/{_githubOptions.Owner}/{_githubOptions.Repo}/issues/{delegation.IssueNumber}",
+            cancellationToken);
+        if (!issueResponse.IsSuccessStatusCode) return;
+
+        var issueJson = await issueResponse.Content.ReadAsStringAsync(cancellationToken);
+        using var issueDoc = JsonDocument.Parse(issueJson);
+        var issueState = issueDoc.RootElement.GetProperty("state").GetString();
+
+        if (issueState == "closed")
+        {
+            _logger.LogDebug("Issue #{IssueNumber} already closed for WI-{WorkItemId} — webhook should handle it",
+                delegation.IssueNumber, delegation.WorkItemId);
+            return;
+        }
+
+        // Look for a PR created by Copilot for this work item
+        var prResponse = await httpClient.GetAsync(
+            $"repos/{_githubOptions.Owner}/{_githubOptions.Repo}/pulls?state=all&sort=created&direction=desc&per_page=10",
+            cancellationToken);
+        if (!prResponse.IsSuccessStatusCode) return;
+
+        var prJson = await prResponse.Content.ReadAsStringAsync(cancellationToken);
+        using var prDoc = JsonDocument.Parse(prJson);
+
+        foreach (var pr in prDoc.RootElement.EnumerateArray())
+        {
+            var prTitle = pr.GetProperty("title").GetString() ?? "";
+            var prBody = pr.TryGetProperty("body", out var bProp) ? bProp.GetString() ?? "" : "";
+            var prCreated = pr.GetProperty("created_at").GetDateTime();
+
+            if (prCreated < delegation.DelegatedAt.AddMinutes(-1)) continue;
+
+            // Check if this PR references our work item
+            if (!prTitle.Contains($"US-{delegation.WorkItemId}", StringComparison.OrdinalIgnoreCase) &&
+                !prBody.Contains($"US-{delegation.WorkItemId}", StringComparison.OrdinalIgnoreCase) &&
+                !prTitle.Contains(delegation.WorkItemId.ToString()) &&
+                !prBody.Contains($"#{delegation.IssueNumber}"))
+            {
+                continue;
+            }
+
+            var prNumber = pr.GetProperty("number").GetInt32();
+            var prCommits = pr.GetProperty("commits").GetInt32();
+
+            if (prCommits > 0)
+            {
+                _logger.LogInformation(
+                    "Copilot completed! PR #{PrNumber} has {Commits} commits for WI-{WorkItemId} — auto-closing Issue #{IssueNumber}",
+                    prNumber, prCommits, delegation.WorkItemId, delegation.IssueNumber);
+
+                await _activityLogger.LogAsync("Coding", delegation.WorkItemId,
+                    $"Detected Copilot completion (PR #{prNumber}, {prCommits} commits) — closing issue to trigger reconciliation",
+                    "info", cancellationToken);
+
+                // Close the issue — this fires the webhook which handles reconciliation
+                var closeBody = JsonSerializer.Serialize(new { state = "closed" });
+                var closeContent = new StringContent(closeBody, Encoding.UTF8, "application/json");
+                await httpClient.PatchAsync(
+                    $"repos/{_githubOptions.Owner}/{_githubOptions.Repo}/issues/{delegation.IssueNumber}",
+                    closeContent, cancellationToken);
+
+                return; // Webhook will handle the rest
+            }
+        }
+
+        _logger.LogDebug("No completed PR found yet for WI-{WorkItemId} ({Elapsed:F0}m elapsed)",
+            delegation.WorkItemId, elapsed);
     }
 
     private async Task HandleTimeoutAsync(CopilotDelegation delegation, CancellationToken cancellationToken)
@@ -198,5 +304,21 @@ public sealed class CopilotTimeoutChecker
             closeContent, cancellationToken);
 
         _logger.LogInformation("Closed timed-out GitHub Issue #{IssueNumber}", issueNumber);
+    }
+
+    private HttpClient CreateGitHubClient()
+    {
+        var client = new HttpClient
+        {
+            BaseAddress = new Uri("https://api.github.com/"),
+            Timeout = TimeSpan.FromSeconds(30)
+        };
+        client.DefaultRequestHeaders.Authorization =
+            new AuthenticationHeaderValue("Bearer", _githubOptions.Token);
+        client.DefaultRequestHeaders.UserAgent.ParseAdd("AIAgents/1.0");
+        client.DefaultRequestHeaders.Accept.Add(
+            new MediaTypeWithQualityHeaderValue("application/vnd.github+json"));
+        client.DefaultRequestHeaders.Add("X-GitHub-Api-Version", "2022-11-28");
+        return client;
     }
 }

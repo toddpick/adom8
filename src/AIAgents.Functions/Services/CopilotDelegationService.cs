@@ -26,6 +26,7 @@ public interface ICopilotDelegationService
 
     /// <summary>Gets all pending delegations older than the specified threshold.</summary>
     Task<IReadOnlyList<CopilotDelegation>> GetTimedOutAsync(TimeSpan timeout, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<CopilotDelegation>> GetPendingAsync(CancellationToken cancellationToken = default);
 }
 
 /// <summary>
@@ -134,28 +135,26 @@ public sealed class TableStorageCopilotDelegationService : ICopilotDelegationSer
         }
     }
 
-    public async Task<IReadOnlyList<CopilotDelegation>> GetTimedOutAsync(TimeSpan timeout, CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<CopilotDelegation>> GetPendingAsync(CancellationToken cancellationToken = default)
     {
-        var cutoff = DateTime.UtcNow.Subtract(timeout);
         var results = new List<CopilotDelegation>();
-
-        // Query all Pending delegations then filter in-memory.
-        // DelegatedAt was previously stored as a string which broke datetime queries;
-        // in-memory filtering is safe given the tiny row count and avoids type issues.
         var query = _tableClient.QueryAsync<TableEntity>(
             filter: $"PartitionKey eq '{PartitionKey}' and Status eq 'Pending'",
             cancellationToken: cancellationToken);
 
         await foreach (var entity in query)
         {
-            var delegation = FromEntity(entity);
-            if (delegation.DelegatedAt < cutoff)
-            {
-                results.Add(delegation);
-            }
+            results.Add(FromEntity(entity));
         }
 
         return results;
+    }
+
+    public async Task<IReadOnlyList<CopilotDelegation>> GetTimedOutAsync(TimeSpan timeout, CancellationToken cancellationToken = default)
+    {
+        var cutoff = DateTime.UtcNow.Subtract(timeout);
+        var pending = await GetPendingAsync(cancellationToken);
+        return pending.Where(d => d.DelegatedAt < cutoff).ToList();
     }
 
     private static TableEntity ToEntity(CopilotDelegation delegation) => new(PartitionKey, delegation.WorkItemId.ToString())
