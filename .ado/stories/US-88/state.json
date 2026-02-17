@@ -2,7 +2,7 @@
   "workItemId": 88,
   "currentState": "AI Test",
   "createdAt": "2026-02-17T05:57:05.8307467Z",
-  "updatedAt": "2026-02-17T07:16:59.8793431Z",
+  "updatedAt": "2026-02-17T07:17:06.0061349Z",
   "agents": {
     "Planning": {
       "status": "in_progress",
@@ -24,6 +24,12 @@
         "durationMinutes": 23.320980463333335,
         "commitCount": 3
       }
+    },
+    "Testing": {
+      "status": "in_progress",
+      "startedAt": "2026-02-17T07:17:06.005564Z",
+      "completedAt": null,
+      "additionalData": null
     }
   },
   "artifacts": {
