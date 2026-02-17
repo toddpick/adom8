@@ -138,8 +138,12 @@ public sealed class CopilotTimeoutChecker
 
         if (issueState == "closed")
         {
-            _logger.LogDebug("Issue #{IssueNumber} already closed for WI-{WorkItemId} — webhook should handle it",
+            _logger.LogInformation(
+                "Issue #{IssueNumber} already closed for WI-{WorkItemId} but delegation still Pending — completing directly (webhook may have missed it)",
                 delegation.IssueNumber, delegation.WorkItemId);
+
+            // Find the PR so we can record its number, then complete the delegation ourselves
+            await FindPrAndCompleteDelegation(httpClient, delegation, cancellationToken);
             return;
         }
 
@@ -204,6 +208,68 @@ public sealed class CopilotTimeoutChecker
 
         _logger.LogDebug("No completed PR found yet for WI-{WorkItemId} ({Elapsed:F0}m elapsed)",
             delegation.WorkItemId, elapsed);
+    }
+
+    /// <summary>
+    /// Searches for a matching PR and completes the delegation directly (bypassing the webhook).
+    /// Called when the issue is already closed but the delegation is still Pending — i.e. the webhook missed it.
+    /// </summary>
+    private async Task FindPrAndCompleteDelegation(HttpClient httpClient, CopilotDelegation delegation, CancellationToken cancellationToken)
+    {
+        var prResponse = await httpClient.GetAsync(
+            $"repos/{_githubOptions.Owner}/{_githubOptions.Repo}/pulls?state=all&sort=created&direction=desc&per_page=10",
+            cancellationToken);
+        if (!prResponse.IsSuccessStatusCode)
+        {
+            _logger.LogWarning("Failed to fetch PRs for WI-{WorkItemId} fallback completion", delegation.WorkItemId);
+            return;
+        }
+
+        var prJson = await prResponse.Content.ReadAsStringAsync(cancellationToken);
+        using var prDoc = JsonDocument.Parse(prJson);
+
+        foreach (var pr in prDoc.RootElement.EnumerateArray())
+        {
+            var prTitle = pr.GetProperty("title").GetString() ?? "";
+            var prBody = pr.TryGetProperty("body", out var bProp) ? bProp.GetString() ?? "" : "";
+            var prCreated = pr.GetProperty("created_at").GetDateTime();
+
+            if (prCreated < delegation.DelegatedAt.AddMinutes(-1)) continue;
+
+            if (!prTitle.Contains($"US-{delegation.WorkItemId}", StringComparison.OrdinalIgnoreCase) &&
+                !prBody.Contains($"US-{delegation.WorkItemId}", StringComparison.OrdinalIgnoreCase) &&
+                !prTitle.Contains(delegation.WorkItemId.ToString()) &&
+                !prBody.Contains($"#{delegation.IssueNumber}"))
+            {
+                continue;
+            }
+
+            var prNumber = pr.GetProperty("number").GetInt32();
+
+            _logger.LogInformation(
+                "Found PR #{PrNumber} for WI-{WorkItemId} — completing delegation directly (webhook missed)",
+                prNumber, delegation.WorkItemId);
+
+            delegation.Status = "Completed";
+            delegation.CopilotPrNumber = prNumber;
+            delegation.CompletedAt = DateTime.UtcNow;
+            await _delegationService.UpdateAsync(delegation, cancellationToken);
+
+            await _activityLogger.LogAsync("Coding", delegation.WorkItemId,
+                $"Copilot completed successfully (PR #{prNumber}) — detected by poller fallback (1 premium credit)",
+                "info", cancellationToken);
+
+            return;
+        }
+
+        _logger.LogWarning(
+            "Issue #{IssueNumber} closed but no matching PR found for WI-{WorkItemId} — completing delegation as-is",
+            delegation.IssueNumber, delegation.WorkItemId);
+
+        // Even without a PR, the issue is closed so complete the delegation to prevent infinite stuck state
+        delegation.Status = "Completed";
+        delegation.CompletedAt = DateTime.UtcNow;
+        await _delegationService.UpdateAsync(delegation, cancellationToken);
     }
 
     private async Task HandleTimeoutAsync(CopilotDelegation delegation, CancellationToken cancellationToken)
