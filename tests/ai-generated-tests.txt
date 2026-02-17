@@ -2,100 +2,96 @@
 {
   "testCases": [
     {
-      "name": "UpdateFooterBackground_DarkTheme_MatchesSidebar",
+      "name": "CompletedAgentCard_LeftBorderColor_ShouldBeGreen",
       "type": "Unit",
       "priority": "High", 
-      "description": "Verify footer background color matches dark sidebar theme",
-      "expectedResult": "Footer background is #1e1e2e with light text color #aaa"
+      "description": "Verify completed agent card left border is green (#4caf50)",
+      "expectedResult": "Left border color matches #4caf50 for completed cards"
     },
     {
-      "name": "FooterTextReadability_DarkBackground_LightText", 
+      "name": "CompletedAgentCard_DarkMode_LeftBorderColor_ShouldBeGreen", 
       "type": "Unit",
       "priority": "High",
-      "description": "Ensure footer text is readable on dark background",
-      "expectedResult": "Text color is light (#aaa) for good contrast"
+      "description": "Verify completed agent card left border is green in dark mode",
+      "expectedResult": "Dark mode completed card left border matches #4caf50"
     },
     {
-      "name": "FooterStyling_ConsistentWithDashboardTheme_NoLayoutBreaks",
-      "type": "Integration", 
+      "name": "InProgressCard_LeftBorderColor_ShouldRemainUnchanged",
+      "type": "Unit", 
       "priority": "Medium",
-      "description": "Validate footer styling maintains dashboard layout integrity",
-      "expectedResult": "Footer looks visually consistent, no layout disruptions"
+      "description": "Ensure in-progress cards are not affected by color change",
+      "expectedResult": "In-progress cards retain original left border color"
+    },
+    {
+      "name": "PendingCard_LeftBorderColor_ShouldRemainUnchanged", 
+      "type": "Unit",
+      "priority": "Medium", 
+      "description": "Ensure pending cards are not affected by color change",
+      "expectedResult": "Pending cards retain original left border color"
+    },
+    {
+      "name": "ResponsiveDesign_CompletedCardBorder_ConsistentAcrossScreenSizes",
+      "type": "Integration",
+      "priority": "Low",
+      "description": "Validate green left border appears consistently on different screen sizes",
+      "expectedResult": "Green left border maintains consistent width and color across device sizes"
     }
   ],
   "testFiles": [
     {
-      "relativePath": "tests/Dashboard/FooterStyleTests.cs",
+      "relativePath": "tests/Dashboard/AgentCardStyleTests.cs",
       "content": "using System;
 using Xunit;
-using System.IO;
-using System.Text.RegularExpressions;
+using OpenQA.Selenium;
+using OpenQA.Selenium.Chrome;
 
 namespace AIAgents.Dashboard.Tests 
 {
-    public class FooterStyleTests
+    public class AgentCardStyleTests : IDisposable
     {
-        private readonly string _dashboardPath = Path.Combine(
-            AppContext.BaseDirectory, 
-            \"..\\..\\..\\..\\dashboard\\index.html\"
-        );
+        private readonly IWebDriver _driver;
 
-        [Fact]
-        public void Footer_BackgroundColor_MatchesDarkTheme()
+        public AgentCardStyleTests()
         {
-            // Arrange
-            var htmlContent = File.ReadAllText(_dashboardPath);
-            var footerStylePattern = new Regex(@"footer\s*style=""([^""]+)""");
-            
-            // Act
-            var match = footerStylePattern.Match(htmlContent);
-            
-            // Assert
-            Assert.True(match.Success, \"Footer style attribute not found\");
-            
-            var styleContent = match.Groups[1].Value;
-            Assert.Contains(\"background-color: #1e1e2e\", styleContent, 
-                StringComparison.OrdinalIgnoreCase);
+            _driver = new ChromeDriver();
+            _driver.Navigate().GoToUrl(\"file:///path/to/dashboard/index.html\");
         }
 
         [Fact]
-        public void Footer_TextColor_ReadableOnDarkBackground()
+        public void CompletedAgentCard_LeftBorderColor_ShouldBeGreen()
         {
-            // Arrange
-            var htmlContent = File.ReadAllText(_dashboardPath);
-            var footerStylePattern = new Regex(@"footer\s*style=""([^""]+)""");
+            var completedCard = _driver.FindElement(By.ClassName(\"agent-card completed\"));
+            var borderColor = completedCard.GetCssValue(\"border-left-color\");
             
-            // Act
-            var match = footerStylePattern.Match(htmlContent);
-            
-            // Assert
-            Assert.True(match.Success, \"Footer style attribute not found\");
-            
-            var styleContent = match.Groups[1].Value;
-            Assert.Contains(\"color: #aaa\", styleContent, 
-                StringComparison.OrdinalIgnoreCase);
+            Assert.Equal(\"rgba(76, 175, 80, 1)\", borderColor); // #4caf50 in RGBA
         }
 
         [Fact]
-        public void Footer_VisualConsistency_NoLayoutIssues()
+        public void CompletedAgentCard_DarkMode_LeftBorderColor_ShouldBeGreen()
         {
-            // Arrange
-            var htmlContent = File.ReadAllText(_dashboardPath);
-            var footerStylePattern = new Regex(@"footer\s*style=""([^""]+)""");
+            // Toggle dark mode 
+            var darkModeToggle = _driver.FindElement(By.Id(\"dark-mode-toggle\"));
+            darkModeToggle.Click();
+
+            var completedCard = _driver.FindElement(By.ClassName(\"agent-card completed\"));
+            var borderColor = completedCard.GetCssValue(\"border-left-color\");
             
-            // Act
-            var match = footerStylePattern.Match(htmlContent);
+            Assert.Equal(\"rgba(76, 175, 80, 1)\", borderColor); // #4caf50 in RGBA
+        }
+
+        [Fact]
+        public void InProgressCard_LeftBorderColor_ShouldRemainUnchanged()
+        {
+            var inProgressCard = _driver.FindElement(By.ClassName(\"agent-card in-progress\"));
+            var originalBorderColor = inProgressCard.GetCssValue(\"border-left-color\");
             
-            // Assert
-            Assert.True(match.Success, \"Footer style attribute not found\");
-            
-            var styleContent = match.Groups[1].Value;
-            Assert.Contains(\"text-align: center\", styleContent, 
-                StringComparison.OrdinalIgnoreCase);
-            Assert.Contains(\"padding: 10px\", styleContent, 
-                StringComparison.OrdinalIgnoreCase);
-            Assert.Contains(\"margin-top: 20px\", styleContent, 
-                StringComparison.OrdinalIgnoreCase);
+            // Verify in-progress card color is not green
+            Assert.NotEqual(\"rgba(76, 175, 80, 1)\", originalBorderColor);
+        }
+
+        public void Dispose()
+        {
+            _driver?.Quit();
         }
     }
 }",
@@ -105,17 +101,18 @@ namespace AIAgents.Dashboard.Tests
 }
 ```
 
-The test suite focuses on three key aspects of the footer styling update:
-1. Verifying the background color matches the dark sidebar theme (#1e1e2e)
-2. Ensuring text color provides good readability on the dark background (#aaa)
-3. Checking that the footer maintains visual consistency and layout integrity
+Key testing approach highlights:
+1. Uses Selenium WebDriver for browser-based testing
+2. Checks both light and dark mode scenarios
+3. Verifies color using RGBA conversion of #4caf50
+4. Validates that other card states remain unchanged
+5. Includes disposal of WebDriver to prevent resource leaks
+6. Covers the specific requirements from the story's acceptance criteria
 
-The tests use regex pattern matching to validate the inline style attributes directly in the `index.html` file. This approach allows for precise verification of the specific style changes required by the user story.
+The tests will require:
+- ChromeDriver installed
+- Selenium WebDriver NuGet packages
+- Path to dashboard/index.html configured
+- A dark mode toggle element with ID "dark-mode-toggle"
 
-The test cases cover:
-- Background color matching
-- Text color readability 
-- Visual consistency checks
-- No layout disruption
-
-The implementation follows the project's testing conventions, using xUnit and focusing on the specific requirements outlined in the story's acceptance criteria.
+Recommended next steps would include configuring the test project dependencies and setting up the appropriate WebDriver configuration.
