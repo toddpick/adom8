@@ -1318,11 +1318,14 @@
         }
 
         /* Notification History Dropdown */
+        .notifications-btn {
+            position: relative;
+        }
+
         .notifications-dropdown {
             position: absolute;
-            top: 100%;
+            top: calc(100% + 8px);
             right: 0;
-            margin-top: 8px;
             background: #fff;
             border-radius: 8px;
             box-shadow: 0 4px 16px rgba(0,0,0,0.2);
@@ -1509,14 +1512,14 @@
         <button class="notifications-btn" id="notifications-btn" onclick="toggleNotificationsDropdown()" title="View notification history">
             🔔
             <span class="notification-badge" id="notification-badge" style="display:none;">0</span>
-            <div class="notifications-dropdown" id="notifications-dropdown">
-                <div class="notifications-header">
-                    <span>Notifications</span>
-                    <button class="notifications-clear" onclick="clearNotifications(event)">Clear All</button>
-                </div>
-                <div id="notifications-list"></div>
-            </div>
         </button>
+        <div class="notifications-dropdown" id="notifications-dropdown">
+            <div class="notifications-header">
+                <span>Notifications</span>
+                <button class="notifications-clear" onclick="clearNotifications(event)">Clear All</button>
+            </div>
+            <div id="notifications-list"></div>
+        </div>
         <button class="settings-btn" id="settings-btn" onclick="openSettingsModal()" title="Notification settings">⚙️</button>
         <button class="dark-toggle" id="dark-toggle" onclick="toggleDarkMode()" title="Toggle dark mode">🌙</button>
     </div>
@@ -1751,6 +1754,8 @@
 
                     Object.entries(story.agents).forEach(([agentName, status]) => {
                         const prevStatus = prevStory.agents[agentName];
+                        // Only notify on actual state transitions, not initial pending states
+                        // This prevents notification spam when the dashboard first loads or refreshes
                         if (prevStatus !== status && status !== 'pending') {
                             this.notify(agentName, status, story.workItemId);
                         }
@@ -1788,9 +1793,10 @@
 
                 // Show browser notification if tab is not focused
                 if (this.settings.browser && document.hidden && 'Notification' in window && Notification.permission === 'granted') {
+                    const iconSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y="80" font-size="80">${emoji}</text></svg>`;
                     new Notification(title, {
                         body: message,
-                        icon: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y="80" font-size="80">' + emoji + '</text></svg>'
+                        icon: 'data:image/svg+xml,' + encodeURIComponent(iconSvg)
                     });
                 }
 
@@ -1816,22 +1822,30 @@
                         <div class="toast-title">${title}</div>
                         <div class="toast-message">${message}</div>
                     </div>
-                    <button class="toast-close" onclick="notificationManager.removeToast(this)">×</button>
+                    <button class="toast-close">×</button>
                 `;
+                
+                // Add close handler
+                toast.querySelector('.toast-close').addEventListener('click', () => {
+                    this.removeToast(toast);
+                });
                 
                 container.appendChild(toast);
 
                 // Auto-dismiss after 5 seconds
                 setTimeout(() => {
-                    this.removeToast(toast.querySelector('.toast-close'));
+                    this.removeToast(toast);
                 }, 5000);
             }
 
-            removeToast(closeBtn) {
-                const toast = closeBtn.closest('.toast');
-                if (!toast) return;
+            removeToast(toast) {
+                if (!toast || !toast.parentElement) return;
                 toast.classList.add('removing');
-                setTimeout(() => toast.remove(), 300);
+                setTimeout(() => {
+                    if (toast.parentElement) {
+                        toast.remove();
+                    }
+                }, 300);
             }
 
             playSuccessSound() {
@@ -1992,9 +2006,10 @@
                 Notification.requestPermission().then(permission => {
                     if (permission === 'granted') {
                         notificationManager.saveSettings({ browser: true });
+                        notificationManager.showToast('✅', 'Browser Notifications Enabled', 'You will receive desktop alerts when the tab is unfocused', 'info');
                     } else {
                         document.getElementById('setting-browser').checked = false;
-                        alert('Browser notifications permission denied. Please enable in browser settings.');
+                        notificationManager.showToast('⚠️', 'Permission Denied', 'Browser notifications permission was denied. Please enable in browser settings.', 'warning');
                     }
                 });
             } else {
@@ -2018,8 +2033,29 @@
 
         function clearNotifications(event) {
             event.stopPropagation();
-            if (confirm('Clear all notifications?')) {
+            // Show confirmation by temporarily changing button text
+            const btn = event.target;
+            const originalText = btn.textContent;
+            btn.textContent = 'Click again to confirm';
+            btn.style.color = '#f44336';
+            
+            // Reset after 3 seconds if not clicked again
+            const resetTimer = setTimeout(() => {
+                btn.textContent = originalText;
+                btn.style.color = '';
+                btn._confirmPending = false;
+            }, 3000);
+            
+            // If already in confirm state, proceed with clear
+            if (btn._confirmPending) {
+                clearTimeout(resetTimer);
                 notificationManager.clearAll();
+                btn.textContent = originalText;
+                btn.style.color = '';
+                btn._confirmPending = false;
+                notificationManager.showToast('🗑️', 'Notifications Cleared', 'All notification history has been removed', 'info');
+            } else {
+                btn._confirmPending = true;
             }
         }
 
