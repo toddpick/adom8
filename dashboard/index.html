@@ -1909,14 +1909,32 @@
 
                 const emoji = this.getEmoji(type);
 
-                toast.innerHTML = `
-                    <div class="toast-emoji">${emoji}</div>
-                    <div class="toast-content">
-                        <div class="toast-title">${title}</div>
-                        <div class="toast-message">${message}</div>
-                    </div>
-                    <button class="toast-close" onclick="this.parentElement.remove()">×</button>
-                `;
+                const emojiDiv = document.createElement('div');
+                emojiDiv.className = 'toast-emoji';
+                emojiDiv.textContent = emoji;
+
+                const contentDiv = document.createElement('div');
+                contentDiv.className = 'toast-content';
+
+                const titleDiv = document.createElement('div');
+                titleDiv.className = 'toast-title';
+                titleDiv.textContent = title;
+
+                const messageDiv = document.createElement('div');
+                messageDiv.className = 'toast-message';
+                messageDiv.textContent = message;
+
+                contentDiv.appendChild(titleDiv);
+                contentDiv.appendChild(messageDiv);
+
+                const closeBtn = document.createElement('button');
+                closeBtn.className = 'toast-close';
+                closeBtn.textContent = '×';
+                closeBtn.addEventListener('click', () => toast.remove());
+
+                toast.appendChild(emojiDiv);
+                toast.appendChild(contentDiv);
+                toast.appendChild(closeBtn);
 
                 this.container.appendChild(toast);
 
@@ -2031,6 +2049,10 @@
 
             getTimeAgo(date) {
                 const seconds = Math.floor((Date.now() - date.getTime()) / 1000);
+                
+                // Handle future timestamps
+                if (seconds < 0) return 'Just now';
+                
                 if (seconds < 60) return 'Just now';
                 const minutes = Math.floor(seconds / 60);
                 if (minutes < 60) return `${minutes}m ago`;
@@ -2071,6 +2093,7 @@
                     }
 
                     // Check each agent for state changes
+                    // Use same agent list as defined in DEFAULT_AGENTS
                     const agentNames = ['Planning', 'Coding', 'Testing', 'Review', 'Documentation', 'Deployment'];
                     
                     agentNames.forEach(agentName => {
@@ -2110,7 +2133,7 @@
                 // Show browser notification
                 this.browserNotificationManager.show(title, {
                     body: message,
-                    icon: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y="75" font-size="75">' + emoji + '</text></svg>',
+                    icon: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y="75" font-size="75">' + encodeURIComponent(emoji) + '</text></svg>',
                     tag: `agent-${agentName}-${workItemId}`
                 });
             }
