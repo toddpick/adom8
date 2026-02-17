@@ -1,8 +1,8 @@
 {
   "workItemId": 78,
-  "currentState": "AI Code",
+  "currentState": "AI Test",
   "createdAt": "2026-02-17T04:26:13.4735087Z",
-  "updatedAt": "2026-02-17T05:15:06.7979086Z",
+  "updatedAt": "2026-02-17T05:16:32.1153089Z",
   "agents": {
     "Planning": {
       "status": "in_progress",
@@ -11,14 +11,18 @@
       "additionalData": null
     },
     "Coding": {
-      "status": "in_progress",
-      "startedAt": "2026-02-17T05:15:06.7978859Z",
-      "completedAt": null,
+      "status": "completed",
+      "startedAt": null,
+      "completedAt": "2026-02-17T05:16:32.1145852Z",
       "additionalData": {
-        "mode": "copilot-delegated",
+        "mode": "copilot",
+        "copilotPrNumber": 34,
         "issueNumber": 33,
-        "delegatedAt": "2026-02-17T05:15:06.7978912Z",
-        "agent": "copilot"
+        "filesChanged": 1,
+        "linesAdded": 2,
+        "linesDeleted": 1,
+        "durationMinutes": 1.412608755,
+        "commitCount": 2
       }
     },
     "Testing": {
@@ -41,7 +45,9 @@
     }
   },
   "artifacts": {
-    "code": [],
+    "code": [
+      "dashboard/index.html"
+    ],
     "tests": [],
     "docs": []
   },
@@ -60,7 +66,7 @@
         "totalTokens": 0,
         "estimatedCost": 0,
         "model": "copilot-coding-agent",
-        "callCount": 1
+        "callCount": 2
       }
     }
   }
