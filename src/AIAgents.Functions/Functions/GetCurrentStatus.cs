@@ -136,6 +136,7 @@ public sealed class GetCurrentStatus
         {
             var agents = new Dictionary<string, string>();
             var agentTimings = new Dictionary<string, AgentTimingDto>();
+            var agentDetails = new Dictionary<string, AgentDetailDto>();
             var agentStartTimes = new Dictionary<string, DateTime>();
             string? currentAgent = null;
 
@@ -150,10 +151,53 @@ public sealed class GetCurrentStatus
                     currentAgent = agent;
                     agentStartTimes[agent] = activity.Timestamp;
                 }
+                else if (activity.Message.Contains("Delegated to @", StringComparison.OrdinalIgnoreCase))
+                {
+                    // Copilot delegation — mark as copilot_delegated with metadata
+                    agents[agent] = "in_progress";
+                    currentAgent = agent;
+
+                    // Parse agent name and issue number from message like:
+                    //   "Delegated to @copilot (Issue #25). Pipeline paused."
+                    var agentName = "copilot";
+                    var issueNumber = 0;
+                    var delegatedMatch = System.Text.RegularExpressions.Regex.Match(
+                        activity.Message, @"Delegated to @(\w+) \(Issue #(\d+)\)");
+                    if (delegatedMatch.Success)
+                    {
+                        agentName = delegatedMatch.Groups[1].Value;
+                        int.TryParse(delegatedMatch.Groups[2].Value, out issueNumber);
+                    }
+
+                    agentDetails[agent] = new AgentDetailDto
+                    {
+                        AdditionalData = new Dictionary<string, object>
+                        {
+                            ["mode"] = "copilot-delegated",
+                            ["agent"] = agentName,
+                            ["issueNumber"] = issueNumber,
+                            ["delegatedAt"] = activity.Timestamp.ToString("O")
+                        }
+                    };
+                }
                 else if (activity.Message.Contains("completed", StringComparison.OrdinalIgnoreCase))
                 {
-                    agents[agent] = "completed";
-                    if (currentAgent == agent) currentAgent = null;
+                    // Only mark completed if NOT currently delegated to Copilot
+                    // (the "Coding agent completed successfully" fires after delegation returns,
+                    //  but the agent is still waiting for Copilot's PR)
+                    if (agents.TryGetValue(agent, out var currentStatus) &&
+                        agentDetails.ContainsKey(agent) &&
+                        agentDetails[agent].AdditionalData?.ContainsKey("mode") == true &&
+                        (string?)agentDetails[agent].AdditionalData!["mode"] == "copilot-delegated" &&
+                        !activity.Message.Contains("Copilot", StringComparison.Ordinal))
+                    {
+                        // Keep as in_progress (delegated) — don't overwrite with "completed"
+                    }
+                    else
+                    {
+                        agents[agent] = "completed";
+                        if (currentAgent == agent) currentAgent = null;
+                    }
                     var startedAt = agentStartTimes.TryGetValue(agent, out var st) ? st : (DateTime?)null;
                     var duration = startedAt.HasValue ? (activity.Timestamp - startedAt.Value).TotalSeconds : (double?)null;
                     agentTimings[agent] = new AgentTimingDto
@@ -181,6 +225,11 @@ public sealed class GetCurrentStatus
                     // Coding agent handoff — mark as awaiting_code
                     agents[agent] = "awaiting_code";
                     if (currentAgent == agent) currentAgent = null;
+                }
+                else if (activity.Message.Contains("timed out", StringComparison.OrdinalIgnoreCase))
+                {
+                    // Copilot timed out — clear delegation details
+                    agentDetails.Remove(agent);
                 }
             }
 
@@ -227,6 +276,7 @@ public sealed class GetCurrentStatus
                 CurrentAgent = currentAgent,
                 Progress = progress,
                 Agents = agents,
+                AgentDetails = agentDetails.Count > 0 ? agentDetails : null,
                 AgentTimings = agentTimings.Count > 0 ? agentTimings : null,
                 TokenUsage = totalTokens > 0 ? new StoryTokenUsageDto
                 {

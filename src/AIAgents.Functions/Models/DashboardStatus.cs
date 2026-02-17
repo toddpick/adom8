@@ -82,11 +82,23 @@ public sealed class StoryStatus
     [JsonPropertyName("agents")]
     public required IReadOnlyDictionary<string, string> Agents { get; init; }
 
+    [JsonPropertyName("agentDetails")]
+    public IReadOnlyDictionary<string, AgentDetailDto>? AgentDetails { get; init; }
+
     [JsonPropertyName("tokenUsage")]
     public StoryTokenUsageDto? TokenUsage { get; init; }
 
     [JsonPropertyName("agentTimings")]
     public IReadOnlyDictionary<string, AgentTimingDto>? AgentTimings { get; init; }
+}
+
+/// <summary>
+/// Extended agent detail including additional data like Copilot delegation info.
+/// </summary>
+public sealed class AgentDetailDto
+{
+    [JsonPropertyName("additionalData")]
+    public IReadOnlyDictionary<string, object>? AdditionalData { get; init; }
 }
 
 /// <summary>
