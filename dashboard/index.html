@@ -3287,13 +3287,23 @@
         let isConnected = false;
 
         // ========== Progress Calculation ==========
+        
+        // Helper function to check if agent status is in active/running state
+        function isActiveStatus(status) {
+            const normalizedStatus = status?.toLowerCase() || '';
+            return normalizedStatus === 'active' || 
+                   normalizedStatus === 'in_progress' || 
+                   normalizedStatus === 'in-progress' || 
+                   normalizedStatus === 'running';
+        }
+        
         function getProgress(data) {
             // Calculate progress based on agent status
             const status = data.status?.toLowerCase() || 'pending';
             
             if (status === 'completed' || status === 'done') {
                 return 100;
-            } else if (status === 'active' || status === 'in_progress' || status === 'in-progress' || status === 'running') {
+            } else if (isActiveStatus(status)) {
                 return 50;
             } else {
                 return 0;  // pending, failed, awaiting_code, copilot_delegated
@@ -3797,8 +3807,7 @@
             agents.forEach(agent => {
                 const progress = getProgress(agent);
                 const progressColorClass = getProgressColorClass(progress);
-                const status = agent.status?.toLowerCase() || 'pending';
-                const isInProgress = (status === 'active' || status === 'in_progress' || status === 'in-progress' || status === 'running');
+                const inProgress = isActiveStatus(agent.status);
                 
                 const card = document.createElement('div');
                 card.className = `agent-card ${agent.status || 'pending'}`;
@@ -3811,7 +3820,7 @@
                         <span class="status-badge ${agent.status || 'pending'}">${formatStatusText(agent.status)}</span>
                     </div>
                     <div class="progress-bar">
-                        <div class="progress-fill ${progressColorClass} ${isInProgress ? 'in-progress' : ''}" style="width: ${progress}%"></div>
+                        <div class="progress-fill ${progressColorClass} ${inProgress ? 'in-progress' : ''}" style="width: ${progress}%"></div>
                     </div>
                     <div class="agent-details">
                         <span>Started: ${formatTime(agent.started)}</span>
