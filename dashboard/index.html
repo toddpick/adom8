@@ -260,7 +260,7 @@
             box-shadow: 0 4px 20px rgba(0,0,0,0.4);
         }
         body.dark-mode .agent-card.completed {
-            background: #1e2a4a;
+            background: #1a3a2a;
             border-left-color: #4caf50;
         }
         body.dark-mode .agent-card.failed {
@@ -594,8 +594,8 @@
 
         .agent-card.completed {
             border-left-color: #4caf50;
-            opacity: 0.8;               /* BUG: Should be 1.0 */
-            background: #deecf9;        /* BUG: Should be #e8f5e9 (light green) */
+            opacity: 1.0;
+            background: #e8f5e9;
         }
 
         .agent-card.failed {
@@ -760,8 +760,8 @@
         }
 
         .status-badge.completed {
-            background: #deecf9;  /* BUG: Should be #e8f5e9 (green tint) */
-            color: #0078d4;      /* BUG: Should be #4caf50 (green) */
+            background: #e8f5e9;
+            color: #4caf50;
         }
 
         @keyframes badgePulse {
@@ -783,6 +783,28 @@
             background: #0078d4;
             border-radius: 6px;
             transition: width 0.6s ease;
+            position: relative;
+        }
+
+        /* Gradient fills for agent progress bars (matching story-level bars) */
+        .progress-fill.progress-red { background: linear-gradient(90deg, #f44336, #e57373); }
+        .progress-fill.progress-orange { background: linear-gradient(90deg, #ff9800, #ffb74d); }
+        .progress-fill.progress-blue { background: linear-gradient(90deg, #2196f3, #64b5f6); }
+        .progress-fill.progress-green { background: linear-gradient(90deg, #4caf50, #81c784); }
+
+        /* Shimmer animation for in-progress agent bars */
+        .progress-fill.in-progress::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, 
+                transparent, 
+                rgba(255, 255, 255, 0.4), 
+                transparent);
+            animation: shimmer 2s infinite;
         }
 
         .agent-details {
@@ -3266,9 +3288,16 @@
 
         // ========== Progress Calculation ==========
         function getProgress(data) {
-            // BUG: Should calculate based on status and elapsed time
-            // but always returns 0
-            return 0;
+            // Calculate progress based on agent status
+            const status = data.status?.toLowerCase() || 'pending';
+            
+            if (status === 'completed' || status === 'done') {
+                return 100;
+            } else if (status === 'active' || status === 'in_progress' || status === 'in-progress' || status === 'running') {
+                return 50;
+            } else {
+                return 0;  // pending, failed, awaiting_code, copilot_delegated
+            }
         }
 
         // ========== DOM Helpers ==========
@@ -3767,6 +3796,10 @@
 
             agents.forEach(agent => {
                 const progress = getProgress(agent);
+                const progressColorClass = getProgressColorClass(progress);
+                const status = agent.status?.toLowerCase() || 'pending';
+                const isInProgress = (status === 'active' || status === 'in_progress' || status === 'in-progress' || status === 'running');
+                
                 const card = document.createElement('div');
                 card.className = `agent-card ${agent.status || 'pending'}`;
                 const tokenStr = agent.tokens ? agent.tokens.toLocaleString() : '—';
@@ -3778,7 +3811,7 @@
                         <span class="status-badge ${agent.status || 'pending'}">${formatStatusText(agent.status)}</span>
                     </div>
                     <div class="progress-bar">
-                        <div class="progress-fill" style="width: ${progress}%"></div>
+                        <div class="progress-fill ${progressColorClass} ${isInProgress ? 'in-progress' : ''}" style="width: ${progress}%"></div>
                     </div>
                     <div class="agent-details">
                         <span>Started: ${formatTime(agent.started)}</span>
