@@ -1654,6 +1654,651 @@
         .notification-bell-wrapper {
             position: relative;
         }
+
+        /* Search and Filter Controls */
+        .search-filter-controls {
+            display: flex;
+            gap: 16px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+
+        .search-box {
+            flex: 1;
+            min-width: 250px;
+            position: relative;
+        }
+
+        .search-input {
+            width: 100%;
+            padding: 10px 16px 10px 40px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            font-size: 0.9rem;
+            transition: all 0.3s ease;
+            background: #fff;
+        }
+
+        .search-input:focus {
+            outline: none;
+            border-color: #0078d4;
+            box-shadow: 0 0 0 3px rgba(0, 120, 212, 0.1);
+        }
+
+        .search-icon {
+            position: absolute;
+            left: 14px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: #999;
+            font-size: 1.1rem;
+        }
+
+        .filter-chips {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .filter-chip {
+            padding: 8px 16px;
+            border: 2px solid #ddd;
+            background: #fff;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            color: #666;
+        }
+
+        .filter-chip:hover {
+            border-color: #0078d4;
+            background: #f0f8ff;
+        }
+
+        .filter-chip.active {
+            background: #0078d4;
+            color: #fff;
+            border-color: #0078d4;
+        }
+
+        .filter-result-count {
+            font-size: 0.85rem;
+            color: #666;
+            padding: 8px 16px;
+            white-space: nowrap;
+        }
+
+        /* Story Card Container */
+        .story-card {
+            background: #fff;
+            border-radius: 12px;
+            margin-bottom: 16px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            overflow: hidden;
+            transition: all 0.3s ease;
+        }
+
+        .story-card:hover {
+            box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+        }
+
+        .story-card-header {
+            padding: 18px 20px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            background: #fafafa;
+            border-bottom: 1px solid #eee;
+            transition: background 0.2s ease;
+        }
+
+        .story-card-header:hover {
+            background: #f0f0f0;
+        }
+
+        .story-card.expanded .story-card-header {
+            background: #f5f9ff;
+        }
+
+        .story-chevron {
+            font-size: 1.2rem;
+            transition: transform 0.3s ease;
+            color: #666;
+            flex-shrink: 0;
+        }
+
+        .story-card.expanded .story-chevron {
+            transform: rotate(90deg);
+        }
+
+        .story-status-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            flex-shrink: 0;
+            box-shadow: 0 0 8px currentColor;
+        }
+
+        .story-status-dot.completed { background: #4caf50; color: #4caf50; }
+        .story-status-dot.in-progress { background: #0078d4; color: #0078d4; }
+        .story-status-dot.failed { background: #f44336; color: #f44336; }
+        .story-status-dot.copilot { background: #9c27b0; color: #9c27b0; }
+        .story-status-dot.pending { background: #bbb; color: #bbb; }
+
+        .story-header-info {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .story-header-title {
+            font-weight: 700;
+            font-size: 1.05rem;
+            color: #333;
+            margin-bottom: 4px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .story-header-meta {
+            font-size: 0.8rem;
+            color: #666;
+            display: flex;
+            gap: 16px;
+            flex-wrap: wrap;
+        }
+
+        .story-header-progress {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            flex-shrink: 0;
+        }
+
+        .story-progress-bar-wrapper {
+            width: 120px;
+            height: 8px;
+            background: #e0e0e0;
+            border-radius: 10px;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .story-progress-fill {
+            height: 100%;
+            border-radius: 10px;
+            transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1), background 0.6s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        /* Gradient Progress Bar Colors - dynamically set via JS */
+        .story-progress-fill.progress-red { background: linear-gradient(90deg, #f44336, #e57373); }
+        .story-progress-fill.progress-orange { background: linear-gradient(90deg, #ff9800, #ffb74d); }
+        .story-progress-fill.progress-blue { background: linear-gradient(90deg, #2196f3, #64b5f6); }
+        .story-progress-fill.progress-green { background: linear-gradient(90deg, #4caf50, #81c784); }
+
+        /* Shimmer animation for in-progress bars */
+        .story-progress-fill.in-progress::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, 
+                transparent, 
+                rgba(255, 255, 255, 0.4), 
+                transparent);
+            animation: shimmer 2s infinite;
+        }
+
+        @keyframes shimmer {
+            0% { left: -100%; }
+            100% { left: 100%; }
+        }
+
+        .story-progress-text {
+            font-size: 0.85rem;
+            font-weight: 700;
+            color: #333;
+            min-width: 45px;
+            text-align: right;
+        }
+
+        .story-status-badge {
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .story-status-badge.completed {
+            background: #e8f5e9;
+            color: #4caf50;
+        }
+
+        .story-status-badge.in-progress {
+            background: #e3f2fd;
+            color: #0078d4;
+        }
+
+        .story-status-badge.failed {
+            background: #ffebee;
+            color: #f44336;
+        }
+
+        .story-status-badge.copilot {
+            background: #f3e5f5;
+            color: #9c27b0;
+        }
+
+        .story-status-badge.pending {
+            background: #f5f5f5;
+            color: #999;
+        }
+
+        /* Story Card Body (Collapsible) */
+        .story-card-body {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .story-card.expanded .story-card-body {
+            max-height: 5000px; /* Large enough for extensive agent details */
+        }
+
+        .story-card-content {
+            padding: 0 20px 20px 20px;
+        }
+
+        /* Agent Pipeline Stepper */
+        .agent-pipeline-stepper {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin: 20px 0;
+            padding: 0 10px;
+        }
+
+        .agent-step {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 8px;
+            flex: 1;
+            position: relative;
+        }
+
+        .agent-step::after {
+            content: '';
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            width: 100%;
+            height: 2px;
+            background: #e0e0e0;
+            z-index: 0;
+        }
+
+        .agent-step:last-child::after {
+            display: none;
+        }
+
+        .agent-step-icon {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.3rem;
+            background: #f5f5f5;
+            border: 3px solid #e0e0e0;
+            z-index: 1;
+            transition: all 0.3s ease;
+        }
+
+        .agent-step.completed .agent-step-icon {
+            background: #e8f5e9;
+            border-color: #4caf50;
+            color: #4caf50;
+        }
+
+        .agent-step.in_progress .agent-step-icon {
+            background: #e3f2fd;
+            border-color: #0078d4;
+            color: #0078d4;
+            animation: stepPulse 2s ease-in-out infinite;
+        }
+
+        .agent-step.copilot_delegated .agent-step-icon {
+            background: #f3e5f5;
+            border-color: #9c27b0;
+            color: #9c27b0;
+            animation: stepPulse 2s ease-in-out infinite;
+        }
+
+        .agent-step.failed .agent-step-icon {
+            background: #ffebee;
+            border-color: #f44336;
+            color: #f44336;
+        }
+
+        .agent-step.awaiting_code .agent-step-icon {
+            background: #fff3e0;
+            border-color: #ff9800;
+            color: #ff9800;
+            animation: stepPulse 2s ease-in-out infinite;
+        }
+
+        @keyframes stepPulse {
+            0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 currentColor; }
+            50% { transform: scale(1.05); box-shadow: 0 0 0 8px rgba(0, 120, 212, 0.2); }
+        }
+
+        .agent-step-label {
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: #666;
+            text-align: center;
+        }
+
+        .agent-step.completed .agent-step-label {
+            color: #4caf50;
+        }
+
+        .agent-step.in_progress .agent-step-label,
+        .agent-step.copilot_delegated .agent-step-label,
+        .agent-step.awaiting_code .agent-step-label {
+            color: #0078d4;
+        }
+
+        /* Agent Details List */
+        .agent-details-list {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            margin-top: 16px;
+        }
+
+        .agent-detail-item {
+            background: #fafafa;
+            border-radius: 8px;
+            padding: 14px 16px;
+            border-left: 4px solid #e0e0e0;
+            transition: all 0.2s ease;
+        }
+
+        .agent-detail-item:hover {
+            background: #f5f5f5;
+        }
+
+        .agent-detail-item.completed {
+            border-left-color: #4caf50;
+            background: #f9fdf9;
+        }
+
+        .agent-detail-item.in_progress {
+            border-left-color: #0078d4;
+            background: #f8fcff;
+        }
+
+        .agent-detail-item.copilot_delegated {
+            border-left-color: #9c27b0;
+            background: #fdfaff;
+        }
+
+        .agent-detail-item.failed {
+            border-left-color: #f44336;
+            background: #fffafa;
+        }
+
+        .agent-detail-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 8px;
+        }
+
+        .agent-detail-name {
+            font-weight: 700;
+            font-size: 0.95rem;
+            color: #333;
+            flex: 1;
+        }
+
+        .agent-detail-badge {
+            font-size: 0.7rem;
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .agent-detail-badge.completed {
+            background: #e8f5e9;
+            color: #4caf50;
+        }
+
+        .agent-detail-badge.in_progress {
+            background: #e3f2fd;
+            color: #0078d4;
+        }
+
+        .agent-detail-badge.pending {
+            background: #f5f5f5;
+            color: #999;
+        }
+
+        .agent-detail-metrics {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 16px;
+            font-size: 0.8rem;
+            color: #666;
+        }
+
+        .agent-detail-metrics span {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        /* Dark Mode Overrides */
+        body.dark-mode .search-input {
+            background: #2a2a2a;
+            border-color: #444;
+            color: #e0e0e0;
+        }
+
+        body.dark-mode .search-input:focus {
+            border-color: #0098ff;
+            box-shadow: 0 0 0 3px rgba(0, 152, 255, 0.2);
+        }
+
+        body.dark-mode .search-icon {
+            color: #666;
+        }
+
+        body.dark-mode .filter-chip {
+            background: #2a2a2a;
+            border-color: #444;
+            color: #aaa;
+        }
+
+        body.dark-mode .filter-chip:hover {
+            border-color: #0098ff;
+            background: #1a3a4a;
+        }
+
+        body.dark-mode .filter-chip.active {
+            background: #0098ff;
+            color: #fff;
+            border-color: #0098ff;
+        }
+
+        body.dark-mode .filter-result-count {
+            color: #aaa;
+        }
+
+        body.dark-mode .story-card {
+            background: #2a2a2a;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+        }
+
+        body.dark-mode .story-card-header {
+            background: #252525;
+            border-bottom-color: #333;
+        }
+
+        body.dark-mode .story-card-header:hover {
+            background: #2d2d2d;
+        }
+
+        body.dark-mode .story-card.expanded .story-card-header {
+            background: #1a2a3a;
+        }
+
+        body.dark-mode .story-header-title {
+            color: #e0e0e0;
+        }
+
+        body.dark-mode .story-header-meta {
+            color: #aaa;
+        }
+
+        body.dark-mode .story-progress-bar-wrapper {
+            background: #333;
+        }
+
+        body.dark-mode .story-progress-text {
+            color: #e0e0e0;
+        }
+
+        body.dark-mode .story-status-badge.completed {
+            background: rgba(76, 175, 80, 0.2);
+            color: #81c784;
+        }
+
+        body.dark-mode .story-status-badge.in-progress {
+            background: rgba(0, 120, 212, 0.2);
+            color: #64b5f6;
+        }
+
+        body.dark-mode .story-status-badge.failed {
+            background: rgba(244, 67, 54, 0.2);
+            color: #e57373;
+        }
+
+        body.dark-mode .story-status-badge.copilot {
+            background: rgba(156, 39, 176, 0.2);
+            color: #ce93d8;
+        }
+
+        body.dark-mode .story-status-badge.pending {
+            background: rgba(187, 187, 187, 0.2);
+            color: #999;
+        }
+
+        body.dark-mode .agent-step-icon {
+            background: #333;
+            border-color: #444;
+        }
+
+        body.dark-mode .agent-step.completed .agent-step-icon {
+            background: rgba(76, 175, 80, 0.15);
+            border-color: #4caf50;
+        }
+
+        body.dark-mode .agent-step.in_progress .agent-step-icon {
+            background: rgba(0, 120, 212, 0.15);
+            border-color: #0078d4;
+        }
+
+        body.dark-mode .agent-step.copilot_delegated .agent-step-icon {
+            background: rgba(156, 39, 176, 0.15);
+            border-color: #9c27b0;
+        }
+
+        body.dark-mode .agent-step.failed .agent-step-icon {
+            background: rgba(244, 67, 54, 0.15);
+            border-color: #f44336;
+        }
+
+        body.dark-mode .agent-step.awaiting_code .agent-step-icon {
+            background: rgba(255, 152, 0, 0.15);
+            border-color: #ff9800;
+        }
+
+        body.dark-mode .agent-step-label {
+            color: #aaa;
+        }
+
+        body.dark-mode .agent-step.completed .agent-step-label {
+            color: #81c784;
+        }
+
+        body.dark-mode .agent-step.in_progress .agent-step-label,
+        body.dark-mode .agent-step.copilot_delegated .agent-step-label,
+        body.dark-mode .agent-step.awaiting_code .agent-step-label {
+            color: #64b5f6;
+        }
+
+        body.dark-mode .agent-detail-item {
+            background: #252525;
+            border-left-color: #444;
+        }
+
+        body.dark-mode .agent-detail-item:hover {
+            background: #2d2d2d;
+        }
+
+        body.dark-mode .agent-detail-item.completed {
+            background: rgba(76, 175, 80, 0.08);
+        }
+
+        body.dark-mode .agent-detail-item.in_progress {
+            background: rgba(0, 120, 212, 0.08);
+        }
+
+        body.dark-mode .agent-detail-item.copilot_delegated {
+            background: rgba(156, 39, 176, 0.08);
+        }
+
+        body.dark-mode .agent-detail-item.failed {
+            background: rgba(244, 67, 54, 0.08);
+        }
+
+        body.dark-mode .agent-detail-name {
+            color: #e0e0e0;
+        }
+
+        body.dark-mode .agent-detail-badge.completed {
+            background: rgba(76, 175, 80, 0.2);
+            color: #81c784;
+        }
+
+        body.dark-mode .agent-detail-badge.in_progress {
+            background: rgba(0, 120, 212, 0.2);
+            color: #64b5f6;
+        }
+
+        body.dark-mode .agent-detail-badge.pending {
+            background: rgba(187, 187, 187, 0.2);
+            color: #999;
+        }
+
+        body.dark-mode .agent-detail-metrics {
+            color: #aaa;
+        }
     </style>
 </head>
 <body>
@@ -1829,6 +2474,26 @@
 
                 <!-- Agent Pipeline -->
                 <div class="section-title">⚡ Agent Pipeline</div>
+                
+                <!-- Search and Filter Controls -->
+                <div class="search-filter-controls">
+                    <div class="search-box">
+                        <span class="search-icon">🔍</span>
+                        <input type="text" class="search-input" id="story-search" 
+                               placeholder="Search by work item ID or title..." 
+                               oninput="handleSearchFilter()">
+                    </div>
+                    <div class="filter-chips">
+                        <button class="filter-chip active" data-filter="all" onclick="handleStatusFilter('all')">All</button>
+                        <button class="filter-chip" data-filter="in-progress" onclick="handleStatusFilter('in-progress')">In Progress</button>
+                        <button class="filter-chip" data-filter="completed" onclick="handleStatusFilter('completed')">Completed</button>
+                        <button class="filter-chip" data-filter="failed" onclick="handleStatusFilter('failed')">Failed</button>
+                    </div>
+                    <div class="filter-result-count" id="filter-result-count">
+                        Showing 0 of 0 stories
+                    </div>
+                </div>
+
                 <div class="agents-list" id="agents-container">
                     <!-- Agent cards rendered by JS -->
                 </div>
@@ -2742,122 +3407,357 @@
             return map[agent] || '🤖';
         }
 
+        // Store stories globally for filtering
+        let allStories = [];
+        let currentSearchText = '';
+        let currentStatusFilter = 'all';
+
+        /**
+         * Updates the story agents display with new story data.
+         * This function stores stories globally and triggers a filtered render.
+         * Called by updateDashboard() when story data is received from the API.
+         * @param {Array} stories - Array of story objects with agent status, timings, and token usage
+         */
         function updateStoryAgents(stories) {
+            allStories = stories;
+            
+            // Restore filter state on first render
+            if (!window.filterStateRestored) {
+                restoreFilterState();
+                window.filterStateRestored = true;
+            }
+            
+            renderFilteredStories();
+        }
+
+        function renderFilteredStories() {
             const container = document.getElementById('agents-container');
             container.innerHTML = '';
-            stories.forEach(story => {
-                const agentNames = ['Planning', 'Coding', 'Testing', 'Review', 'Documentation', 'Deployment'];
-                agentNames.forEach(name => {
-                    const status = story.agents[name] || 'pending';
-                    const emoji = getAgentEmoji(name);
-                    const tokInfo = story.tokenUsage?.agents?.[name];
-                    const timing = story.agentTimings?.[name];
-                    const card = document.createElement('div');
-                    // Detect copilot-delegated mode from additionalData
-                    const agentData = story.agentDetails?.[name];
-                    const isCopilotDelegated = agentData?.additionalData?.mode === 'copilot-delegated';
-                    const isCopilotCompleted = agentData?.additionalData?.mode === 'copilot';
-                    const cardStatus = isCopilotDelegated ? 'copilot_delegated' : status;
-                    card.className = `agent-card ${cardStatus}`;
+            
+            // Apply filters
+            let filtered = allStories.filter(story => {
+                // Search filter
+                const searchMatch = currentSearchText === '' || 
+                    story.workItemId.toString().includes(currentSearchText) ||
+                    (story.title || '').toLowerCase().includes(currentSearchText.toLowerCase());
+                
+                // Status filter
+                let statusMatch = true;
+                if (currentStatusFilter !== 'all') {
+                    const storyStatus = getStoryStatus(story);
+                    statusMatch = storyStatus === currentStatusFilter;
+                }
+                
+                return searchMatch && statusMatch;
+            });
 
-                    // Compute duration display
-                    let durationStr = '—';
-                    if (timing) {
-                        if (timing.durationSeconds != null) {
-                            durationStr = formatDuration(timing.durationSeconds);
-                        } else if (timing.startedAt && status === 'in_progress') {
-                            // Live ticking for active agents
-                            const startMs = new Date(timing.startedAt).getTime();
-                            const elapsedSec = (Date.now() - startMs) / 1000;
-                            durationStr = formatDuration(elapsedSec) + ' ⏱️';
-                        }
+            // Update result count
+            document.getElementById('filter-result-count').textContent = 
+                `Showing ${filtered.length} of ${allStories.length} ${allStories.length === 1 ? 'story' : 'stories'}`;
+
+            // Render story cards
+            filtered.forEach(story => renderStoryCard(story, container));
+        }
+
+        function getStoryStatus(story) {
+            const agentNames = ['Planning', 'Coding', 'Testing', 'Review', 'Documentation', 'Deployment'];
+            
+            // Check for any failures
+            for (const name of agentNames) {
+                if (story.agents[name] === 'failed') {
+                    return 'failed';
+                }
+            }
+            
+            // Check for any in-progress or copilot-delegated
+            for (const name of agentNames) {
+                const status = story.agents[name];
+                const agentData = story.agentDetails?.[name];
+                const isCopilotDelegated = agentData?.additionalData?.mode === 'copilot-delegated';
+                if (status === 'in_progress' || status === 'awaiting_code' || isCopilotDelegated) {
+                    return 'in-progress';
+                }
+            }
+            
+            // Check if all completed
+            const allCompleted = agentNames.every(name => story.agents[name] === 'completed');
+            if (allCompleted) {
+                return 'completed';
+            }
+            
+            return 'pending';
+        }
+
+        function renderStoryCard(story, container) {
+            const agentNames = ['Planning', 'Coding', 'Testing', 'Review', 'Documentation', 'Deployment'];
+            
+            // Calculate overall progress
+            const progress = calculateStoryProgress(story, agentNames);
+            const storyStatus = getStoryStatus(story);
+            
+            // Determine if card should be expanded by default
+            const expandedByDefault = storyStatus === 'in-progress';
+            const expandedState = localStorage.getItem(`story-${story.workItemId}-expanded`);
+            const isExpanded = expandedState !== null ? expandedState === 'true' : expandedByDefault;
+            
+            // Create story card
+            const storyCard = document.createElement('div');
+            storyCard.className = `story-card ${isExpanded ? 'expanded' : ''}`;
+            storyCard.dataset.storyId = story.workItemId;
+            storyCard.dataset.status = storyStatus;
+            
+            // Story header with summary
+            const header = document.createElement('div');
+            header.className = 'story-card-header';
+            header.onclick = () => toggleStoryCard(story.workItemId);
+            
+            header.innerHTML = `
+                <span class="story-chevron">▶</span>
+                <span class="story-status-dot ${storyStatus}"></span>
+                <div class="story-header-info">
+                    <div class="story-header-title">US-${story.workItemId}: ${story.title || 'Untitled Story'}</div>
+                    <div class="story-header-meta">
+                        <span>${story.currentAgent || 'Ready'}</span>
+                        ${story.tokenUsage ? `<span>💰 $${story.tokenUsage.totalCost.toFixed(2)}</span>` : ''}
+                        ${story.tokenUsage ? `<span>🎯 ${story.tokenUsage.totalTokens.toLocaleString()} tokens</span>` : ''}
+                    </div>
+                </div>
+                <div class="story-header-progress">
+                    <div class="story-progress-bar-wrapper">
+                        <div class="story-progress-fill ${getProgressColorClass(progress)} ${storyStatus === 'in-progress' ? 'in-progress' : ''}" 
+                             data-progress="${progress}" 
+                             style="width: ${progress}%"></div>
+                    </div>
+                    <span class="story-progress-text">${progress}%</span>
+                </div>
+                <span class="story-status-badge ${storyStatus}">${formatStoryStatusText(storyStatus)}</span>
+            `;
+            
+            // Story body with details
+            const body = document.createElement('div');
+            body.className = 'story-card-body';
+            
+            const content = document.createElement('div');
+            content.className = 'story-card-content';
+            
+            // Agent pipeline stepper
+            const stepper = document.createElement('div');
+            stepper.className = 'agent-pipeline-stepper';
+            agentNames.forEach(name => {
+                const status = story.agents[name] || 'pending';
+                const agentData = story.agentDetails?.[name];
+                const isCopilotDelegated = agentData?.additionalData?.mode === 'copilot-delegated';
+                const cardStatus = isCopilotDelegated ? 'copilot_delegated' : status;
+                const emoji = getAgentEmoji(name);
+                
+                const step = document.createElement('div');
+                step.className = `agent-step ${cardStatus}`;
+                step.innerHTML = `
+                    <div class="agent-step-icon">${isCopilotDelegated ? '🤖' : emoji}</div>
+                    <div class="agent-step-label">${name}</div>
+                `;
+                stepper.appendChild(step);
+            });
+            content.appendChild(stepper);
+            
+            // Agent details list
+            const detailsList = document.createElement('div');
+            detailsList.className = 'agent-details-list';
+            
+            agentNames.forEach(name => {
+                const status = story.agents[name] || 'pending';
+                const emoji = getAgentEmoji(name);
+                const tokInfo = story.tokenUsage?.agents?.[name];
+                const timing = story.agentTimings?.[name];
+                const agentData = story.agentDetails?.[name];
+                const isCopilotDelegated = agentData?.additionalData?.mode === 'copilot-delegated';
+                const isCopilotCompleted = agentData?.additionalData?.mode === 'copilot';
+                const cardStatus = isCopilotDelegated ? 'copilot_delegated' : status;
+                
+                // Compute duration display
+                let durationStr = '—';
+                if (timing) {
+                    if (timing.durationSeconds != null) {
+                        durationStr = formatDuration(timing.durationSeconds);
+                    } else if (timing.startedAt && status === 'in_progress') {
+                        const startMs = new Date(timing.startedAt).getTime();
+                        const elapsedSec = (Date.now() - startMs) / 1000;
+                        durationStr = formatDuration(elapsedSec) + ' ⏱️';
                     }
-
-                    // Copilot-specific metrics display
-                    let metricsHtml = '';
-                    if (isCopilotCompleted && agentData?.additionalData) {
-                        const ad = agentData.additionalData;
-                        metricsHtml = `
-                            <span>Files: ${ad.filesChanged || '—'}</span>
-                            <span>+${ad.linesAdded || 0}/-${ad.linesDeleted || 0} lines</span>
-                            <span>Duration: ${ad.durationMinutes ? ad.durationMinutes.toFixed(1) + 'm' : '—'}</span>
-                            <span>Mode: 🤖 Copilot</span>
-                        `;
-                    } else {
-                        metricsHtml = `
-                            <span>Tokens: ${tokInfo ? tokInfo.totalTokens.toLocaleString() : '—'}</span>
-                            <span>Cost: ${tokInfo ? '$' + tokInfo.estimatedCost.toFixed(2) : '—'}</span>
-                        `;
-                    }
-
-                    // Compute copilot elapsed time
-                    let copilotElapsed = '';
-                    if (isCopilotDelegated && agentData?.additionalData?.delegatedAt) {
-                        const delegatedMs = new Date(agentData.additionalData.delegatedAt).getTime();
-                        const elapsedSec = Math.floor((Date.now() - delegatedMs) / 1000);
-                        copilotElapsed = formatDuration(elapsedSec);
-                    }
-
-                    // Determine agent display name
-                    const agentAssignee = agentData?.additionalData?.agent || 'copilot';
-                    const agentDisplayName = agentAssignee.charAt(0).toUpperCase() + agentAssignee.slice(1);
-
-                    // Build GitHub issue link
-                    const issueNum = agentData?.additionalData?.issueNumber;
-                    const githubIssueUrl = issueNum ? `https://github.com/toddpick/ADO-Agent/issues/${issueNum}` : null;
-
-                    card.innerHTML = `
-                        <div class="agent-header">
-                            <span class="agent-emoji">${isCopilotDelegated || isCopilotCompleted ? '🤖' : emoji}</span>
-                            <span class="agent-name">${name} Agent${isCopilotDelegated ? ` (${agentDisplayName})` : isCopilotCompleted ? ` (${agentDisplayName} ✓)` : ''}</span>
-                            <span class="status-badge ${cardStatus}">${isCopilotDelegated ? `${agentDisplayName} Working` : formatStatusText(status)}</span>
-                        </div>
-                        <div class="progress-bar${isCopilotDelegated ? ' copilot-progress-bar' : ''}">
-                            <div class="progress-fill" style="width: ${status === 'completed' ? 100 : status === 'in_progress' ? 50 : status === 'awaiting_code' ? 35 : 0}%"></div>
-                        </div>
-                        <div class="agent-details">
-                            <span>WI: US-${story.workItemId}</span>
-                            <span>Duration: ${isCopilotDelegated ? `<span class="copilot-elapsed" data-delegated="${agentData?.additionalData?.delegatedAt || ''}">${copilotElapsed} ⏱️</span>` : durationStr}</span>
-                            ${metricsHtml}
-                        </div>
-                        ${isCopilotDelegated ? `
-                            <div class="github-working">
-                                <svg class="github-spinner" viewBox="0 0 16 16" fill="currentColor">
-                                    <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/>
-                                </svg>
-                                <span class="github-working-text">GitHub ${agentDisplayName} Agent Working<span class="github-working-dots"></span></span>
-                                ${githubIssueUrl ? `<a href="${githubIssueUrl}" target="_blank" class="github-issue-link">View Issue #${issueNum} ↗</a>` : ''}
-                            </div>
-                        ` : ''}
-                        ${status === 'awaiting_code' ? `
-                            <div style="margin-top: 8px; display: flex; align-items: center; gap: 10px;">
-                                <button class="resume-btn" onclick="resumePipeline(${story.workItemId}, this)">▶ Resume Pipeline</button>
-                                <span style="font-size: 0.75rem; color: #888;">Code locally with Copilot/Codex, then resume</span>
-                            </div>
-                        ` : ''}
+                }
+                
+                // Copilot-specific metrics
+                let metricsHtml = '';
+                if (isCopilotCompleted && agentData?.additionalData) {
+                    const ad = agentData.additionalData;
+                    metricsHtml = `
+                        <span>📁 Files: ${ad.filesChanged || '—'}</span>
+                        <span>📝 +${ad.linesAdded || 0}/-${ad.linesDeleted || 0} lines</span>
+                        <span>⏱️ Duration: ${ad.durationMinutes ? ad.durationMinutes.toFixed(1) + 'm' : '—'}</span>
+                        <span>🤖 Mode: Copilot</span>
                     `;
-                    container.appendChild(card);
-                });
-                // Show story-level token summary if available
-                if (story.tokenUsage && story.tokenUsage.totalTokens > 0) {
-                    const summary = document.createElement('div');
-                    summary.className = 'agent-card completed';
-                    summary.style.borderLeftColor = '#e67e22';
-                    summary.innerHTML = `
-                        <div class="agent-header">
-                            <span class="agent-emoji">📊</span>
-                            <span class="agent-name">US-${story.workItemId} Token Summary</span>
-                            <span class="status-badge completed">${story.tokenUsage.complexity}</span>
-                        </div>
-                        <div class="agent-details">
-                            <span>Total: ${story.tokenUsage.totalTokens.toLocaleString()} tokens</span>
-                            <span>Cost: $${story.tokenUsage.totalCost.toFixed(2)}</span>
-                            <span>Complexity: ${story.tokenUsage.complexity}</span>
-                        </div>
+                } else {
+                    metricsHtml = `
+                        <span>🎯 Tokens: ${tokInfo ? tokInfo.totalTokens.toLocaleString() : '—'}</span>
+                        <span>💰 Cost: ${tokInfo ? '$' + tokInfo.estimatedCost.toFixed(2) : '—'}</span>
+                        <span>⏱️ Duration: ${durationStr}</span>
                     `;
-                    container.appendChild(summary);
+                }
+                
+                // Copilot elapsed time
+                let copilotElapsed = '';
+                if (isCopilotDelegated && agentData?.additionalData?.delegatedAt) {
+                    const delegatedMs = new Date(agentData.additionalData.delegatedAt).getTime();
+                    const elapsedSec = Math.floor((Date.now() - delegatedMs) / 1000);
+                    copilotElapsed = formatDuration(elapsedSec);
+                }
+                
+                const agentAssignee = agentData?.additionalData?.agent || 'copilot';
+                const agentDisplayName = agentAssignee.charAt(0).toUpperCase() + agentAssignee.slice(1);
+                const issueNum = agentData?.additionalData?.issueNumber;
+                const githubIssueUrl = issueNum ? `https://github.com/toddpick/ADO-Agent/issues/${issueNum}` : null;
+                
+                const detailItem = document.createElement('div');
+                detailItem.className = `agent-detail-item ${cardStatus}`;
+                detailItem.innerHTML = `
+                    <div class="agent-detail-header">
+                        <span style="font-size: 1.2rem;">${isCopilotDelegated || isCopilotCompleted ? '🤖' : emoji}</span>
+                        <span class="agent-detail-name">${name} Agent${isCopilotDelegated ? ` (${agentDisplayName})` : isCopilotCompleted ? ` (${agentDisplayName} ✓)` : ''}</span>
+                        <span class="agent-detail-badge ${cardStatus}">${isCopilotDelegated ? `${agentDisplayName} Working` : formatStatusText(status)}</span>
+                    </div>
+                    <div class="agent-detail-metrics">
+                        ${metricsHtml}
+                    </div>
+                    ${isCopilotDelegated ? `
+                        <div class="github-working" style="margin-top: 10px;">
+                            <svg class="github-spinner" viewBox="0 0 16 16" fill="currentColor">
+                                <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/>
+                            </svg>
+                            <span class="github-working-text">GitHub ${agentDisplayName} Agent Working<span class="github-working-dots"></span></span>
+                            ${githubIssueUrl ? `<a href="${githubIssueUrl}" target="_blank" class="github-issue-link">View Issue #${issueNum} ↗</a>` : ''}
+                        </div>
+                    ` : ''}
+                    ${status === 'awaiting_code' ? `
+                        <div style="margin-top: 8px; display: flex; align-items: center; gap: 10px;">
+                            <button class="resume-btn" onclick="resumePipeline(${story.workItemId}, this)">▶ Resume Pipeline</button>
+                            <span style="font-size: 0.75rem; color: #888;">Code locally with Copilot/Codex, then resume</span>
+                        </div>
+                    ` : ''}
+                `;
+                detailsList.appendChild(detailItem);
+            });
+            
+            content.appendChild(detailsList);
+            
+            // Token summary
+            if (story.tokenUsage && story.tokenUsage.totalTokens > 0) {
+                const summary = document.createElement('div');
+                summary.className = 'agent-detail-item completed';
+                summary.style.borderLeftColor = '#e67e22';
+                summary.innerHTML = `
+                    <div class="agent-detail-header">
+                        <span style="font-size: 1.2rem;">📊</span>
+                        <span class="agent-detail-name">Token Summary</span>
+                        <span class="agent-detail-badge completed">${story.tokenUsage.complexity}</span>
+                    </div>
+                    <div class="agent-detail-metrics">
+                        <span>🎯 Total: ${story.tokenUsage.totalTokens.toLocaleString()} tokens</span>
+                        <span>💰 Cost: $${story.tokenUsage.totalCost.toFixed(2)}</span>
+                        <span>📊 Complexity: ${story.tokenUsage.complexity}</span>
+                    </div>
+                `;
+                content.appendChild(summary);
+            }
+            
+            body.appendChild(content);
+            storyCard.appendChild(header);
+            storyCard.appendChild(body);
+            container.appendChild(storyCard);
+        }
+
+        function calculateStoryProgress(story, agentNames) {
+            let completed = 0;
+            agentNames.forEach(name => {
+                if (story.agents[name] === 'completed') {
+                    completed++;
                 }
             });
+            return Math.round((completed / agentNames.length) * 100);
+        }
+
+        function getProgressColorClass(progress) {
+            if (progress <= 25) return 'progress-red';
+            if (progress <= 50) return 'progress-orange';
+            if (progress <= 75) return 'progress-blue';
+            return 'progress-green';
+        }
+
+        function formatStoryStatusText(status) {
+            const map = {
+                'completed': 'Completed',
+                'in-progress': 'In Progress',
+                'failed': 'Failed',
+                'pending': 'Pending',
+                'copilot': 'Copilot'
+            };
+            return map[status] || status;
+        }
+
+        function toggleStoryCard(workItemId) {
+            const card = document.querySelector(`.story-card[data-story-id="${workItemId}"]`);
+            if (!card) return;
+            
+            const isExpanded = card.classList.contains('expanded');
+            card.classList.toggle('expanded');
+            
+            // Save state
+            localStorage.setItem(`story-${workItemId}-expanded`, !isExpanded);
+        }
+
+        function handleSearchFilter() {
+            currentSearchText = document.getElementById('story-search').value;
+            localStorage.setItem('story-search-text', currentSearchText);
+            renderFilteredStories();
+        }
+
+        function handleStatusFilter(status) {
+            currentStatusFilter = status;
+            localStorage.setItem('story-status-filter', status);
+            
+            // Update active chip
+            document.querySelectorAll('.filter-chip').forEach(chip => {
+                chip.classList.remove('active');
+                if (chip.dataset.filter === status) {
+                    chip.classList.add('active');
+                }
+            });
+            
+            renderFilteredStories();
+        }
+
+        /**
+         * Restores filter state from localStorage.
+         * Checks for element existence before attempting to restore state.
+         * Called from updateStoryAgents on first render to ensure DOM is ready.
+         */
+        function restoreFilterState() {
+            const searchInput = document.getElementById('story-search');
+            if (!searchInput) {
+                // DOM not ready yet, skip restoration
+                return;
+            }
+            
+            const savedSearch = localStorage.getItem('story-search-text');
+            const savedStatus = localStorage.getItem('story-status-filter');
+            
+            if (savedSearch) {
+                currentSearchText = savedSearch;
+                searchInput.value = savedSearch;
+            }
+            
+            if (savedStatus && document.querySelector(`.filter-chip[data-filter="${savedStatus}"]`)) {
+                handleStatusFilter(savedStatus);
+            }
         }
 
         function updateAgents(agents) {
