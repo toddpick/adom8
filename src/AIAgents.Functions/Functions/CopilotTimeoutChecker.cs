@@ -59,7 +59,7 @@ public sealed class CopilotTimeoutChecker
     /// </summary>
     [Function("CopilotTimeoutChecker")]
     public async Task RunAsync(
-        [TimerTrigger("0 */5 * * * *")] TimerInfo timerInfo,
+        [TimerTrigger("0 */2 * * * *")] TimerInfo timerInfo,
         CancellationToken cancellationToken)
     {
         if (!_copilotOptions.Enabled)
