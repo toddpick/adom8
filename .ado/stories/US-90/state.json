@@ -1,8 +1,8 @@
 {
   "workItemId": 90,
-  "currentState": "AI Code",
+  "currentState": "AI Test",
   "createdAt": "2026-02-17T07:53:23.8832658Z",
-  "updatedAt": "2026-02-17T07:53:46.6524462Z",
+  "updatedAt": "2026-02-17T08:14:06.5328588Z",
   "agents": {
     "Planning": {
       "status": "in_progress",
@@ -11,19 +11,26 @@
       "additionalData": null
     },
     "Coding": {
-      "status": "in_progress",
-      "startedAt": "2026-02-17T07:53:46.6520426Z",
-      "completedAt": null,
+      "status": "completed",
+      "startedAt": null,
+      "completedAt": "2026-02-17T08:14:06.5322833Z",
       "additionalData": {
-        "mode": "copilot-delegated",
+        "mode": "copilot",
+        "copilotPrNumber": 58,
         "issueNumber": 57,
-        "delegatedAt": "2026-02-17T07:53:46.6520470Z",
-        "agent": "copilot"
+        "filesChanged": 2,
+        "linesAdded": 1006,
+        "linesDeleted": 105,
+        "durationMinutes": 20.296468615,
+        "commitCount": 5
       }
     }
   },
   "artifacts": {
-    "code": [],
+    "code": [
+      ".gitignore",
+      "dashboard/index.html"
+    ],
     "tests": [],
     "docs": []
   },
@@ -35,6 +42,15 @@
     "totalTokens": 0,
     "totalCost": 0,
     "complexity": "XS",
-    "agents": {}
+    "agents": {
+      "Coding": {
+        "inputTokens": 0,
+        "outputTokens": 0,
+        "totalTokens": 0,
+        "estimatedCost": 0,
+        "model": "copilot-coding-agent",
+        "callCount": 1
+      }
+    }
   }
 }
