@@ -170,7 +170,16 @@ public sealed class CopilotTimeoutChecker
             }
 
             var prNumber = pr.GetProperty("number").GetInt32();
-            var prCommits = pr.GetProperty("commits").GetInt32();
+
+            // The PR list endpoint does NOT return 'commits' — must fetch individual PR detail
+            var prDetailResponse = await httpClient.GetAsync(
+                $"repos/{_githubOptions.Owner}/{_githubOptions.Repo}/pulls/{prNumber}",
+                cancellationToken);
+            if (!prDetailResponse.IsSuccessStatusCode) continue;
+
+            var prDetailJson = await prDetailResponse.Content.ReadAsStringAsync(cancellationToken);
+            using var prDetailDoc = JsonDocument.Parse(prDetailJson);
+            var prCommits = prDetailDoc.RootElement.GetProperty("commits").GetInt32();
 
             if (prCommits > 0)
             {
