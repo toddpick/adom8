@@ -38,7 +38,7 @@ public sealed class ResumePipeline
 
     [Function("ResumePipeline")]
     public async Task<IActionResult> Execute(
-        [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "resume")] HttpRequest req,
+        [HttpTrigger(AuthorizationLevel.Function, "post", Route = "resume")] HttpRequest req,
         CancellationToken cancellationToken)
     {
         string body;

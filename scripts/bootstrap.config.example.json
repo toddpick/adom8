@@ -1,0 +1,58 @@
+{
+  "azure": {
+    "subscriptionId": "<YOUR_SUBSCRIPTION_ID>",
+    "location": "eastus"
+  },
+  "infrastructure": {
+    "resourceGroupName": "ai-agents-rg",
+    "environment": "dev",
+    "functionAppName": "ai-agents-func-<UNIQUE>",
+    "storageAccountName": "aiagentsstor<UNIQUE>",
+    "staticWebAppName": "ai-agent-dashboard-<UNIQUE>",
+    "alertEmail": "you@example.com"
+  },
+  "ai": {
+    "provider": "Claude",
+    "model": "claude-sonnet-4-20250514",
+    "apiKey": "<YOUR_AI_API_KEY>",
+    "endpoint": "",
+    "maxTokens": 4096,
+    "temperature": 0.3
+  },
+  "ado": {
+    "organizationUrl": "https://dev.azure.com/<YOUR_ORG>",
+    "project": "<YOUR_PROJECT>",
+    "pat": "<YOUR_ADO_PAT>"
+  },
+  "git": {
+    "provider": "GitHub",
+    "repositoryUrl": "https://github.com/<OWNER>/<REPO>.git",
+    "username": "x-token-auth",
+    "token": "<YOUR_GIT_PAT>",
+    "email": "ai-agent@your-org.com",
+    "name": "AI Agent Bot"
+  },
+  "github": {
+    "owner": "<GITHUB_OWNER_OR_ORG>",
+    "repo": "<GITHUB_REPO_NAME>",
+    "token": "<YOUR_GITHUB_PAT>",
+    "deployWorkflow": "deploy.yml"
+  },
+  "deployment": {
+    "pipelineName": "Deploy-To-Production",
+    "pipelineId": "",
+    "defaultAutonomyLevel": 3,
+    "defaultMinimumReviewScore": 85,
+    "dashboardDeploymentToken": ""
+  },
+  "copilot": {
+    "enabled": false,
+    "mode": "Auto",
+    "complexityThreshold": 8,
+    "createIssue": true,
+    "webhookSecret": "",
+    "timeoutMinutes": 30,
+    "autoCloseCopilotPr": true,
+    "model": "copilot"
+  }
+}

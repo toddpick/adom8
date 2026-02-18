@@ -95,3 +95,49 @@ When adding developer helper scripts:
 5. Validate prerequisites before executing
 6. Document the script in this README
 7. Make executable: `chmod +x scripts/your-script.sh`
+
+## bootstrap.ps1
+
+One-command infrastructure + app setup + deployment automation for Windows PowerShell.
+
+### What It Automates
+
+1. Writes `infrastructure/terraform.tfvars` from your config
+2. Runs Terraform (`init` + `apply`)
+3. Configures Function App app settings (AI, ADO, Git, optional Copilot)
+4. Publishes Azure Functions
+5. Updates dashboard API URL to your deployed Function App
+6. Deploys Static Web App dashboard
+
+### Usage
+
+```powershell
+# 1) Create editable config from template
+.\scripts\bootstrap.ps1 -InitConfig
+
+# 2) Edit scripts\bootstrap.config.json with your values (PATs, API keys, names)
+
+# 3) Run full bootstrap
+.\scripts\bootstrap.ps1 -ConfigPath .\scripts\bootstrap.config.json
+```
+
+### Optional Flags
+
+```powershell
+# Reuse existing infrastructure outputs only
+.\scripts\bootstrap.ps1 -SkipTerraform
+
+# Skip Functions publish
+.\scripts\bootstrap.ps1 -SkipFunctions
+
+# Skip dashboard deploy
+.\scripts\bootstrap.ps1 -SkipDashboard
+```
+
+### Required Manual Inputs
+
+- Azure DevOps PAT
+- Git PAT (GitHub or ADO Repos)
+- AI provider API key
+
+Those values go into `scripts/bootstrap.config.json`; everything else is automated.

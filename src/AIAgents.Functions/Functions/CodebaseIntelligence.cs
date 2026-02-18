@@ -55,7 +55,7 @@ public sealed class CodebaseIntelligence
     /// </summary>
     [Function("AnalyzeCodebase")]
     public async Task<IActionResult> AnalyzeCodebase(
-        [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "analyze-codebase")] HttpRequest req,
+        [HttpTrigger(AuthorizationLevel.Function, "post", Route = "analyze-codebase")] HttpRequest req,
         CancellationToken cancellationToken)
     {
         _logger.LogInformation("Received analyze-codebase request");
@@ -172,7 +172,7 @@ public sealed class CodebaseIntelligence
     /// </summary>
     [Function("InitializeCodebase")]
     public async Task<IActionResult> InitializeCodebase(
-        [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "initialize-codebase")] HttpRequest req,
+        [HttpTrigger(AuthorizationLevel.Function, "post", Route = "initialize-codebase")] HttpRequest req,
         CancellationToken cancellationToken)
     {
         _logger.LogInformation("Received initialize-codebase request (Copilot enabled: {CopilotEnabled})", _copilotOptions.Enabled);

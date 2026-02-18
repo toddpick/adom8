@@ -36,7 +36,7 @@ public sealed class ResetDashboard
 
     [Function("ResetDashboard")]
     public async Task<IActionResult> Execute(
-        [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "reset")] HttpRequest req,
+        [HttpTrigger(AuthorizationLevel.Function, "post", Route = "reset")] HttpRequest req,
         CancellationToken cancellationToken)
     {
         _logger.LogWarning("Dashboard RESET triggered — clearing activity log and queues");

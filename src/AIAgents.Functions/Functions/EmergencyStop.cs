@@ -37,7 +37,7 @@ public sealed class EmergencyStop
     /// </summary>
     [Function("EmergencyStopStatus")]
     public async Task<IActionResult> GetStatus(
-        [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "emergency-stop")] HttpRequest req,
+        [HttpTrigger(AuthorizationLevel.Function, "get", Route = "emergency-stop")] HttpRequest req,
         CancellationToken cancellationToken)
     {
         try
@@ -68,7 +68,7 @@ public sealed class EmergencyStop
     /// </summary>
     [Function("EmergencyStopExecute")]
     public async Task<IActionResult> Execute(
-        [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "emergency-stop")] HttpRequest req,
+        [HttpTrigger(AuthorizationLevel.Function, "post", Route = "emergency-stop")] HttpRequest req,
         CancellationToken cancellationToken)
     {
         _logger.LogWarning("EMERGENCY STOP triggered — clearing all agent task queues");

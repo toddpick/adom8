@@ -3,6 +3,8 @@
 > **End-to-end walkthrough:** from a blank Azure subscription + ADO org to a fully working AI agent pipeline.
 > Estimated time: **45–60 minutes** for first-time setup.
 
+> **Fast path (recommended):** If you want maximum automation, use `scripts/bootstrap.ps1` after collecting PATs/API keys. It provisions Azure resources, configures app settings, deploys Functions, rewires dashboard API URL, and deploys dashboard in one run.
+
 ---
 
 ## Table of Contents
