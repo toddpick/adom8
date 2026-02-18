@@ -3800,10 +3800,15 @@
             return value;
         }
 
-        function formatStatusText(status) {
+        function formatStatusText(status, agentName) {
             if (status === 'active' || status === 'in_progress') return 'Running';
             if (status === 'completed') return 'Done';
-            if (status === 'skipped') return 'Skipped';
+            if (status === 'skipped') {
+                if (agentName === 'Testing') {
+                    return 'Skipped – Testing done by GitHub Coding Agent';
+                }
+                return 'Skipped';
+            }
             if (status === 'failed') return 'Failed';
             if (status === 'awaiting_code') return 'Awaiting Code';
             return 'Pending';
@@ -4167,7 +4172,7 @@
                     <div class="agent-detail-header">
                         <span style="font-size: 1.2rem;">${isCopilotDelegated || isCopilotCompleted ? '🤖' : emoji}</span>
                         <span class="agent-detail-name">${name} Agent${isCopilotDelegated ? ` (${agentDisplayName})` : isCopilotCompleted ? ` (${agentDisplayName} ✓)` : ''}</span>
-                        <span class="agent-detail-badge ${cardStatus}">${isCopilotDelegated ? `${agentDisplayName} Working` : formatStatusText(status)}</span>
+                        <span class="agent-detail-badge ${cardStatus}">${isCopilotDelegated ? `${agentDisplayName} Working` : formatStatusText(status, name)}</span>
                     </div>
                     <div class="agent-detail-metrics">
                         ${metricsHtml}
@@ -4319,7 +4324,7 @@
                     <div class="agent-header">
                         <span class="agent-emoji">${agent.emoji || '⚡'}</span>
                         <span class="agent-name">${agent.name}</span>
-                        <span class="status-badge ${agent.status || 'pending'}">${formatStatusText(agent.status)}</span>
+                        <span class="status-badge ${agent.status || 'pending'}">${formatStatusText(agent.status, agent.name)}</span>
                     </div>
                     <div class="progress-bar">
                         <div class="progress-fill" style="width: ${progress}%"></div>
