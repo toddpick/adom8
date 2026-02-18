@@ -45,6 +45,13 @@
     "defaultMinimumReviewScore": 85,
     "dashboardDeploymentToken": ""
   },
+  "keyVault": {
+    "enabled": false,
+    "name": "",
+    "resourceGroupName": "",
+    "location": "",
+    "useRbacAuthorization": true
+  },
   "copilot": {
     "enabled": false,
     "mode": "Auto",

@@ -5,6 +5,8 @@
 
 > **Fast path (recommended):** If you want maximum automation, use `scripts/bootstrap.ps1` after collecting PATs/API keys. It provisions Azure resources, configures app settings, deploys Functions, rewires dashboard API URL, and deploys dashboard in one run.
 
+> **Key Vault with fast path:** In `scripts/bootstrap.config.json`, set `keyVault.enabled=true` and provide `keyVault.name` to automatically wire managed identity + Key Vault secret references during bootstrap.
+
 > **Production security:** After initial setup, follow `SECURITY_HARDENING.md` to move secrets to Key Vault and apply least-privilege controls.
 
 ---

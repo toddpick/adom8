@@ -15,6 +15,8 @@ The quick-start path stores secrets in Function App settings for speed and simpl
 5. Protect dashboard access (SWA auth / Entra ID).
 6. Add alerting for high-risk endpoints (`reset`, `emergency-stop`, `provision-ado`).
 
+> **Automation option:** `scripts/bootstrap.ps1` supports end-to-end Key Vault setup when `keyVault.enabled=true` in your bootstrap config.
+
 ## Secrets to move into Key Vault
 
 Move these values out of plain app settings:

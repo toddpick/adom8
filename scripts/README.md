@@ -109,6 +109,13 @@ One-command infrastructure + app setup + deployment automation for Windows Power
 5. Updates dashboard API URL to your deployed Function App
 6. Deploys Static Web App dashboard
 
+When `keyVault.enabled=true`, it also automates:
+
+7. Creates/uses Azure Key Vault
+8. Enables Function App managed identity
+9. Grants Key Vault secret read access
+10. Stores sensitive values as Key Vault secrets and configures Function App settings with Key Vault references
+
 ### Usage
 
 ```powershell
@@ -141,3 +148,24 @@ One-command infrastructure + app setup + deployment automation for Windows Power
 - AI provider API key
 
 Those values go into `scripts/bootstrap.config.json`; everything else is automated.
+
+### Optional: Key Vault Automation (recommended for production)
+
+In `scripts/bootstrap.config.json`:
+
+```json
+"keyVault": {
+  "enabled": true,
+  "name": "your-kv-name",
+  "resourceGroupName": "",
+  "location": "",
+  "useRbacAuthorization": true
+}
+```
+
+Notes:
+
+- `name` is required when `enabled=true`.
+- `resourceGroupName` defaults to infrastructure resource group when blank.
+- `location` defaults to your configured Azure location when blank.
+- Sensitive settings are moved to Key Vault refs: `AI__ApiKey`, `AzureDevOps__Pat`, `Git__Token`, `GitHub__Token`, and optional `Copilot__WebhookSecret`.

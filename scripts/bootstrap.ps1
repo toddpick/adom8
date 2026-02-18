@@ -59,6 +59,56 @@ function To-SettingValue {
     return [string]$Value
 }
 
+function Ensure-ResourceGroup {
+    param(
+        [string]$Name,
+        [string]$Location
+    )
+
+    $null = az group show --name $Name 2>$null | Out-String
+    if ($LASTEXITCODE -ne 0) {
+        az group create --name $Name --location $Location | Out-Null
+    }
+}
+
+function Ensure-KeyVault {
+    param(
+        [string]$Name,
+        [string]$ResourceGroupName,
+        [string]$Location,
+        [bool]$UseRbacAuthorization
+    )
+
+    $null = az keyvault show --name $Name 2>$null | Out-String
+    if ($LASTEXITCODE -ne 0) {
+        if ($UseRbacAuthorization) {
+            az keyvault create --name $Name --resource-group $ResourceGroupName --location $Location --enable-rbac-authorization true | Out-Null
+        }
+        else {
+            az keyvault create --name $Name --resource-group $ResourceGroupName --location $Location | Out-Null
+        }
+    }
+}
+
+function Ensure-KeyVaultSecretAccess {
+    param(
+        [string]$VaultName,
+        [string]$PrincipalId,
+        [bool]$UseRbacAuthorization
+    )
+
+    if ($UseRbacAuthorization) {
+        $vaultId = az keyvault show --name $VaultName --query id -o tsv
+        $existing = az role assignment list --assignee-object-id $PrincipalId --scope $vaultId --query "[?roleDefinitionName=='Key Vault Secrets User'] | length(@)" -o tsv
+        if ([string]::IsNullOrWhiteSpace([string]$existing) -or [int]$existing -eq 0) {
+            az role assignment create --assignee-object-id $PrincipalId --assignee-principal-type ServicePrincipal --role "Key Vault Secrets User" --scope $vaultId | Out-Null
+        }
+    }
+    else {
+        az keyvault set-policy --name $VaultName --object-id $PrincipalId --secret-permissions get list | Out-Null
+    }
+}
+
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $defaultConfigPath = Join-Path $PSScriptRoot "bootstrap.config.json"
 $exampleConfigPath = Join-Path $PSScriptRoot "bootstrap.config.example.json"
@@ -120,6 +170,16 @@ $storageAccountName = Get-ConfigValue -Object $config -Path 'infrastructure.stor
 $staticWebAppName = Get-ConfigValue -Object $config -Path 'infrastructure.staticWebAppName' -Required
 $alertEmail = Get-ConfigValue -Object $config -Path 'infrastructure.alertEmail' -Required
 
+$keyVaultEnabled = [bool](Get-ConfigValue -Object $config -Path 'keyVault.enabled' -Default $false)
+$keyVaultName = [string](Get-ConfigValue -Object $config -Path 'keyVault.name' -Default '')
+$keyVaultResourceGroupName = [string](Get-ConfigValue -Object $config -Path 'keyVault.resourceGroupName' -Default $resourceGroupName)
+$keyVaultLocation = [string](Get-ConfigValue -Object $config -Path 'keyVault.location' -Default $location)
+$keyVaultUseRbac = [bool](Get-ConfigValue -Object $config -Path 'keyVault.useRbacAuthorization' -Default $true)
+
+if ($keyVaultEnabled -and [string]::IsNullOrWhiteSpace($keyVaultName)) {
+    throw "When keyVault.enabled=true, keyVault.name is required."
+}
+
 $infraPath = Join-Path $repoRoot "infrastructure"
 $tfvarsPath = Join-Path $infraPath "terraform.tfvars"
 
@@ -171,20 +231,33 @@ if ([string]::IsNullOrWhiteSpace($dashboardApiKey)) {
     $dashboardApiKey = [string]$tfOutput.dashboard_api_key.value
 }
 
+$keyVaultSecretUris = @{}
+if ($keyVaultEnabled) {
+    Write-Step "Configuring Key Vault and managed identity"
+
+    Ensure-ResourceGroup -Name $keyVaultResourceGroupName -Location $keyVaultLocation
+    Ensure-KeyVault -Name $keyVaultName -ResourceGroupName $keyVaultResourceGroupName -Location $keyVaultLocation -UseRbacAuthorization $keyVaultUseRbac
+
+    $identity = az functionapp identity assign --name $functionAppName --resource-group $resourceGroupName | ConvertFrom-Json
+    $principalId = [string]$identity.principalId
+    if ([string]::IsNullOrWhiteSpace($principalId)) {
+        throw "Failed to resolve managed identity principalId for Function App '$functionAppName'."
+    }
+
+    Ensure-KeyVaultSecretAccess -VaultName $keyVaultName -PrincipalId $principalId -UseRbacAuthorization $keyVaultUseRbac
+}
+
 Write-Step "Configuring Function App settings"
 $appSettings = [ordered]@{
     "AI__Provider" = (Get-ConfigValue -Object $config -Path 'ai.provider' -Required)
     "AI__Model" = (Get-ConfigValue -Object $config -Path 'ai.model' -Required)
-    "AI__ApiKey" = (Get-ConfigValue -Object $config -Path 'ai.apiKey' -Required)
     "AI__MaxTokens" = (Get-ConfigValue -Object $config -Path 'ai.maxTokens' -Default 4096)
     "AI__Temperature" = (Get-ConfigValue -Object $config -Path 'ai.temperature' -Default 0.3)
     "AzureDevOps__OrganizationUrl" = (Get-ConfigValue -Object $config -Path 'ado.organizationUrl' -Required)
-    "AzureDevOps__Pat" = (Get-ConfigValue -Object $config -Path 'ado.pat' -Required)
     "AzureDevOps__Project" = (Get-ConfigValue -Object $config -Path 'ado.project' -Required)
     "Git__Provider" = (Get-ConfigValue -Object $config -Path 'git.provider' -Required)
     "Git__RepositoryUrl" = (Get-ConfigValue -Object $config -Path 'git.repositoryUrl' -Required)
     "Git__Username" = (Get-ConfigValue -Object $config -Path 'git.username' -Default 'x-token-auth')
-    "Git__Token" = (Get-ConfigValue -Object $config -Path 'git.token' -Required)
     "Git__Email" = (Get-ConfigValue -Object $config -Path 'git.email' -Default 'ai-agent@your-org.com')
     "Git__Name" = (Get-ConfigValue -Object $config -Path 'git.name' -Default 'AI Agent Bot')
     "Deployment__PipelineName" = (Get-ConfigValue -Object $config -Path 'deployment.pipelineName' -Default 'Deploy-To-Production')
@@ -206,7 +279,6 @@ $gitProvider = ([string]$appSettings["Git__Provider"]).ToLowerInvariant()
 if ($gitProvider -eq 'github') {
     $appSettings["GitHub__Owner"] = (Get-ConfigValue -Object $config -Path 'github.owner' -Required)
     $appSettings["GitHub__Repo"] = (Get-ConfigValue -Object $config -Path 'github.repo' -Required)
-    $appSettings["GitHub__Token"] = (Get-ConfigValue -Object $config -Path 'github.token' -Required)
     $appSettings["GitHub__DeployWorkflow"] = (Get-ConfigValue -Object $config -Path 'github.deployWorkflow' -Default 'deploy.yml')
 }
 
@@ -220,13 +292,58 @@ if ($copilotEnabled) {
     $appSettings["Copilot__AutoCloseCopilotPr"] = [bool](Get-ConfigValue -Object $config -Path 'copilot.autoCloseCopilotPr' -Default $true)
 
     $copilotWebhookSecret = [string](Get-ConfigValue -Object $config -Path 'copilot.webhookSecret' -Default '')
-    if (-not [string]::IsNullOrWhiteSpace($copilotWebhookSecret)) {
-        $appSettings["Copilot__WebhookSecret"] = $copilotWebhookSecret
-    }
 
     $copilotModel = [string](Get-ConfigValue -Object $config -Path 'copilot.model' -Default '')
     if (-not [string]::IsNullOrWhiteSpace($copilotModel)) {
         $appSettings["Copilot__Model"] = $copilotModel
+    }
+}
+
+$sensitiveSettings = [ordered]@{
+    "AI__ApiKey" = [string](Get-ConfigValue -Object $config -Path 'ai.apiKey' -Required)
+    "AzureDevOps__Pat" = [string](Get-ConfigValue -Object $config -Path 'ado.pat' -Required)
+    "Git__Token" = [string](Get-ConfigValue -Object $config -Path 'git.token' -Required)
+}
+
+if ($gitProvider -eq 'github') {
+    $sensitiveSettings["GitHub__Token"] = [string](Get-ConfigValue -Object $config -Path 'github.token' -Required)
+}
+
+if ($copilotEnabled) {
+    $copilotWebhookSecret = [string](Get-ConfigValue -Object $config -Path 'copilot.webhookSecret' -Default '')
+    if (-not [string]::IsNullOrWhiteSpace($copilotWebhookSecret)) {
+        $sensitiveSettings["Copilot__WebhookSecret"] = $copilotWebhookSecret
+    }
+}
+
+$secretNameMap = @{
+    "AI__ApiKey" = "AI-ApiKey"
+    "AzureDevOps__Pat" = "AzureDevOps-Pat"
+    "Git__Token" = "Git-Token"
+    "GitHub__Token" = "GitHub-Token"
+    "Copilot__WebhookSecret" = "Copilot-WebhookSecret"
+}
+
+foreach ($entry in $sensitiveSettings.GetEnumerator()) {
+    $settingKey = $entry.Key
+    $settingValue = [string]$entry.Value
+    if ([string]::IsNullOrWhiteSpace($settingValue)) {
+        continue
+    }
+
+    if ($keyVaultEnabled) {
+        $secretName = $secretNameMap[$settingKey]
+        if ([string]::IsNullOrWhiteSpace([string]$secretName)) {
+            throw "No Key Vault secret mapping defined for $settingKey"
+        }
+
+        az keyvault secret set --vault-name $keyVaultName --name $secretName --value $settingValue | Out-Null
+        $secretUri = "https://$keyVaultName.vault.azure.net/secrets/$secretName/"
+        $appSettings[$settingKey] = "@Microsoft.KeyVault(SecretUri=$secretUri)"
+        $keyVaultSecretUris[$settingKey] = $secretUri
+    }
+    else {
+        $appSettings[$settingKey] = $settingValue
     }
 }
 
@@ -277,6 +394,9 @@ Write-Step "Bootstrap complete"
 Write-Host "Function App: $functionAppName" -ForegroundColor Green
 Write-Host "Function URL: $functionAppUrl" -ForegroundColor Green
 Write-Host "Dashboard URL: $dashboardUrl" -ForegroundColor Green
+if ($keyVaultEnabled) {
+    Write-Host "Key Vault: $keyVaultName" -ForegroundColor Green
+}
 Write-Host ""
 Write-Host "Next: retrieve a function key for secured dashboard actions:" -ForegroundColor Yellow
 Write-Host "az functionapp keys list --name $functionAppName --resource-group $resourceGroupName --query functionKeys.default -o tsv"
