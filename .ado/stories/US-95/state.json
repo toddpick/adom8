@@ -1,0 +1,78 @@
+{
+  "workItemId": 95,
+  "currentState": "AI Docs",
+  "createdAt": "2026-02-18T05:10:11.6577562Z",
+  "updatedAt": "2026-02-18T05:23:10.3800591Z",
+  "agents": {
+    "Planning": {
+      "status": "in_progress",
+      "startedAt": "2026-02-18T05:10:11.6678088Z",
+      "completedAt": null,
+      "additionalData": null
+    },
+    "Coding": {
+      "status": "completed",
+      "startedAt": null,
+      "completedAt": "2026-02-18T05:22:45.8856969Z",
+      "additionalData": {
+        "mode": "copilot",
+        "copilotPrNumber": 74,
+        "issueNumber": 73,
+        "filesChanged": 4,
+        "linesAdded": 99,
+        "linesDeleted": 6,
+        "durationMinutes": 12.095801828333334,
+        "commitCount": 3
+      }
+    },
+    "Testing": {
+      "status": "skipped",
+      "startedAt": null,
+      "completedAt": "2026-02-18T05:22:45.8858329Z",
+      "additionalData": {
+        "reason": "Copilot coding agent already runs tests"
+      }
+    },
+    "Review": {
+      "status": "in_progress",
+      "startedAt": "2026-02-18T05:22:51.4058166Z",
+      "completedAt": null,
+      "additionalData": null
+    },
+    "Documentation": {
+      "status": "in_progress",
+      "startedAt": "2026-02-18T05:23:10.3800576Z",
+      "completedAt": null,
+      "additionalData": null
+    }
+  },
+  "artifacts": {
+    "code": [
+      "src/AIAgents.Core/Models/PlanningResult.cs",
+      "src/AIAgents.Functions.Tests/Agents/PlanningAgentServiceTests.cs",
+      "src/AIAgents.Functions.Tests/Helpers/MockAIResponses.cs",
+      "src/AIAgents.Functions/Agents/PlanningAgentService.cs"
+    ],
+    "tests": [],
+    "docs": []
+  },
+  "decisions": [],
+  "questions": [],
+  "tokenUsage": {
+    "totalInputTokens": 0,
+    "totalOutputTokens": 0,
+    "totalTokens": 0,
+    "totalCost": 0,
+    "complexity": "XS",
+    "agents": {
+      "Coding": {
+        "inputTokens": 0,
+        "outputTokens": 0,
+        "totalTokens": 0,
+        "estimatedCost": 0,
+        "model": "copilot-coding-agent",
+        "callCount": 1
+      }
+    }
+  }
+}

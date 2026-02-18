@@ -82,16 +82,25 @@ You have TWO jobs:
 1. TRIAGE — Assess whether the story is ready for AI coding.
 2. PLAN — If ready, create a detailed implementation plan.
 
-TRIAGE CHECKS (evaluate all 6):
+TRIAGE CHECKS (evaluate all 7):
 - Completeness: Does the story have a clear title, description, AND acceptance criteria? All three are REQUIRED. An empty or missing acceptance criteria is an automatic blocker.
 - Complexity: Is the estimated complexity ≤ 13 story points? Stories over 13 should be broken down.
 - Ambiguity: Are the requirements specific enough to implement without guessing? Flag vague terms like 'improve', 'optimize', 'make better', 'enhance' without measurable criteria.
 - Risk: Are there architectural risks that need human review first?
 - Feasibility: Can this be implemented with the existing codebase and tech stack?
 - Content Quality: Does the story contain placeholder or unresolved text? Look for: TBD, TODO, TBC, N/A (in required fields), 'need to decide', 'to be determined', 'not yet defined', 'undecided', 'placeholder', '[fill in]', '???', or any open questions/decision points that haven't been resolved. Each placeholder found is a blocker — list the exact text and which field it appears in.
+- Unverified Assumptions: Does the story make assumptions about external API capabilities that cannot be verified from codebase documentation alone? Flag assumptions about:
+  • GitHub API capabilities (task GUIDs, repository metadata, Copilot-specific features, webhook payloads, GraphQL fields)
+  • Azure DevOps API capabilities (custom fields, work item types, webhooks, process templates, specific field names not in standard docs)
+  • Third-party APIs (specific endpoints, data formats, authentication methods, rate limits)
+  • Any external data that the story assumes exists or can be retrieved but hasn't been verified in codebase documentation or comments
 
 If ANY check fails, set readiness.proceed=false with clear blockers and questions.
-Be STRICT: do not allow stories with unresolved decisions or placeholder text to proceed.
+Be STRICT: do not allow stories with unverified decisions or placeholder text to proceed.
+
+DISTINCTION between questions and researchNeeded:
+- questions: Human clarification needed (business logic, requirements, user experience decisions)
+- researchNeeded: Technical verification needed (external API capabilities, data availability, endpoint existence)
 
 Respond ONLY with valid JSON matching this structure:
 {
@@ -99,7 +108,8 @@ Respond ONLY with valid JSON matching this structure:
     ""proceed"": true/false,
     ""readinessScore"": number (0-100),
     ""blockers"": [""string — blocking issue""],
-    ""questions"": [""string — question for the analyst""],
+    ""questions"": [""string — question for the analyst requiring human clarification""],
+    ""researchNeeded"": [""string — unverified external API assumption that needs technical investigation""],
     ""suggestedBreakdown"": [""string — suggested sub-stories if too complex""],
     ""reason"": ""brief rationale for the decision""
   },
@@ -115,7 +125,8 @@ Respond ONLY with valid JSON matching this structure:
   ""testingStrategy"": ""string""
 }
 
-ALWAYS include the full plan even when proceed=false — the analyst needs the analysis to fix the story.";
+ALWAYS include the full plan even when proceed=false — the analyst needs the analysis to fix the story.
+If unverified external dependencies are detected, add a warning note in the technicalApproach field.";
 
         var userPrompt = $@"## Story Details
 **ID:** {workItem.Id}
@@ -196,6 +207,9 @@ Analyze this story and create a comprehensive implementation plan.";
             var questionList = readiness.Questions.Count > 0
                 ? string.Join("<br/>", readiness.Questions.Select(q => $"❓ {q}"))
                 : "None";
+            var researchList = readiness.ResearchNeeded.Count > 0
+                ? string.Join("<br/>", readiness.ResearchNeeded.Select(r => $"🔍 {r}"))
+                : "";
             var breakdownList = readiness.SuggestedBreakdown.Count > 0
                 ? string.Join("<br/>", readiness.SuggestedBreakdown.Select(s => $"📋 {s}"))
                 : "";
@@ -205,6 +219,9 @@ Analyze this story and create a comprehensive implementation plan.";
                 $"<b>Reason:</b> {System.Net.WebUtility.HtmlEncode(readiness.Reason)}<br/><br/>" +
                 $"<b>Blockers:</b><br/>{blockerList}<br/><br/>" +
                 $"<b>Questions to Answer:</b><br/>{questionList}";
+
+            if (readiness.ResearchNeeded.Count > 0)
+                rejectComment += $"<br/><br/><b>Research Needed (Unverified External API Assumptions):</b><br/>{researchList}";
 
             if (readiness.SuggestedBreakdown.Count > 0)
                 rejectComment += $"<br/><br/><b>Suggested Breakdown:</b><br/>{breakdownList}";
@@ -328,6 +345,7 @@ Analyze this story and create a comprehensive implementation plan.";
                     ReadinessScore = readinessEl.TryGetProperty("readinessScore", out var rs) ? rs.GetInt32() : (readinessEl.TryGetProperty("proceed", out var p2) && p2.GetBoolean() ? 100 : 0),
                     Blockers = GetStringArray(readinessEl, "blockers"),
                     Questions = GetStringArray(readinessEl, "questions"),
+                    ResearchNeeded = GetStringArray(readinessEl, "researchNeeded"),
                     SuggestedBreakdown = GetStringArray(readinessEl, "suggestedBreakdown"),
                     Reason = readinessEl.TryGetProperty("reason", out var r) ? r.GetString() ?? "" : ""
                 };

@@ -27,8 +27,8 @@ public sealed record PlanningResult
 
 /// <summary>
 /// Triage assessment that determines whether a story is ready for coding.
-/// The Planning agent evaluates 5 dimensions: Completeness, Complexity,
-/// Ambiguity, Risk, and Feasibility.
+/// The Planning agent evaluates 7 dimensions: Completeness, Complexity,
+/// Ambiguity, Risk, Feasibility, Content Quality, and Unverified Assumptions.
 /// </summary>
 public sealed record PlanningReadiness
 {
@@ -43,6 +43,9 @@ public sealed record PlanningReadiness
 
     /// <summary>Questions the analyst needs to answer before coding can begin.</summary>
     public IReadOnlyList<string> Questions { get; init; } = [];
+
+    /// <summary>Unverified external API assumptions that require research or investigation.</summary>
+    public IReadOnlyList<string> ResearchNeeded { get; init; } = [];
 
     /// <summary>Suggested story breakdown if the story is too complex.</summary>
     public IReadOnlyList<string> SuggestedBreakdown { get; init; } = [];

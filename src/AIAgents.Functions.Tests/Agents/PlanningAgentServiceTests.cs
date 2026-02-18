@@ -398,6 +398,48 @@ public sealed class PlanningAgentServiceTests
         Assert.Null(result.Readiness);
     }
 
+    [Fact]
+    public void ParsePlanningResult_WithResearchNeeded_ParsesCorrectly()
+    {
+        var result = PlanningAgentService.ParsePlanningResult(MockAIResponses.PlanningResponseWithResearchNeeded);
+
+        Assert.NotNull(result.Readiness);
+        Assert.False(result.Readiness.Proceed);
+        Assert.Equal(65, result.Readiness.ReadinessScore);
+        Assert.Equal(2, result.Readiness.ResearchNeeded.Count);
+        Assert.Contains("GitHub Issues API", result.Readiness.ResearchNeeded[0]);
+        Assert.Contains("Azure DevOps API", result.Readiness.ResearchNeeded[1]);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WithResearchNeeded_IncludesInComment()
+    {
+        SetupHappyPath(aiResponse: MockAIResponses.PlanningResponseWithResearchNeeded);
+        var service = CreateService();
+        var task = new AgentTask { WorkItemId = 12345, AgentType = AgentType.Planning };
+
+        await service.ExecuteAsync(task);
+
+        _adoMock.Verify(a => a.AddWorkItemCommentAsync(12345,
+            It.Is<string>(c => c.Contains("Research Needed") && 
+                              c.Contains("Unverified External API Assumptions") &&
+                              c.Contains("🔍")),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WithResearchNeeded_MovesToNeedsRevision()
+    {
+        SetupHappyPath(aiResponse: MockAIResponses.PlanningResponseWithResearchNeeded);
+        var service = CreateService();
+        var task = new AgentTask { WorkItemId = 12345, AgentType = AgentType.Planning };
+
+        await service.ExecuteAsync(task);
+
+        Assert.Equal("Needs Revision", _capturedState.CurrentState);
+        _adoMock.Verify(a => a.UpdateWorkItemStateAsync(12345, "Needs Revision", It.IsAny<CancellationToken>()), Times.Once);
+    }
+
     // ========== PLACEHOLDER DETECTION TESTS ==========
 
     [Theory]

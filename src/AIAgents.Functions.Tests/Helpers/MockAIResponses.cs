@@ -163,6 +163,36 @@ public static class MockAIResponses
         testingStrategy = "Basic tests"
     });
 
+    /// <summary>
+    /// Planning response where the triage gate identifies unverified external API assumptions.
+    /// </summary>
+    public static string PlanningResponseWithResearchNeeded => JsonSerializer.Serialize(new
+    {
+        readiness = new
+        {
+            proceed = false,
+            readinessScore = 65,
+            blockers = new[] { "Unverified external API assumptions detected" },
+            questions = new[] { "Should we validate the GitHub task GUID before implementation?" },
+            researchNeeded = new[] { 
+                "GitHub Issues API does not expose Copilot Agent Tab task GUIDs - needs verification", 
+                "Azure DevOps API custom field availability for this project type is unconfirmed" 
+            },
+            suggestedBreakdown = Array.Empty<string>(),
+            reason = "Story assumes external API capabilities that cannot be verified from codebase documentation"
+        },
+        problemAnalysis = "The story requires linking to GitHub Copilot Agent Tab using task GUID.",
+        technicalApproach = "⚠️ WARNING: This approach assumes GitHub Issues API provides task GUID field, which may not be available. Research required before implementation.",
+        affectedFiles = new[] { "src/Services/GitHubService.cs" },
+        complexity = 5,
+        architecture = "API integration with GitHub Issues",
+        subTasks = new[] { "Research GitHub API capabilities", "Implement GitHub service", "Add task GUID linking" },
+        dependencies = new[] { "GitHub API documentation", "Verified endpoint availability" },
+        risks = new[] { "GitHub API may not expose required data", "Integration could fail during coding" },
+        assumptions = new[] { "GitHub Issues API provides task GUID", "Copilot Agent Tab is accessible via API" },
+        testingStrategy = "Mock GitHub API responses, verify endpoint availability first"
+    });
+
     public static string MalformedPlanningResponse => "This is not valid JSON at all - just plain text analysis";
 
     public static string PlanningResponseInCodeFences => $"```json\n{ValidPlanningResponse}\n```";
