@@ -1,3 +1,4 @@
+using AIAgents.Core.Configuration;
 using AIAgents.Core.Interfaces;
 using AIAgents.Core.Models;
 using AIAgents.Functions.Functions;
@@ -9,6 +10,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using Moq;
 
 namespace AIAgents.Functions.Tests.Functions;
@@ -71,7 +73,9 @@ public sealed class HealthCheckTests : IDisposable
             _aiMock.Object,
             configuration,
             NullLogger<HealthCheck>.Instance,
-            _telemetry);
+            _telemetry,
+            Options.Create(new AIOptions { Provider = "Claude", Model = "claude-sonnet-4-20250514", ApiKey = "test-key" }),
+            Options.Create(new CopilotOptions()));
     }
 
     private static DefaultHttpContext CreateHttpContext()

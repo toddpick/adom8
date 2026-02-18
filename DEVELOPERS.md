@@ -4,6 +4,10 @@ Comprehensive guide for human developers working alongside AI agents in this cod
 
 ---
 
+> **💡 Quick Setup — If you have GitHub Copilot:** We highly recommend clicking the **"Scan & Document Codebase"** button on the ADOm8 dashboard instead of manually running the setup scripts below. This creates a work item that flows through the AI pipeline, where GitHub Copilot Coding Agent handles the heavy scanning and documentation work in its own environment — no timeout issues, even for large codebases. The manual script approach below is the fallback for teams without Copilot.
+
+---
+
 ## 1. Working with AI-Generated Code
 
 This codebase is **partially AI-generated**. Autonomous AI agents (Planning, Coding, Testing, Review, Documentation, Deployment) process Azure DevOps work items and produce code, tests, and documentation. Human developers also contribute — especially for complex features, architecture changes, and integrations.

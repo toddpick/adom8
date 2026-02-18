@@ -40,4 +40,14 @@ public interface IAzureDevOpsClient
         int workItemId,
         IDictionary<string, object> fieldUpdates,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Creates a new work item (User Story) with the given title, description, and state.
+    /// Returns the ID of the newly created work item.
+    /// </summary>
+    Task<int> CreateWorkItemAsync(
+        string title,
+        string description,
+        string state,
+        CancellationToken cancellationToken = default);
 }

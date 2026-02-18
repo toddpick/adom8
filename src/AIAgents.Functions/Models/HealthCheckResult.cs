@@ -27,6 +27,67 @@ public sealed class HealthCheckResult
     /// <summary>Deployment environment (dev, staging, prod).</summary>
     [JsonPropertyName("environment")]
     public string? Environment { get; init; }
+
+    /// <summary>AI provider configuration and status for dashboard display.</summary>
+    [JsonPropertyName("providers")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public ProviderInfo? Providers { get; init; }
+}
+
+/// <summary>
+/// AI provider configuration info returned alongside health checks.
+/// Used by the dashboard to show which providers are configured and their models.
+/// </summary>
+public sealed class ProviderInfo
+{
+    /// <summary>Primary AI provider (Claude, OpenAI, etc.).</summary>
+    [JsonPropertyName("ai")]
+    public ProviderDetail? Ai { get; init; }
+
+    /// <summary>GitHub Copilot coding agent configuration.</summary>
+    [JsonPropertyName("copilot")]
+    public CopilotProviderDetail? Copilot { get; init; }
+
+    /// <summary>Additional configured providers from ProviderKeys.</summary>
+    [JsonPropertyName("additionalProviders")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<ProviderDetail>? AdditionalProviders { get; init; }
+}
+
+/// <summary>
+/// Details for a single AI provider.
+/// </summary>
+public sealed class ProviderDetail
+{
+    [JsonPropertyName("name")]
+    public required string Name { get; init; }
+
+    [JsonPropertyName("model")]
+    public string? Model { get; init; }
+
+    [JsonPropertyName("configured")]
+    public bool Configured { get; init; }
+
+    [JsonPropertyName("status")]
+    public string? Status { get; init; }
+}
+
+/// <summary>
+/// Details for the GitHub Copilot provider.
+/// </summary>
+public sealed class CopilotProviderDetail
+{
+    [JsonPropertyName("enabled")]
+    public bool Enabled { get; init; }
+
+    [JsonPropertyName("mode")]
+    public string? Mode { get; init; }
+
+    [JsonPropertyName("model")]
+    public string? Model { get; init; }
+
+    [JsonPropertyName("configured")]
+    public bool Configured { get; init; }
 }
 
 /// <summary>

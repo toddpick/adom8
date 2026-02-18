@@ -518,6 +518,373 @@
             background: rgba(76, 175, 80, 0.15);
         }
 
+        /* AI Provider Status Bar */
+        .ai-status-bar {
+            display: flex;
+            gap: 12px;
+            justify-content: center;
+            flex-wrap: wrap;
+            margin-bottom: 24px;
+            padding: 0 8px;
+        }
+
+        .ai-provider-card {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            background: #fff;
+            border-radius: 10px;
+            padding: 10px 16px;
+            min-width: 160px;
+            border-left: 4px solid #ccc;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            transition: all 0.3s ease;
+            position: relative;
+        }
+
+        .ai-provider-card.configured {
+            opacity: 1;
+        }
+
+        .ai-provider-card.not-configured {
+            opacity: 0.45;
+            background: #f5f5f5;
+            border-left-color: #ccc;
+        }
+
+        .ai-provider-card.claude { border-left-color: #D97757; }
+        .ai-provider-card.openai { border-left-color: #10A37F; }
+        .ai-provider-card.gemini { border-left-color: #4285F4; }
+        .ai-provider-card.copilot { border-left-color: #0078d4; }
+
+        .ai-provider-name {
+            font-weight: 700;
+            font-size: 0.85rem;
+            line-height: 1.2;
+        }
+
+        .ai-provider-card.claude .ai-provider-name { color: #D97757; }
+        .ai-provider-card.openai .ai-provider-name { color: #10A37F; }
+        .ai-provider-card.gemini .ai-provider-name { color: #4285F4; }
+        .ai-provider-card.copilot .ai-provider-name { color: #0078d4; }
+        .ai-provider-card.not-configured .ai-provider-name { color: #999; }
+
+        .ai-provider-model {
+            font-size: 0.72rem;
+            color: #888;
+            font-weight: 400;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 140px;
+        }
+
+        .ai-provider-status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            flex-shrink: 0;
+            margin-left: auto;
+        }
+
+        .ai-provider-status-dot.healthy {
+            background: #4caf50;
+            box-shadow: 0 0 6px rgba(76, 175, 80, 0.5);
+        }
+
+        .ai-provider-status-dot.configured {
+            background: #4caf50;
+            box-shadow: 0 0 6px rgba(76, 175, 80, 0.5);
+        }
+
+        .ai-provider-status-dot.degraded {
+            background: #ff9800;
+            box-shadow: 0 0 6px rgba(255, 152, 0, 0.5);
+        }
+
+        .ai-provider-status-dot.not-configured {
+            background: #666;
+        }
+
+        /* Codebase Initialized Badge */
+        .codebase-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 0.78rem;
+            font-weight: 600;
+            padding: 6px 14px;
+            border-radius: 20px;
+            cursor: default;
+        }
+
+        .codebase-badge.initialized {
+            color: #4caf50;
+            background: rgba(76, 175, 80, 0.1);
+            border: 1px solid rgba(76, 175, 80, 0.3);
+        }
+
+        .codebase-badge.not-initialized {
+            color: #ff9800;
+            background: rgba(255, 152, 0, 0.1);
+            border: 1px solid rgba(255, 152, 0, 0.3);
+            cursor: pointer;
+        }
+
+        .codebase-badge.not-initialized:hover {
+            background: rgba(255, 152, 0, 0.2);
+        }
+
+        /* Onboarding Card */
+        .onboarding-card {
+            background: #fff;
+            border-radius: 12px;
+            padding: 24px;
+            margin-bottom: 24px;
+            border-left: 5px solid #0078d4;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+        }
+
+        .onboarding-card.hidden { display: none; }
+
+        .onboarding-card-header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 12px;
+        }
+
+        .onboarding-card-icon {
+            font-size: 1.8rem;
+        }
+
+        .onboarding-card-title {
+            font-size: 1.2rem;
+            font-weight: 700;
+            color: #333;
+        }
+
+        .onboarding-card-desc {
+            font-size: 0.9rem;
+            color: #666;
+            line-height: 1.6;
+            margin-bottom: 16px;
+        }
+
+        .onboarding-card-actions {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        .btn-scan {
+            background: #0078d4;
+            color: #fff;
+            border: none;
+            border-radius: 8px;
+            padding: 10px 20px;
+            font-size: 0.9rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .btn-scan:hover { background: #006abc; }
+        .btn-scan:disabled { opacity: 0.6; cursor: not-allowed; }
+
+        .btn-scan.warning {
+            background: #e67e22;
+        }
+
+        .btn-scan.warning:hover { background: #d35400; }
+
+        .onboarding-progress {
+            display: none;
+            align-items: center;
+            gap: 10px;
+            font-size: 0.85rem;
+            color: #888;
+        }
+
+        .onboarding-progress.show { display: flex; }
+
+        .onboarding-spinner {
+            width: 18px;
+            height: 18px;
+            border: 2px solid #ddd;
+            border-top: 2px solid #0078d4;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* Codebase Scan Modal */
+        .scan-modal-body {
+            font-size: 0.9rem;
+            color: #555;
+            line-height: 1.7;
+        }
+
+        .scan-modal-body h3 {
+            font-size: 1rem;
+            font-weight: 700;
+            color: #333;
+            margin: 16px 0 8px;
+        }
+
+        .scan-modal-body ul {
+            margin: 8px 0 12px 20px;
+        }
+
+        .scan-modal-body ul li {
+            margin-bottom: 4px;
+        }
+
+        .scan-modal-warning {
+            background: rgba(255, 152, 0, 0.1);
+            border: 1px solid rgba(255, 152, 0, 0.3);
+            border-radius: 8px;
+            padding: 12px 16px;
+            color: #e67e22;
+            font-size: 0.85rem;
+            margin: 12px 0;
+        }
+
+        .scan-modal-recommended {
+            background: rgba(76, 175, 80, 0.1);
+            border: 1px solid rgba(76, 175, 80, 0.3);
+            border-radius: 8px;
+            padding: 12px 16px;
+            color: #4caf50;
+            font-size: 0.85rem;
+            margin: 12px 0;
+        }
+
+        .scan-modal-actions {
+            display: flex;
+            gap: 12px;
+            justify-content: flex-end;
+            margin-top: 20px;
+        }
+
+        .btn-modal-cancel {
+            background: none;
+            color: #999;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 8px 20px;
+            font-size: 0.85rem;
+            cursor: pointer;
+        }
+
+        .btn-modal-cancel:hover { background: #f5f5f5; color: #666; }
+
+        /* Footer */
+        .dashboard-footer {
+            background: #16162a;
+            border-top: 1px solid #2a2a45;
+            padding: 20px 0;
+            text-align: center;
+        }
+
+        .footer-ctas {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 12px;
+            flex-wrap: wrap;
+        }
+
+        .footer-cta-link {
+            color: #ccc;
+            text-decoration: none;
+            font-size: 0.85rem;
+            font-weight: 500;
+            padding: 4px 8px;
+            border-radius: 4px;
+            transition: color 0.2s ease;
+        }
+
+        .footer-cta-link:hover {
+            color: #f1c40f;
+        }
+
+        .footer-cta-link.upgrade:hover { color: #0078d4; }
+        .footer-cta-link.docs:hover { color: #4caf50; }
+
+        .footer-separator {
+            color: #444;
+            font-size: 0.75rem;
+        }
+
+        .footer-tech {
+            font-size: 0.72rem;
+            color: #666;
+            margin-bottom: 8px;
+        }
+
+        .footer-tech a {
+            color: #777;
+            text-decoration: none;
+            transition: color 0.2s ease;
+        }
+
+        .footer-tech a:hover { color: #bbb; }
+
+        .footer-copyright {
+            font-size: 0.65rem;
+            color: #555;
+        }
+
+        /* Dark Mode Overrides for new components */
+        body.dark-mode .ai-provider-card {
+            background: #252540;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+        }
+
+        body.dark-mode .ai-provider-card.not-configured {
+            background: #1e1e30;
+        }
+
+        body.dark-mode .ai-provider-model { color: #777; }
+
+        body.dark-mode .onboarding-card {
+            background: #252540;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+        }
+
+        body.dark-mode .onboarding-card-title { color: #e0e0e0; }
+        body.dark-mode .onboarding-card-desc { color: #aaa; }
+
+        body.dark-mode .scan-modal-body { color: #bbb; }
+        body.dark-mode .scan-modal-body h3 { color: #e0e0e0; }
+        body.dark-mode .btn-modal-cancel {
+            color: #888;
+            border-color: #444;
+        }
+        body.dark-mode .btn-modal-cancel:hover {
+            background: #2a2a45;
+            color: #ccc;
+        }
+
+        body.dark-mode .scan-modal-warning {
+            background: rgba(255, 152, 0, 0.08);
+            border-color: rgba(255, 152, 0, 0.2);
+        }
+
+        body.dark-mode .scan-modal-recommended {
+            background: rgba(76, 175, 80, 0.08);
+            border-color: rgba(76, 175, 80, 0.2);
+        }
+
         /* Sidebar Stats */
         .sidebar-stats {
             border-top: 1px solid #333;
@@ -2525,6 +2892,63 @@
                     <div class="subtitle">Real-time monitoring of autonomous AI agents processing Azure DevOps work items</div>
                 </div>
 
+                <!-- AI Provider Status Bar -->
+                <div class="ai-status-bar" id="ai-status-bar">
+                    <div class="ai-provider-card claude not-configured" id="provider-claude">
+                        <div>
+                            <div class="ai-provider-name">Claude</div>
+                            <div class="ai-provider-model" id="provider-claude-model">Not Configured</div>
+                        </div>
+                        <span class="ai-provider-status-dot not-configured" id="provider-claude-dot"></span>
+                    </div>
+                    <div class="ai-provider-card openai not-configured" id="provider-openai">
+                        <div>
+                            <div class="ai-provider-name">OpenAI</div>
+                            <div class="ai-provider-model" id="provider-openai-model">Not Configured</div>
+                        </div>
+                        <span class="ai-provider-status-dot not-configured" id="provider-openai-dot"></span>
+                    </div>
+                    <div class="ai-provider-card gemini not-configured" id="provider-gemini">
+                        <div>
+                            <div class="ai-provider-name">Gemini</div>
+                            <div class="ai-provider-model" id="provider-gemini-model">Not Configured</div>
+                        </div>
+                        <span class="ai-provider-status-dot not-configured" id="provider-gemini-dot"></span>
+                    </div>
+                    <div class="ai-provider-card copilot not-configured" id="provider-copilot">
+                        <div>
+                            <div class="ai-provider-name">GitHub Copilot</div>
+                            <div class="ai-provider-model" id="provider-copilot-model">Not Configured</div>
+                        </div>
+                        <span class="ai-provider-status-dot not-configured" id="provider-copilot-dot"></span>
+                    </div>
+                    <span class="codebase-badge not-initialized" id="codebase-badge" onclick="openScanModal()" title="Click to initialize codebase documentation">
+                        ⚠ Codebase Not Initialized
+                    </span>
+                </div>
+
+                <!-- Codebase Onboarding Card -->
+                <div class="onboarding-card hidden" id="onboarding-card">
+                    <div class="onboarding-card-header">
+                        <span class="onboarding-card-icon">🧠</span>
+                        <span class="onboarding-card-title">Initialize Codebase Intelligence</span>
+                    </div>
+                    <div class="onboarding-card-desc">
+                        Scan your repository and generate AI-optimized documentation. This creates architecture diagrams, 
+                        coding standards, pattern guides, and feature documentation that all AI agents use for context 
+                        when processing your work items.
+                    </div>
+                    <div class="onboarding-card-actions">
+                        <button class="btn-scan" id="btn-scan-codebase" onclick="openScanModal()">
+                            🔍 Scan &amp; Document Codebase
+                        </button>
+                        <div class="onboarding-progress" id="onboarding-progress">
+                            <div class="onboarding-spinner"></div>
+                            <span id="onboarding-progress-text">Scanning in progress...</span>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Current Work Item -->
                 <div class="work-item-panel" id="work-item-panel">
                     <div class="work-item-header">
@@ -2635,6 +3059,27 @@
                 <div class="volume-control">
                     <div class="setting-label">Volume</div>
                     <input type="range" min="0" max="100" value="50" class="volume-slider" id="volume-slider" oninput="saveSettings()">
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Codebase Scan Modal -->
+    <div class="modal-overlay" id="scan-modal" onclick="closeScanModal(event)">
+        <div class="modal" style="max-width: 560px;" onclick="event.stopPropagation()">
+            <div class="modal-header">
+                <div class="modal-title">🧠 Initialize Codebase Intelligence</div>
+                <button class="modal-close" onclick="closeScanModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="scan-modal-body" id="scan-modal-content">
+                    <!-- Content injected by JS based on Copilot config -->
+                </div>
+                <div class="scan-modal-actions">
+                    <button class="btn-modal-cancel" onclick="closeScanModal()">Cancel</button>
+                    <button class="btn-scan" id="btn-scan-confirm" onclick="confirmCodebaseScan()">
+                        Proceed
+                    </button>
                 </div>
             </div>
         </div>
@@ -3325,6 +3770,8 @@
         const API_URL = 'https://ai-agents-func-todd.azurewebsites.net/api/status';
         const EMERGENCY_STOP_URL = 'https://ai-agents-func-todd.azurewebsites.net/api/emergency-stop';
         const RESET_URL = 'https://ai-agents-func-todd.azurewebsites.net/api/reset';
+        const INITIALIZE_CODEBASE_URL = API_URL.replace('/status', '/initialize-codebase');
+        const CODEBASE_INTEL_URL = API_URL.replace('/status', '/codebase-intelligence');
         const POLL_INTERVAL = 2000;
 
         // ========== Default Agent Definitions ==========
@@ -3913,6 +4360,7 @@
                 const response = await fetch(HEALTH_URL);
                 const data = await response.json();
                 updateHealthPanel(data);
+                updateProviderStatusBar(data);
             } catch (err) {
                 updateHealthPanel(null);
                 console.warn('Health fetch failed:', err.message);
@@ -3977,6 +4425,243 @@
                         }
                     }
                 }
+            }
+        }
+
+        // ========== AI Provider Status Bar ==========
+        let cachedProviders = null;
+
+        function updateProviderStatusBar(data) {
+            if (!data || !data.providers) return;
+            cachedProviders = data.providers;
+
+            const providers = data.providers;
+            const aiStatus = data.checks?.aiApi?.status || 'unknown';
+
+            // Primary AI provider — map to the correct card
+            if (providers.ai) {
+                const normalizedName = normalizeProviderName(providers.ai.name);
+                const cardId = 'provider-' + normalizedName;
+                const card = document.getElementById(cardId);
+                if (card) {
+                    const isConfigured = providers.ai.configured;
+                    card.className = `ai-provider-card ${normalizedName} ${isConfigured ? 'configured' : 'not-configured'}`;
+                    const modelEl = document.getElementById(cardId + '-model');
+                    if (modelEl) modelEl.textContent = isConfigured ? (providers.ai.model || 'Configured') : 'Not Configured';
+                    const dotEl = document.getElementById(cardId + '-dot');
+                    if (dotEl) dotEl.className = `ai-provider-status-dot ${isConfigured ? aiStatus : 'not-configured'}`;
+                }
+            }
+
+            // Additional providers
+            if (providers.additionalProviders) {
+                providers.additionalProviders.forEach(p => {
+                    const normalizedName = normalizeProviderName(p.name);
+                    const cardId = 'provider-' + normalizedName;
+                    const card = document.getElementById(cardId);
+                    if (!card) return;
+                    const isConfigured = p.configured;
+                    card.className = `ai-provider-card ${normalizedName} ${isConfigured ? 'configured' : 'not-configured'}`;
+                    const modelEl = document.getElementById(cardId + '-model');
+                    if (modelEl) modelEl.textContent = isConfigured ? (p.model || 'Configured') : 'Not Configured';
+                    const dotEl = document.getElementById(cardId + '-dot');
+                    if (dotEl) dotEl.className = `ai-provider-status-dot ${isConfigured ? 'configured' : 'not-configured'}`;
+                });
+            }
+
+            // Copilot
+            if (providers.copilot) {
+                const card = document.getElementById('provider-copilot');
+                if (card) {
+                    const isConfigured = providers.copilot.configured;
+                    card.className = `ai-provider-card copilot ${isConfigured ? 'configured' : 'not-configured'}`;
+                    const modelEl = document.getElementById('provider-copilot-model');
+                    if (modelEl) {
+                        modelEl.textContent = isConfigured
+                            ? `${providers.copilot.mode || 'Auto'} · ${providers.copilot.model || 'copilot'}`
+                            : 'Not Configured';
+                    }
+                    const dotEl = document.getElementById('provider-copilot-dot');
+                    if (dotEl) dotEl.className = `ai-provider-status-dot ${isConfigured ? 'configured' : 'not-configured'}`;
+                }
+            }
+        }
+
+        function normalizeProviderName(name) {
+            if (!name) return 'unknown';
+            const lower = name.toLowerCase();
+            if (lower === 'claude' || lower === 'anthropic') return 'claude';
+            if (lower === 'openai' || lower === 'azureopenai') return 'openai';
+            if (lower === 'google' || lower === 'gemini') return 'gemini';
+            return lower;
+        }
+
+        // ========== Codebase Intelligence ==========
+        let codebaseInitialized = false;
+
+        async function checkCodebaseIntelligence() {
+            try {
+                const response = await fetch(CODEBASE_INTEL_URL);
+                const data = await response.json();
+                const badge = document.getElementById('codebase-badge');
+                const onboardingCard = document.getElementById('onboarding-card');
+
+                if (data.status === 'up_to_date') {
+                    codebaseInitialized = true;
+                    if (badge) {
+                        badge.className = 'codebase-badge initialized';
+                        badge.textContent = '✓ Codebase Initialized';
+                        badge.onclick = null;
+                        badge.style.cursor = 'default';
+                        badge.title = data.stats
+                            ? `Last scan: ${new Date(data.lastAnalysis).toLocaleDateString()} · ${data.stats.filesAnalyzed} files · ${data.stats.featuresDocumented} features`
+                            : 'Codebase documentation is up to date';
+                    }
+                    if (onboardingCard) onboardingCard.classList.add('hidden');
+
+                    // Show re-analyze if stale
+                    if (data.recommendReanalysis && onboardingCard) {
+                        onboardingCard.classList.remove('hidden');
+                        const titleEl = onboardingCard.querySelector('.onboarding-card-title');
+                        if (titleEl) titleEl.textContent = 'Re-analyze Codebase';
+                        const descEl = onboardingCard.querySelector('.onboarding-card-desc');
+                        if (descEl) descEl.textContent = `Last scan was ${new Date(data.lastAnalysis).toLocaleDateString()}. Consider re-analyzing to capture recent changes.`;
+                        const btnEl = document.getElementById('btn-scan-codebase');
+                        if (btnEl) btnEl.textContent = '🔄 Re-analyze Codebase';
+                    }
+                } else {
+                    codebaseInitialized = false;
+                    if (badge) {
+                        badge.className = 'codebase-badge not-initialized';
+                        badge.textContent = '⚠ Codebase Not Initialized';
+                        badge.onclick = openScanModal;
+                        badge.title = 'Click to initialize codebase documentation';
+                    }
+                    if (onboardingCard) onboardingCard.classList.remove('hidden');
+                }
+            } catch (err) {
+                console.warn('Codebase intelligence check failed:', err.message);
+            }
+        }
+
+        // ========== Codebase Scan Modal ==========
+        function openScanModal() {
+            const modal = document.getElementById('scan-modal');
+            const content = document.getElementById('scan-modal-content');
+            const confirmBtn = document.getElementById('btn-scan-confirm');
+
+            const isCopilotEnabled = cachedProviders?.copilot?.enabled || false;
+
+            if (isCopilotEnabled) {
+                content.innerHTML = `
+                    <div class="scan-modal-recommended">
+                        ✅ <strong>Recommended path:</strong> You have GitHub Copilot Coding Agent configured.
+                    </div>
+                    <p>We'll create an ADO User Story that flows through your AI pipeline. GitHub Copilot will scan 
+                    your entire repository in its own environment — no timeout issues, even for large codebases.</p>
+                    <h3>What gets created</h3>
+                    <ul>
+                        <li>Architecture diagrams (Mermaid)</li>
+                        <li>Coding standards (extracted from your actual code)</li>
+                        <li>Tech stack reference with versions</li>
+                        <li>Common patterns &amp; how-to guides</li>
+                        <li>Testing strategy documentation</li>
+                        <li>Deployment guide</li>
+                        <li>API reference (if applicable)</li>
+                        <li>Per-feature documentation for detected features</li>
+                    </ul>
+                    <p style="font-size: 0.8rem; color: #888; margin-top: 8px;">
+                        This runs through your normal pipeline (Planning → Coding → Review) and may take 15-30 minutes.
+                    </p>
+                `;
+                confirmBtn.textContent = 'Proceed';
+                confirmBtn.className = 'btn-scan';
+            } else {
+                const providerName = cachedProviders?.ai?.name || 'your AI API';
+                content.innerHTML = `
+                    <div class="scan-modal-warning">
+                        ⚠️ <strong>Warning:</strong> GitHub Copilot Coding Agent is not configured. 
+                        Using ${providerName} directly.
+                    </div>
+                    <p>If your codebase is large, this scan can take significant time and will make multiple 
+                    API calls to your AI provider. Please be aware of any API rate limits or token budgets.</p>
+                    <p><strong>For large codebases, we strongly recommend configuring GitHub Copilot and using that path instead.</strong></p>
+                    <h3>What gets created</h3>
+                    <ul>
+                        <li>Architecture diagrams (Mermaid)</li>
+                        <li>Coding standards (extracted from your actual code)</li>
+                        <li>Tech stack reference with versions</li>
+                        <li>Common patterns &amp; how-to guides</li>
+                        <li>Testing strategy documentation</li>
+                        <li>Deployment guide</li>
+                        <li>API reference (if applicable)</li>
+                        <li>Per-feature documentation for detected features</li>
+                    </ul>
+                `;
+                confirmBtn.textContent = 'Proceed Anyway';
+                confirmBtn.className = 'btn-scan warning';
+            }
+
+            modal.classList.add('show');
+        }
+
+        function closeScanModal(event) {
+            const modal = document.getElementById('scan-modal');
+            if (!event || event.target === modal) {
+                modal.classList.remove('show');
+            }
+        }
+
+        async function confirmCodebaseScan() {
+            const confirmBtn = document.getElementById('btn-scan-confirm');
+            confirmBtn.disabled = true;
+            confirmBtn.textContent = 'Starting...';
+
+            try {
+                const response = await fetch(INITIALIZE_CODEBASE_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                const data = await response.json();
+
+                closeScanModal();
+
+                // Update onboarding card to show progress
+                const onboardingCard = document.getElementById('onboarding-card');
+                const btnScan = document.getElementById('btn-scan-codebase');
+                const progressEl = document.getElementById('onboarding-progress');
+                const progressText = document.getElementById('onboarding-progress-text');
+
+                if (btnScan) btnScan.style.display = 'none';
+                if (progressEl) progressEl.classList.add('show');
+
+                if (data.path === 'copilot' && data.workItemId) {
+                    if (progressText) progressText.textContent = `Story #${data.workItemId} created — processing through pipeline...`;
+                } else {
+                    if (progressText) progressText.textContent = 'Scanning in progress (est. 10-15 min)...';
+                }
+
+                // Update badge
+                const badge = document.getElementById('codebase-badge');
+                if (badge) {
+                    badge.className = 'codebase-badge not-initialized';
+                    badge.textContent = '⏳ Scanning...';
+                    badge.style.cursor = 'default';
+                    badge.onclick = null;
+                }
+
+                // Show toast
+                if (typeof showToast === 'function') {
+                    showToast('Codebase scan started! ' + (data.path === 'copilot' ? `Story #${data.workItemId} created.` : 'Processing via AI agent.'), 'success');
+                }
+            } catch (err) {
+                console.error('Failed to start codebase scan:', err);
+                if (typeof showToast === 'function') {
+                    showToast('Failed to start codebase scan: ' + err.message, 'error');
+                }
+            } finally {
+                confirmBtn.disabled = false;
+                confirmBtn.textContent = 'Proceed';
             }
         }
 
@@ -4200,6 +4885,9 @@
             fetchHealth();
             setInterval(fetchHealth, HEALTH_POLL_INTERVAL);
 
+            // Check codebase intelligence status
+            checkCodebaseIntelligence();
+
             // Poll queue depth for abort button badge
             pollQueueDepth();
             setInterval(pollQueueDepth, 5000);
@@ -4218,8 +4906,23 @@
         document.addEventListener('DOMContentLoaded', init);
     </script>
     <!-- Footer -->
-    <footer style="background-color: #1e1e2e; text-align: center; font-size: 12px; padding: 10px; color: #aaa; margin-top: 20px;">
-        ADOm8 v1.0 | Powered by Azure Functions
+    <footer class="dashboard-footer">
+        <div class="footer-ctas">
+            <a href="https://github.com/toddpieck/adom8" target="_blank" rel="noopener" class="footer-cta-link">⭐ Star on GitHub</a>
+            <span class="footer-separator">·</span>
+            <a href="https://adom8.dev" target="_blank" rel="noopener" class="footer-cta-link upgrade">🚀 Upgrade to Pro</a>
+            <span class="footer-separator">·</span>
+            <a href="https://adom8.dev/docs" target="_blank" rel="noopener" class="footer-cta-link docs">📖 Documentation</a>
+        </div>
+        <div class="footer-tech">
+            Built with
+            <a href="https://azure.microsoft.com/en-us/products/functions" target="_blank" rel="noopener">Azure Functions</a> ·
+            <a href="https://anthropic.com" target="_blank" rel="noopener">Claude</a> ·
+            <a href="https://openai.com" target="_blank" rel="noopener">OpenAI</a> ·
+            <a href="https://deepmind.google/technologies/gemini/" target="_blank" rel="noopener">Gemini</a> ·
+            <a href="https://github.com/features/copilot" target="_blank" rel="noopener">GitHub Copilot</a>
+        </div>
+        <div class="footer-copyright">© 2026 ADOm8</div>
     </footer>
 </body>
 </html>

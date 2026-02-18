@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using AIAgents.Core.Configuration;
 using AIAgents.Core.Interfaces;
 using AIAgents.Core.Telemetry;
 using AIAgents.Functions.Models;
@@ -10,6 +11,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 namespace AIAgents.Functions.Functions;
 
@@ -25,6 +27,8 @@ public sealed class HealthCheck
     private readonly IConfiguration _configuration;
     private readonly ILogger<HealthCheck> _logger;
     private readonly TelemetryClient _telemetry;
+    private readonly AIOptions _aiOptions;
+    private readonly CopilotOptions _copilotOptions;
 
     // Cache health results for 60 seconds
     private static readonly ConcurrentDictionary<string, (HealthCheckResult Result, DateTime CachedAt)> s_cache = new();
@@ -35,13 +39,17 @@ public sealed class HealthCheck
         IAIClient aiClient,
         IConfiguration configuration,
         ILogger<HealthCheck> logger,
-        TelemetryClient telemetry)
+        TelemetryClient telemetry,
+        IOptions<AIOptions> aiOptions,
+        IOptions<CopilotOptions> copilotOptions)
     {
         _adoClient = adoClient;
         _aiClient = aiClient;
         _configuration = configuration;
         _logger = logger;
         _telemetry = telemetry;
+        _aiOptions = aiOptions.Value;
+        _copilotOptions = copilotOptions.Value;
     }
 
     [Function("HealthCheck")]
@@ -90,7 +98,8 @@ public sealed class HealthCheck
         {
             Status = overallStatus,
             Checks = checks,
-            Environment = _configuration["ASPNETCORE_ENVIRONMENT"] ?? _configuration["environment"] ?? "unknown"
+            Environment = _configuration["ASPNETCORE_ENVIRONMENT"] ?? _configuration["environment"] ?? "unknown",
+            Providers = BuildProviderInfo(checks)
         };
 
         // Cache the result
@@ -267,6 +276,85 @@ public sealed class HealthCheck
         }
 
         return new ComponentCheck { Status = "healthy" };
+    }
+
+    /// <summary>
+    /// Builds provider configuration info from AIOptions, CopilotOptions, and ProviderKeys.
+    /// This tells the dashboard which AI providers are configured and what models they use.
+    /// </summary>
+    private ProviderInfo BuildProviderInfo(Dictionary<string, ComponentCheck> checks)
+    {
+        var aiStatus = checks.TryGetValue("aiApi", out var aiCheck) ? aiCheck.Status : "unknown";
+
+        // Primary AI provider
+        var primaryProvider = new ProviderDetail
+        {
+            Name = _aiOptions.Provider ?? "Unknown",
+            Model = _aiOptions.Model,
+            Configured = !string.IsNullOrEmpty(_aiOptions.ApiKey),
+            Status = aiStatus
+        };
+
+        // Copilot provider
+        var copilotDetail = new CopilotProviderDetail
+        {
+            Enabled = _copilotOptions.Enabled,
+            Mode = _copilotOptions.Mode,
+            Model = _copilotOptions.Model,
+            Configured = _copilotOptions.Enabled
+        };
+
+        // Additional providers from ProviderKeys
+        var additionalProviders = new List<ProviderDetail>();
+        var knownProviders = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "Claude", "OpenAI", "Google", "Gemini"
+        };
+
+        // Detect which of the 4 providers are configured
+        var primaryName = NormalizeProviderName(_aiOptions.Provider);
+
+        foreach (var providerName in knownProviders)
+        {
+            // Skip if this is the primary provider
+            if (string.Equals(providerName, primaryName, StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            var isConfigured = _aiOptions.ProviderKeys?.Any(kvp =>
+                string.Equals(NormalizeProviderName(kvp.Key), providerName, StringComparison.OrdinalIgnoreCase) &&
+                !string.IsNullOrEmpty(kvp.Value?.ApiKey)) ?? false;
+
+            additionalProviders.Add(new ProviderDetail
+            {
+                Name = providerName,
+                Model = null,
+                Configured = isConfigured,
+                Status = isConfigured ? "configured" : "not_configured"
+            });
+        }
+
+        return new ProviderInfo
+        {
+            Ai = primaryProvider,
+            Copilot = copilotDetail,
+            AdditionalProviders = additionalProviders.Count > 0 ? additionalProviders : null
+        };
+    }
+
+    /// <summary>
+    /// Normalizes provider names to consistent display names.
+    /// </summary>
+    private static string NormalizeProviderName(string? provider)
+    {
+        if (string.IsNullOrEmpty(provider)) return "Unknown";
+
+        return provider.ToLowerInvariant() switch
+        {
+            "claude" or "anthropic" => "Claude",
+            "openai" or "azureopenai" => "OpenAI",
+            "google" or "gemini" => "Gemini",
+            _ => provider
+        };
     }
 
     private static IActionResult ToActionResult(HealthCheckResult result)

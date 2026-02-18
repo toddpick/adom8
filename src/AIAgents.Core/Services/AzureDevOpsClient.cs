@@ -132,6 +132,48 @@ public sealed class AzureDevOpsClient : IAzureDevOpsClient, IDisposable
         await client.UpdateWorkItemAsync(patchDocument, workItemId, cancellationToken: cancellationToken);
     }
 
+    public async Task<int> CreateWorkItemAsync(
+        string title,
+        string description,
+        string state,
+        CancellationToken cancellationToken = default)
+    {
+        _logger.LogInformation("Creating work item: '{Title}' with state '{State}'", title, state);
+
+        var patchDocument = new JsonPatchDocument
+        {
+            new JsonPatchOperation
+            {
+                Operation = Operation.Add,
+                Path = "/fields/System.Title",
+                Value = title
+            },
+            new JsonPatchOperation
+            {
+                Operation = Operation.Add,
+                Path = "/fields/System.Description",
+                Value = description
+            },
+            new JsonPatchOperation
+            {
+                Operation = Operation.Add,
+                Path = "/fields/System.State",
+                Value = state
+            }
+        };
+
+        var client = await _connection.Value.GetClientAsync<WorkItemTrackingHttpClient>(cancellationToken);
+        var workItem = await client.CreateWorkItemAsync(
+            patchDocument,
+            _options.Project,
+            "User Story",
+            cancellationToken: cancellationToken);
+
+        var workItemId = workItem.Id ?? 0;
+        _logger.LogInformation("Created work item {WorkItemId}: '{Title}'", workItemId, title);
+        return workItemId;
+    }
+
     public void Dispose()
     {
         if (_connection.IsValueCreated)
