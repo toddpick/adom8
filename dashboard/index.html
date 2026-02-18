@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self' https:; img-src 'self' data: https:; font-src 'self' data:; object-src 'none'; base-uri 'self'; frame-ancestors 'none'">
     <title>ADOm8</title>
     <style>
         * {
@@ -250,6 +251,7 @@
 
         body.dark-mode .header { color: #e0e0e0; }
         body.dark-mode .header .subtitle { opacity: 0.7; }
+        body.dark-mode .header-logo { color: #64b5f6; }
 
         /* Sidebar stats inherit dark sidebar colors */
 
@@ -306,10 +308,17 @@
 
         /* Header */
         .header {
-            text-align: center;
             color: #333;
-            margin-bottom: 32px;
+            margin-bottom: 24px;
             position: relative;
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 16px;
+        }
+
+        .header-main {
+            min-width: 0;
         }
 
         .header h1 {
@@ -317,6 +326,16 @@
             font-weight: 700;
             margin-bottom: 6px;
             letter-spacing: -0.5px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .header-logo {
+            width: 28px;
+            height: 28px;
+            color: #0078d4;
+            flex-shrink: 0;
         }
 
         .header .subtitle {
@@ -324,6 +343,14 @@
             opacity: 0.7;
             font-weight: 400;
             color: #666;
+        }
+
+        .header-tools {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+            justify-content: flex-end;
         }
 
         /* Emergency Stop Button (in top-nav) */
@@ -465,7 +492,7 @@
             box-shadow: 0 8px 32px rgba(0,0,0,0.4);
             z-index: 300;
             font-size: 0.78rem;
-            white-space: nowrap;
+            white-space: normal;
             border: 1px solid #444;
         }
 
@@ -494,6 +521,7 @@
             color: #aaa;
             font-size: 0.74rem;
             line-height: 1.5;
+            white-space: pre-line;
         }
 
         .sidebar-health-poison {
@@ -611,11 +639,15 @@
             display: inline-flex;
             align-items: center;
             gap: 6px;
-            font-size: 0.78rem;
+            font-size: 0.74rem;
             font-weight: 600;
-            padding: 6px 14px;
+            padding: 5px 12px;
             border-radius: 20px;
             cursor: default;
+            max-width: 360px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
 
         .codebase-badge.initialized {
@@ -633,6 +665,34 @@
 
         .codebase-badge.not-initialized:hover {
             background: rgba(255, 152, 0, 0.2);
+        }
+
+        .codebase-scan-btn {
+            background: #fff;
+            color: #333;
+            border: 1px solid #d0d7de;
+            border-radius: 999px;
+            width: 30px;
+            height: 30px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            font-size: 0.95rem;
+            transition: all 0.2s ease;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+        }
+
+        .codebase-scan-btn:hover {
+            background: #f5f8ff;
+            border-color: #0078d4;
+            color: #0078d4;
+        }
+
+        .codebase-scan-btn.urgent {
+            border-color: #ff9800;
+            color: #b26a00;
+            background: rgba(255, 152, 0, 0.08);
         }
 
         /* Onboarding Card */
@@ -883,6 +943,24 @@
         body.dark-mode .scan-modal-recommended {
             background: rgba(76, 175, 80, 0.08);
             border-color: rgba(76, 175, 80, 0.2);
+        }
+
+        body.dark-mode .codebase-scan-btn {
+            background: #252540;
+            color: #ccc;
+            border-color: #444;
+        }
+
+        body.dark-mode .codebase-scan-btn:hover {
+            background: #2f2f4f;
+            border-color: #64b5f6;
+            color: #64b5f6;
+        }
+
+        body.dark-mode .codebase-scan-btn.urgent {
+            border-color: #ff9800;
+            color: #ffb74d;
+            background: rgba(255, 152, 0, 0.12);
         }
 
         /* Sidebar Stats */
@@ -1294,6 +1372,14 @@
             .header h1 {
                 font-size: 1.6rem;
             }
+            .header {
+                flex-direction: column;
+                gap: 10px;
+            }
+            .header-tools {
+                justify-content: flex-start;
+                width: 100%;
+            }
         }
 
         /* Current Work Item */
@@ -1453,6 +1539,10 @@
             display: flex;
             align-items: center;
             gap: 8px;
+            padding: 0;
+        }
+
+        .top-nav .refresh-controls {
             padding: 0 12px;
             border-left: 1px solid #3a3a3a;
             border-right: 1px solid #3a3a3a;
@@ -1550,6 +1640,41 @@
             animation: spin 0.8s linear infinite;
         }
 
+        .activity-header-controls {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-left: auto;
+        }
+
+        .activity-refresh-label {
+            font-size: 0.72rem;
+            color: #888;
+            text-transform: uppercase;
+            letter-spacing: 0.4px;
+            white-space: nowrap;
+        }
+
+        .sidebar-right .refresh-interval-select,
+        .sidebar-right .refresh-toggle,
+        .sidebar-right .refresh-manual {
+            background: #fff;
+            color: #555;
+            border: 1px solid #ddd;
+        }
+
+        .sidebar-right .refresh-interval-select:hover,
+        .sidebar-right .refresh-toggle:hover,
+        .sidebar-right .refresh-manual:hover {
+            background: #f8f9fb;
+            border-color: #bbb;
+        }
+
+        .sidebar-right .refresh-countdown {
+            color: #777;
+            min-width: 30px;
+        }
+
         @keyframes spin {
             from { transform: rotate(0deg); }
             to { transform: rotate(360deg); }
@@ -1582,6 +1707,25 @@
             background: #ff9800;
             border-color: #f57c00;
             color: #fff;
+        }
+
+        body.dark-mode .sidebar-right .refresh-interval-select,
+        body.dark-mode .sidebar-right .refresh-toggle,
+        body.dark-mode .sidebar-right .refresh-manual {
+            background: #252540;
+            color: #bbb;
+            border-color: #444;
+        }
+
+        body.dark-mode .sidebar-right .refresh-interval-select:hover,
+        body.dark-mode .sidebar-right .refresh-toggle:hover,
+        body.dark-mode .sidebar-right .refresh-manual:hover {
+            background: #2f2f4f;
+            border-color: #666;
+        }
+
+        body.dark-mode .sidebar-right .refresh-countdown {
+            color: #aaa;
         }
 
         /* Toast Notifications */
@@ -2751,43 +2895,30 @@
 
         <span class="nav-spacer"></span>
         
-        <!-- Refresh Controls -->
-        <div class="refresh-controls">
-            <select class="refresh-interval-select" id="refresh-interval" onchange="handleIntervalChange()" title="Auto-refresh interval">
-                <option value="5000">5s</option>
-                <option value="10000">10s</option>
-                <option value="30000">30s</option>
-                <option value="60000">60s</option>
-            </select>
-            <button class="refresh-toggle" id="refresh-toggle" onclick="handleRefreshToggle()" title="Pause/Resume auto-refresh">⏸️</button>
-            <span class="refresh-countdown" id="refresh-countdown">0s</span>
-            <button class="refresh-manual" id="refresh-manual" onclick="handleManualRefresh()" title="Manual refresh">🔄</button>
-        </div>
-        
-        <button class="reset-btn" id="reset-btn" onclick="handleReset()" title="Clear all activity data and reset dashboard">
+        <button class="reset-btn" id="reset-btn" onclick="handleReset()" title="Clear all activity data and reset dashboard" aria-label="Reset dashboard data">
             🔄 <span id="reset-btn-text">RESET</span>
         </button>
-        <button class="abort-btn" id="abort-btn" onclick="handleAbort()" title="Emergency stop — clears all pending agent tasks">
+        <button class="abort-btn" id="abort-btn" onclick="handleAbort()" title="Emergency stop — clears all pending agent tasks" aria-label="Emergency stop pipeline">
             🛑 <span id="abort-btn-text">ABORT</span>
             <span class="queue-badge" id="abort-queue-badge" style="display:none;">0</span>
         </button>
         <div class="notification-bell-wrapper">
-            <button class="notification-bell" id="notification-bell" onclick="toggleNotificationDropdown()" title="Notifications">
+            <button class="notification-bell" id="notification-bell" onclick="toggleNotificationDropdown()" title="Notifications" aria-label="Open notifications">
                 🔔
                 <span class="unread-badge" id="unread-badge" style="display:none;">0</span>
             </button>
             <div class="notification-dropdown" id="notification-dropdown">
                 <div class="notification-dropdown-header">
                     📬 Notifications
-                    <button class="clear-all-btn" onclick="clearAllNotifications()">Clear All</button>
+                    <button class="clear-all-btn" onclick="clearAllNotifications()" aria-label="Clear all notifications">Clear All</button>
                 </div>
                 <div class="notification-dropdown-body" id="notification-dropdown-body">
                     <div class="notification-empty">No notifications yet</div>
                 </div>
             </div>
         </div>
-        <button class="settings-gear" id="settings-gear" onclick="openSettingsModal()" title="Notification Settings">⚙️</button>
-        <button class="dark-toggle" id="dark-toggle" onclick="toggleDarkMode()" title="Toggle dark mode">🌙</button>
+        <button class="settings-gear" id="settings-gear" onclick="openSettingsModal()" title="Notification Settings" aria-label="Open notification settings">⚙️</button>
+        <button class="dark-toggle" id="dark-toggle" onclick="toggleDarkMode()" title="Toggle dark mode" aria-label="Toggle dark mode">🌙</button>
     </div>
 
     <div class="app-layout">
@@ -2888,8 +3019,26 @@
             <div class="container">
                 <!-- Header -->
                 <div class="header">
-                    <h1>⚡ ADOm8</h1>
-                    <div class="subtitle">Real-time monitoring of autonomous AI agents processing Azure DevOps work items</div>
+                    <div class="header-main">
+                        <h1>
+                            <svg class="header-logo" viewBox="0 0 18 18" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                                <circle cx="9" cy="9" r="7.5" fill="none" stroke="currentColor" stroke-width="1.5"/>
+                                <path d="M6 6.5 Q7 5, 9 5.5 Q11 6, 12 7.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                                <circle cx="9" cy="9" r="2.5" fill="none" stroke="currentColor" stroke-width="1.5"/>
+                                <path d="M6 11.5 Q7 13, 9 12.5 Q11 12, 12 10.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                                <circle cx="13" cy="9" r="1" fill="currentColor"/>
+                                <circle cx="5" cy="9" r="1" fill="currentColor"/>
+                            </svg>
+                            ADOm8
+                        </h1>
+                        <div class="subtitle">Real-time monitoring of autonomous AI agents processing Azure DevOps work items</div>
+                    </div>
+                    <div class="header-tools">
+                        <span class="codebase-badge not-initialized" id="codebase-badge" onclick="openScanModal()" title="Click to initialize codebase documentation" role="button" tabindex="0" aria-label="Initialize codebase documentation">
+                            ⚠ Codebase Not Initialized
+                        </span>
+                        <button class="codebase-scan-btn" id="btn-scan-codebase" onclick="openScanModal()" title="Initialize codebase documentation" aria-label="Initialize or re-analyze codebase">🧠</button>
+                    </div>
                 </div>
 
                 <!-- AI Provider Status Bar -->
@@ -2921,31 +3070,6 @@
                             <div class="ai-provider-model" id="provider-copilot-model">Not Configured</div>
                         </div>
                         <span class="ai-provider-status-dot not-configured" id="provider-copilot-dot"></span>
-                    </div>
-                    <span class="codebase-badge not-initialized" id="codebase-badge" onclick="openScanModal()" title="Click to initialize codebase documentation">
-                        ⚠ Codebase Not Initialized
-                    </span>
-                </div>
-
-                <!-- Codebase Onboarding Card -->
-                <div class="onboarding-card hidden" id="onboarding-card">
-                    <div class="onboarding-card-header">
-                        <span class="onboarding-card-icon">🧠</span>
-                        <span class="onboarding-card-title">Initialize Codebase Intelligence</span>
-                    </div>
-                    <div class="onboarding-card-desc">
-                        Scan your repository and generate AI-optimized documentation. This creates architecture diagrams, 
-                        coding standards, pattern guides, and feature documentation that all AI agents use for context 
-                        when processing your work items.
-                    </div>
-                    <div class="onboarding-card-actions">
-                        <button class="btn-scan" id="btn-scan-codebase" onclick="openScanModal()">
-                            🔍 Scan &amp; Document Codebase
-                        </button>
-                        <div class="onboarding-progress" id="onboarding-progress">
-                            <div class="onboarding-spinner"></div>
-                            <span id="onboarding-progress-text">Scanning in progress...</span>
-                        </div>
                     </div>
                 </div>
 
@@ -2979,9 +3103,9 @@
                 <div class="search-filter-controls">
                     <div class="search-box">
                         <span class="search-icon">🔍</span>
-                        <input type="text" class="search-input" id="story-search" 
+                           <input type="text" class="search-input" id="story-search" 
                                placeholder="Search by work item ID or title..." 
-                               oninput="handleSearchFilter()">
+                               oninput="handleSearchFilter()" aria-label="Search stories">
                     </div>
                     <div class="filter-chips">
                         <button class="filter-chip active" data-filter="all" onclick="handleStatusFilter('all')">All</button>
@@ -3002,7 +3126,23 @@
 
         <!-- Right Sidebar: Activity Feed -->
         <aside class="sidebar-right">
-            <div class="sidebar-header">📡 Live Activity</div>
+            <div class="sidebar-header">
+                <span>📡 Live Activity</span>
+                <div class="activity-header-controls">
+                    <span class="activity-refresh-label">Refresh</span>
+                    <div class="refresh-controls">
+                        <select class="refresh-interval-select" id="refresh-interval" onchange="handleIntervalChange()" title="Auto-refresh interval" aria-label="Auto refresh interval">
+                            <option value="5000">5s</option>
+                            <option value="10000">10s</option>
+                            <option value="30000">30s</option>
+                            <option value="60000">60s</option>
+                        </select>
+                        <button class="refresh-toggle" id="refresh-toggle" onclick="handleRefreshToggle()" title="Pause/Resume auto-refresh" aria-label="Pause or resume auto refresh">⏸️</button>
+                        <span class="refresh-countdown" id="refresh-countdown">0s</span>
+                        <button class="refresh-manual" id="refresh-manual" onclick="handleManualRefresh()" title="Manual refresh" aria-label="Refresh now">🔄</button>
+                    </div>
+                </div>
+            </div>
             <div class="activity-list" id="activity-feed">
                 <!-- Activity items rendered by JS -->
             </div>
@@ -3032,7 +3172,7 @@
                         <div class="setting-description">Show slide-in notifications on agent updates</div>
                     </div>
                     <label class="toggle-switch">
-                        <input type="checkbox" id="setting-toast" onchange="saveSettings()">
+                        <input type="checkbox" id="setting-toast" onchange="saveSettings()" aria-label="Enable toast notifications">
                         <span class="toggle-slider"></span>
                     </label>
                 </div>
@@ -3042,7 +3182,7 @@
                         <div class="setting-description">Desktop alerts when tab is not focused</div>
                     </div>
                     <label class="toggle-switch">
-                        <input type="checkbox" id="setting-browser" onchange="saveSettings()">
+                        <input type="checkbox" id="setting-browser" onchange="saveSettings()" aria-label="Enable browser notifications">
                         <span class="toggle-slider"></span>
                     </label>
                 </div>
@@ -3052,13 +3192,13 @@
                         <div class="setting-description">Play sounds on agent completion/failure</div>
                     </div>
                     <label class="toggle-switch">
-                        <input type="checkbox" id="setting-sound" onchange="saveSettings()">
+                        <input type="checkbox" id="setting-sound" onchange="saveSettings()" aria-label="Enable sound alerts">
                         <span class="toggle-slider"></span>
                     </label>
                 </div>
                 <div class="volume-control">
                     <div class="setting-label">Volume</div>
-                    <input type="range" min="0" max="100" value="50" class="volume-slider" id="volume-slider" oninput="saveSettings()">
+                    <input type="range" min="0" max="100" value="50" class="volume-slider" id="volume-slider" oninput="saveSettings()" aria-label="Notification volume">
                 </div>
             </div>
         </div>
@@ -3086,6 +3226,39 @@
     </div>
 
     <script>
+        function escapeHtml(value) {
+            const str = String(value ?? '');
+            return str.replace(/[&<>"'`]/g, (char) => ({
+                '&': '&amp;',
+                '<': '&lt;',
+                '>': '&gt;',
+                '"': '&quot;',
+                "'": '&#39;',
+                '`': '&#96;'
+            }[char] || char));
+        }
+
+        function safeText(value, fallback = '') {
+            const text = String(value ?? '').trim();
+            return text.length ? text : fallback;
+        }
+
+        function safeNumber(value, fallback = 0) {
+            const parsed = Number(value);
+            return Number.isFinite(parsed) ? parsed : fallback;
+        }
+
+        function safeInteger(value, fallback = 0) {
+            const parsed = Number.parseInt(value, 10);
+            return Number.isFinite(parsed) ? parsed : fallback;
+        }
+
+        function safeStatus(value) {
+            const allowed = new Set(['pending', 'in_progress', 'completed', 'failed', 'awaiting_code', 'skipped', 'active', 'copilot_delegated']);
+            const normalized = String(value ?? 'pending').toLowerCase();
+            return allowed.has(normalized) ? normalized : 'pending';
+        }
+
         // ========== Dark Mode ==========
         function toggleDarkMode() {
             const body = document.body;
@@ -3359,6 +3532,7 @@
 
             renderDropdown() {
                 const body = document.getElementById('notification-dropdown-body');
+                if (!body) return;
                 
                 if (this.notifications.length === 0) {
                     body.innerHTML = '<div class="notification-empty">No notifications yet</div>';
@@ -3369,14 +3543,18 @@
                     const date = new Date(n.timestamp);
                     const timeAgo = this.getTimeAgo(date);
                     const unreadClass = n.read ? '' : 'unread';
+                    const emoji = escapeHtml(safeText(n.emoji, '📢'));
+                    const title = escapeHtml(safeText(n.title, 'Notification'));
+                    const message = escapeHtml(safeText(n.message, ''));
+                    const safeTimeAgo = escapeHtml(timeAgo);
 
                     return `
                         <div class="notification-item ${unreadClass}">
-                            <div class="notification-item-emoji">${n.emoji}</div>
+                            <div class="notification-item-emoji">${emoji}</div>
                             <div class="notification-item-content">
-                                <div class="notification-item-title">${n.title}</div>
-                                <div class="notification-item-message">${n.message}</div>
-                                <div class="notification-item-time">${timeAgo}</div>
+                                <div class="notification-item-title">${title}</div>
+                                <div class="notification-item-message">${message}</div>
+                                <div class="notification-item-time">${safeTimeAgo}</div>
                             </div>
                         </div>
                     `;
@@ -3964,7 +4142,7 @@
          * @param {Array} stories - Array of story objects with agent status, timings, and token usage
          */
         function updateStoryAgents(stories) {
-            allStories = stories;
+            allStories = Array.isArray(stories) ? stories : [];
             
             // Restore filter state on first render
             if (!window.filterStateRestored) {
@@ -3976,32 +4154,40 @@
         }
 
         function renderFilteredStories() {
-            const container = document.getElementById('agents-container');
-            container.innerHTML = '';
-            
-            // Apply filters
-            let filtered = allStories.filter(story => {
-                // Search filter
-                const searchMatch = currentSearchText === '' || 
-                    story.workItemId.toString().includes(currentSearchText) ||
-                    (story.title || '').toLowerCase().includes(currentSearchText.toLowerCase());
+            try {
+                const container = document.getElementById('agents-container');
+                const resultCount = document.getElementById('filter-result-count');
+                if (!container || !resultCount) return;
+                container.innerHTML = '';
                 
-                // Status filter
-                let statusMatch = true;
-                if (currentStatusFilter !== 'all') {
-                    const storyStatus = getStoryStatus(story);
-                    statusMatch = storyStatus === currentStatusFilter;
-                }
-                
-                return searchMatch && statusMatch;
-            });
+                // Apply filters
+                let filtered = allStories.filter(story => {
+                    // Search filter
+                    const workItemId = safeInteger(story?.workItemId, 0).toString();
+                    const title = safeText(story?.title, '').toLowerCase();
+                    const searchMatch = currentSearchText === '' || 
+                        workItemId.includes(currentSearchText) ||
+                        title.includes(currentSearchText.toLowerCase());
+                    
+                    // Status filter
+                    let statusMatch = true;
+                    if (currentStatusFilter !== 'all') {
+                        const storyStatus = getStoryStatus(story);
+                        statusMatch = storyStatus === currentStatusFilter;
+                    }
+                    
+                    return searchMatch && statusMatch;
+                });
 
-            // Update result count
-            document.getElementById('filter-result-count').textContent = 
-                `Showing ${filtered.length} of ${allStories.length} ${allStories.length === 1 ? 'story' : 'stories'}`;
+                // Update result count
+                resultCount.textContent = 
+                    `Showing ${filtered.length} of ${allStories.length} ${allStories.length === 1 ? 'story' : 'stories'}`;
 
-            // Render story cards
-            filtered.forEach(story => renderStoryCard(story, container));
+                // Render story cards
+                filtered.forEach(story => renderStoryCard(story, container));
+            } catch (error) {
+                console.error('Failed to render filtered stories:', error);
+            }
         }
 
         function hasCopilotUsage(story) {
@@ -4018,18 +4204,22 @@
         }
 
         function getStoryStatus(story) {
+            if (!story || !story.agents) {
+                return 'pending';
+            }
+
             const agentNames = ['Planning', 'Coding', 'Testing', 'Review', 'Documentation', 'Deployment'];
             
             // Check for any failures
             for (const name of agentNames) {
-                if (story.agents[name] === 'failed') {
+                if (story.agents?.[name] === 'failed') {
                     return 'failed';
                 }
             }
             
             // Check for any in-progress or copilot-delegated
             for (const name of agentNames) {
-                const status = story.agents[name];
+                const status = story.agents?.[name];
                 const agentData = story.agentDetails?.[name];
                 const isCopilotDelegated = agentData?.additionalData?.mode === 'copilot-delegated';
                 if (status === 'in_progress' || status === 'awaiting_code' || isCopilotDelegated) {
@@ -4039,7 +4229,7 @@
             
             // Check if all completed (skipped counts as completed)
             const allCompleted = agentNames.every(name => {
-                const s = story.agents[name];
+                const s = story.agents?.[name];
                 return s === 'completed' || s === 'skipped';
             });
             if (allCompleted) {
@@ -4066,6 +4256,11 @@
             storyCard.className = `story-card ${isExpanded ? 'expanded' : ''}`;
             storyCard.dataset.storyId = story.workItemId;
             storyCard.dataset.status = storyStatus;
+
+            const safeWorkItemId = safeInteger(story.workItemId, 0);
+            const safeTitle = escapeHtml(safeText(story.title, 'Untitled Story'));
+            const safeCurrentAgent = escapeHtml(safeText(story.currentAgent, 'Ready'));
+            const safeProgress = Math.max(0, Math.min(100, safeInteger(progress, 0)));
             
             // Story header with summary
             const header = document.createElement('div');
@@ -4084,20 +4279,20 @@
                 <span class="story-chevron">▶</span>
                 <span class="story-status-dot ${storyStatus}"></span>
                 <div class="story-header-info">
-                    <div class="story-header-title">US-${story.workItemId}: ${story.title || 'Untitled Story'}</div>
+                    <div class="story-header-title">US-${safeWorkItemId}: ${safeTitle}</div>
                     <div class="story-header-meta">
-                        <span>${story.currentAgent || 'Ready'}</span>
+                        <span>${safeCurrentAgent}</span>
                         ${costDisplay}
                         ${story.tokenUsage ? `<span>🎯 ${story.tokenUsage.totalTokens.toLocaleString()} tokens</span>` : ''}
                     </div>
                 </div>
                 <div class="story-header-progress">
                     <div class="story-progress-bar-wrapper">
-                        <div class="story-progress-fill ${getProgressColorClass(progress)} ${storyStatus === 'in-progress' ? 'in-progress' : ''}" 
-                             data-progress="${progress}" 
-                             style="width: ${progress}%"></div>
+                        <div class="story-progress-fill ${getProgressColorClass(safeProgress)} ${storyStatus === 'in-progress' ? 'in-progress' : ''}" 
+                             data-progress="${safeProgress}" 
+                             style="width: ${safeProgress}%"></div>
                     </div>
-                    <span class="story-progress-text">${progress}%</span>
+                    <span class="story-progress-text">${safeProgress}%</span>
                 </div>
                 <span class="story-status-badge ${storyStatus}">${formatStoryStatusText(storyStatus)}</span>
             `;
@@ -4141,7 +4336,7 @@
                 const agentData = story.agentDetails?.[name];
                 const isCopilotDelegated = agentData?.additionalData?.mode === 'copilot-delegated';
                 const isCopilotCompleted = agentData?.additionalData?.mode === 'copilot';
-                const cardStatus = isCopilotDelegated ? 'copilot_delegated' : status;
+                const cardStatus = isCopilotDelegated ? 'copilot_delegated' : safeStatus(status);
                 
                 // Compute duration display
                 let durationStr = '—';
@@ -4159,10 +4354,14 @@
                 let metricsHtml = '';
                 if (isCopilotCompleted && agentData?.additionalData) {
                     const ad = agentData.additionalData;
+                    const safeFilesChanged = escapeHtml(safeText(ad.filesChanged, '—'));
+                    const safeLinesAdded = safeInteger(ad.linesAdded, 0);
+                    const safeLinesDeleted = safeInteger(ad.linesDeleted, 0);
+                    const safeDurationMinutes = safeNumber(ad.durationMinutes, 0);
                     metricsHtml = `
-                        <span>📁 Files: ${ad.filesChanged || '—'}</span>
-                        <span>📝 +${ad.linesAdded || 0}/-${ad.linesDeleted || 0} lines</span>
-                        <span>⏱️ Duration: ${ad.durationMinutes ? ad.durationMinutes.toFixed(1) + 'm' : '—'}</span>
+                        <span>📁 Files: ${safeFilesChanged}</span>
+                        <span>📝 +${safeLinesAdded}/-${safeLinesDeleted} lines</span>
+                        <span>⏱️ Duration: ${safeDurationMinutes > 0 ? safeDurationMinutes.toFixed(1) + 'm' : '—'}</span>
                         <span>💰 Cost: 1 premium credit</span>
                         <span>🤖 Mode: Copilot</span>
                     `;
@@ -4183,9 +4382,9 @@
                 }
                 
                 const agentAssignee = agentData?.additionalData?.agent || 'copilot';
-                const agentDisplayName = agentAssignee.charAt(0).toUpperCase() + agentAssignee.slice(1);
-                const issueNum = agentData?.additionalData?.issueNumber;
-                const githubIssueUrl = issueNum ? `https://github.com/toddpick/ADO-Agent/issues/${issueNum}` : null;
+                const agentDisplayName = escapeHtml(safeText(agentAssignee, 'copilot').replace(/^./, (char) => char.toUpperCase()));
+                const issueNum = safeInteger(agentData?.additionalData?.issueNumber, 0);
+                const githubIssueUrl = issueNum > 0 ? `https://github.com/toddpick/ADO-Agent/issues/${issueNum}` : null;
                 
                 const detailItem = document.createElement('div');
                 detailItem.className = `agent-detail-item ${cardStatus}`;
@@ -4209,7 +4408,7 @@
                     ` : ''}
                     ${status === 'awaiting_code' ? `
                         <div style="margin-top: 8px; display: flex; align-items: center; gap: 10px;">
-                            <button class="resume-btn" onclick="resumePipeline(${story.workItemId}, this)">▶ Resume Pipeline</button>
+                            <button class="resume-btn" onclick="resumePipeline(${safeWorkItemId}, this)">▶ Resume Pipeline</button>
                             <span style="font-size: 0.75rem; color: #888;">Code locally with Copilot/Codex, then resume</span>
                         </div>
                     ` : ''}
@@ -4230,17 +4429,18 @@
                 const costDisplay = (usedCopilot && story.tokenUsage.totalCost === 0)
                     ? '✦ 1 Premium Request'
                     : `$${story.tokenUsage.totalCost.toFixed(2)}`;
+                const safeComplexity = escapeHtml(safeText(story.tokenUsage.complexity, 'Unknown'));
                 
                 summary.innerHTML = `
                     <div class="agent-detail-header">
                         <span style="font-size: 1.2rem;">📊</span>
                         <span class="agent-detail-name">Token Summary</span>
-                        <span class="agent-detail-badge completed">${story.tokenUsage.complexity}</span>
+                        <span class="agent-detail-badge completed">${safeComplexity}</span>
                     </div>
                     <div class="agent-detail-metrics">
                         <span>🎯 Total: ${story.tokenUsage.totalTokens.toLocaleString()} tokens</span>
                         <span>💰 Cost: ${costDisplay}</span>
-                        <span>📊 Complexity: ${story.tokenUsage.complexity}</span>
+                        <span>📊 Complexity: ${safeComplexity}</span>
                     </div>
                 `;
                 content.appendChild(summary);
@@ -4340,19 +4540,21 @@
 
         function updateAgents(agents) {
             const container = document.getElementById('agents-container');
+            if (!container || !Array.isArray(agents)) return;
             container.innerHTML = '';
 
             agents.forEach(agent => {
                 const progress = getProgress(agent);
                 const card = document.createElement('div');
-                card.className = `agent-card ${agent.status || 'pending'}`;
+                card.className = `agent-card ${safeStatus(agent.status)}`;
                 const tokenStr = agent.tokens ? agent.tokens.toLocaleString() : '—';
                 const costStr = agent.cost ? '$' + agent.cost.toFixed(2) : '—';
+                const safeAgentName = escapeHtml(safeText(agent.name, 'Unknown Agent'));
                 card.innerHTML = `
                     <div class="agent-header">
                         <span class="agent-emoji">${agent.emoji || '⚡'}</span>
-                        <span class="agent-name">${agent.name}</span>
-                        <span class="status-badge ${agent.status || 'pending'}">${formatStatusText(agent.status, agent.name)}</span>
+                        <span class="agent-name">${safeAgentName}</span>
+                        <span class="status-badge ${safeStatus(agent.status)}">${formatStatusText(agent.status, agent.name)}</span>
                     </div>
                     <div class="progress-bar">
                         <div class="progress-fill" style="width: ${progress}%"></div>
@@ -4370,15 +4572,18 @@
 
         function updateActivity(activities) {
             const feed = document.getElementById('activity-feed');
+            if (!feed || !Array.isArray(activities)) return;
             feed.innerHTML = '';
 
             activities.forEach(item => {
                 const el = document.createElement('div');
                 el.className = 'activity-item';
+                const safeMessage = escapeHtml(safeText(item.message, ''));
+                const safeTime = escapeHtml(safeText(item.time, ''));
                 el.innerHTML = `
                     <span class="activity-emoji">${item.emoji || '📌'}</span>
-                    <span class="activity-text">${item.message}</span>
-                    <span class="activity-time">${item.time || ''}</span>
+                    <span class="activity-text">${safeMessage}</span>
+                    <span class="activity-time">${safeTime}</span>
                 `;
                 feed.appendChild(el);
             });
@@ -4435,16 +4640,16 @@
                         : checkStatus === 'degraded' ? '#ff9800'
                         : checkStatus === 'unhealthy' ? '#f44336' : '#999';
 
-                    let detail = '';
-                    if (check.responseTime) detail += '⏱ ' + check.responseTime;
-                    if (check.message) detail += (detail ? '<br>' : '') + check.message;
+                    const detailLines = [];
+                    if (check.responseTime) detailLines.push('⏱ ' + check.responseTime);
+                    if (check.message) detailLines.push(String(check.message));
                     if (check.missingVars && check.missingVars.length > 0) {
-                        detail += (detail ? '<br>' : '') + '⚠ Missing: ' + check.missingVars.join(', ');
+                        detailLines.push('⚠ Missing: ' + check.missingVars.join(', '));
                     }
                     if (check.messageCount !== undefined && check.messageCount !== null) {
-                        detail += (detail ? '<br>' : '') + '📬 ' + check.messageCount + ' queued';
+                        detailLines.push('📬 ' + check.messageCount + ' queued');
                     }
-                    tooltipDetail.innerHTML = detail || 'No details';
+                    tooltipDetail.textContent = detailLines.length ? detailLines.join('\n') : 'No details';
 
                     // Poison queue
                     if (key === 'storageQueue' && check.poisonMessageCount !== undefined) {
@@ -4532,35 +4737,41 @@
         // ========== Codebase Intelligence ==========
         let codebaseInitialized = false;
 
+        function formatScanTimestamp(value) {
+            if (!value) return null;
+            const date = new Date(value);
+            if (Number.isNaN(date.getTime())) return null;
+            return date.toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+        }
+
         async function checkCodebaseIntelligence() {
             try {
                 const response = await fetch(CODEBASE_INTEL_URL);
                 const data = await response.json();
                 const badge = document.getElementById('codebase-badge');
-                const onboardingCard = document.getElementById('onboarding-card');
+                const scanBtn = document.getElementById('btn-scan-codebase');
 
                 if (data.status === 'up_to_date') {
                     codebaseInitialized = true;
+                    const lastScanText = formatScanTimestamp(data.lastAnalysis);
                     if (badge) {
                         badge.className = 'codebase-badge initialized';
-                        badge.textContent = '✓ Codebase Initialized';
-                        badge.onclick = null;
-                        badge.style.cursor = 'default';
+                        badge.textContent = lastScanText
+                            ? `✓ Codebase Initialized · Last scan ${lastScanText}`
+                            : '✓ Codebase Initialized';
+                        badge.onclick = openScanModal;
+                        badge.style.cursor = 'pointer';
                         badge.title = data.stats
                             ? `Last scan: ${new Date(data.lastAnalysis).toLocaleDateString()} · ${data.stats.filesAnalyzed} files · ${data.stats.featuresDocumented} features`
                             : 'Codebase documentation is up to date';
                     }
-                    if (onboardingCard) onboardingCard.classList.add('hidden');
 
-                    // Show re-analyze if stale
-                    if (data.recommendReanalysis && onboardingCard) {
-                        onboardingCard.classList.remove('hidden');
-                        const titleEl = onboardingCard.querySelector('.onboarding-card-title');
-                        if (titleEl) titleEl.textContent = 'Re-analyze Codebase';
-                        const descEl = onboardingCard.querySelector('.onboarding-card-desc');
-                        if (descEl) descEl.textContent = `Last scan was ${new Date(data.lastAnalysis).toLocaleDateString()}. Consider re-analyzing to capture recent changes.`;
-                        const btnEl = document.getElementById('btn-scan-codebase');
-                        if (btnEl) btnEl.textContent = '🔄 Re-analyze Codebase';
+                    if (scanBtn) {
+                        scanBtn.textContent = '🔄';
+                        scanBtn.title = data.recommendReanalysis
+                            ? 'Re-analyze codebase (recommended)'
+                            : 'Re-analyze codebase';
+                        scanBtn.classList.toggle('urgent', !!data.recommendReanalysis);
                     }
                 } else {
                     codebaseInitialized = false;
@@ -4570,7 +4781,11 @@
                         badge.onclick = openScanModal;
                         badge.title = 'Click to initialize codebase documentation';
                     }
-                    if (onboardingCard) onboardingCard.classList.remove('hidden');
+                    if (scanBtn) {
+                        scanBtn.textContent = '🧠';
+                        scanBtn.title = 'Initialize codebase documentation';
+                        scanBtn.classList.add('urgent');
+                    }
                 }
             } catch (err) {
                 console.warn('Codebase intelligence check failed:', err.message);
@@ -4610,7 +4825,7 @@
                 confirmBtn.textContent = 'Proceed';
                 confirmBtn.className = 'btn-scan';
             } else {
-                const providerName = cachedProviders?.ai?.name || 'your AI API';
+                const providerName = escapeHtml(safeText(cachedProviders?.ai?.name, 'your AI API'));
                 content.innerHTML = `
                     <div class="scan-modal-warning">
                         ⚠️ <strong>Warning:</strong> GitHub Copilot Coding Agent is not configured. 
@@ -4658,29 +4873,21 @@
                 const data = await response.json();
 
                 closeScanModal();
-
-                // Update onboarding card to show progress
-                const onboardingCard = document.getElementById('onboarding-card');
                 const btnScan = document.getElementById('btn-scan-codebase');
-                const progressEl = document.getElementById('onboarding-progress');
-                const progressText = document.getElementById('onboarding-progress-text');
-
-                if (btnScan) btnScan.style.display = 'none';
-                if (progressEl) progressEl.classList.add('show');
-
-                if (data.path === 'copilot' && data.workItemId) {
-                    if (progressText) progressText.textContent = `Story #${data.workItemId} created — processing through pipeline...`;
-                } else {
-                    if (progressText) progressText.textContent = 'Scanning in progress (est. 10-15 min)...';
-                }
 
                 // Update badge
                 const badge = document.getElementById('codebase-badge');
                 if (badge) {
                     badge.className = 'codebase-badge not-initialized';
-                    badge.textContent = '⏳ Scanning...';
+                    badge.textContent = '⏳ Scanning codebase…';
                     badge.style.cursor = 'default';
-                    badge.onclick = null;
+                    badge.onclick = openScanModal;
+                }
+
+                if (btnScan) {
+                    btnScan.textContent = '⏳';
+                    btnScan.title = 'Codebase analysis in progress';
+                    btnScan.classList.remove('urgent');
                 }
 
                 // Show toast
@@ -4800,6 +5007,7 @@
         function updateQueueSidebar(tasks) {
             const container = document.getElementById('queue-container');
             const countBadge = document.getElementById('queue-count');
+            if (!container || !countBadge) return;
 
             if (!tasks || tasks.length === 0) {
                 container.innerHTML = '<div class="queue-empty">No stories in queue</div>';
@@ -4817,10 +5025,12 @@
 
                 const agentEmoji = getAgentEmoji(task.agentType) || '⚡';
                 const waitTime = task.enqueuedAt ? getTimeAgo(new Date(task.enqueuedAt)) : '';
+                const safeAgentType = escapeHtml(safeText(task.agentType, 'Unknown'));
+                const safeWorkItemId = safeInteger(task.workItemId, 0);
 
                 el.innerHTML = `
-                    <div class="queue-item-id">${agentEmoji} US-${task.workItemId}</div>
-                    <div class="queue-item-agent">${task.agentType} Agent</div>
+                    <div class="queue-item-id">${agentEmoji} US-${safeWorkItemId}</div>
+                    <div class="queue-item-agent">${safeAgentType} Agent</div>
                     <div class="queue-item-time">${waitTime ? 'Waiting ' + waitTime : 'Queued'}</div>
                 `;
                 container.appendChild(el);
@@ -4901,6 +5111,16 @@
             const intervalSelect = document.getElementById('refresh-interval');
             if (intervalSelect) {
                 intervalSelect.value = refreshManager.interval.toString();
+            }
+
+            const codebaseBadge = document.getElementById('codebase-badge');
+            if (codebaseBadge) {
+                codebaseBadge.addEventListener('keydown', (event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault();
+                        openScanModal();
+                    }
+                });
             }
             refreshManager.updateUI();
 
