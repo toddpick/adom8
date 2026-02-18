@@ -3999,6 +3999,19 @@
             filtered.forEach(story => renderStoryCard(story, container));
         }
 
+        function hasCopilotUsage(story) {
+            // Check if any agent in the story used Copilot delegation
+            const agentNames = ['Planning', 'Coding', 'Testing', 'Review', 'Documentation', 'Deployment'];
+            for (const name of agentNames) {
+                const agentData = story.agentDetails?.[name];
+                const mode = agentData?.additionalData?.mode;
+                if (mode === 'copilot-delegated' || mode === 'copilot') {
+                    return true;
+                }
+            }
+            return false;
+        }
+
         function getStoryStatus(story) {
             const agentNames = ['Planning', 'Coding', 'Testing', 'Review', 'Documentation', 'Deployment'];
             
@@ -4054,6 +4067,14 @@
             header.className = 'story-card-header';
             header.onclick = () => toggleStoryCard(story.workItemId);
             
+            // Check if Copilot was used for cost display
+            const usedCopilot = hasCopilotUsage(story);
+            const costDisplay = story.tokenUsage 
+                ? (usedCopilot && story.tokenUsage.totalCost === 0 
+                    ? `<span>✦ 1 Premium Request</span>` 
+                    : `<span>💰 $${story.tokenUsage.totalCost.toFixed(2)}</span>`)
+                : '';
+            
             header.innerHTML = `
                 <span class="story-chevron">▶</span>
                 <span class="story-status-dot ${storyStatus}"></span>
@@ -4061,7 +4082,7 @@
                     <div class="story-header-title">US-${story.workItemId}: ${story.title || 'Untitled Story'}</div>
                     <div class="story-header-meta">
                         <span>${story.currentAgent || 'Ready'}</span>
-                        ${story.tokenUsage ? `<span>💰 $${story.tokenUsage.totalCost.toFixed(2)}</span>` : ''}
+                        ${costDisplay}
                         ${story.tokenUsage ? `<span>🎯 ${story.tokenUsage.totalTokens.toLocaleString()} tokens</span>` : ''}
                     </div>
                 </div>
@@ -4198,6 +4219,13 @@
                 const summary = document.createElement('div');
                 summary.className = 'agent-detail-item completed';
                 summary.style.borderLeftColor = '#e67e22';
+                
+                // Check if Copilot was used for cost display
+                const usedCopilot = hasCopilotUsage(story);
+                const costDisplay = (usedCopilot && story.tokenUsage.totalCost === 0)
+                    ? '✦ 1 Premium Request'
+                    : `$${story.tokenUsage.totalCost.toFixed(2)}`;
+                
                 summary.innerHTML = `
                     <div class="agent-detail-header">
                         <span style="font-size: 1.2rem;">📊</span>
@@ -4206,7 +4234,7 @@
                     </div>
                     <div class="agent-detail-metrics">
                         <span>🎯 Total: ${story.tokenUsage.totalTokens.toLocaleString()} tokens</span>
-                        <span>💰 Cost: $${story.tokenUsage.totalCost.toFixed(2)}</span>
+                        <span>💰 Cost: ${costDisplay}</span>
                         <span>📊 Complexity: ${story.tokenUsage.complexity}</span>
                     </div>
                 `;
