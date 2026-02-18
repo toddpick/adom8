@@ -27,8 +27,8 @@ public sealed record PlanningResult
 
 /// <summary>
 /// Triage assessment that determines whether a story is ready for coding.
-/// The Planning agent evaluates 6 dimensions: Completeness, Complexity,
-/// Ambiguity, Risk, Feasibility, and Content Quality.
+/// The Planning agent evaluates 7 dimensions: Completeness, Complexity,
+/// Ambiguity, Risk, Feasibility, Content Quality, and Unverified Assumptions.
 /// </summary>
 public sealed record PlanningReadiness
 {
