@@ -3400,6 +3400,22 @@
         }
 
         // ========== Update Functions ==========
+        /**
+         * Maps autonomy level number to text description
+         * @param {number} level - Autonomy level (1-5)
+         * @returns {string} Formatted autonomy text
+         */
+        function getAutonomyText(level) {
+            const autonomyMap = {
+                1: '1- Plan Only',
+                2: '2- Code Only',
+                3: '3- Review & Pause',
+                4: '4- Auto-Merge',
+                5: '5- Full Autonomy'
+            };
+            return autonomyMap[level] || level?.toString() || '—';
+        }
+
         function updateWorkItem(data) {
             const titleEl = document.getElementById('wi-title');
             const stateEl = document.getElementById('wi-state');
@@ -3412,7 +3428,7 @@
                 titleEl.textContent = `US-${wi.id}: ${wi.title}`;
                 titleEl.classList.remove('empty');
                 stateEl.textContent = wi.state || '—';
-                autonomyEl.textContent = wi.autonomyLevel || '—';
+                autonomyEl.textContent = getAutonomyText(wi.autonomyLevel);
                 elapsedEl.textContent = wi.elapsedTime || '—';
                 // Calculate progress from agents
                 if (data.stories && data.stories.length > 0) {
