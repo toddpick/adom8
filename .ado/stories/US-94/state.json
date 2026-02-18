@@ -1,0 +1,29 @@
+{
+  "workItemId": 94,
+  "currentState": "Story Planning",
+  "createdAt": "2026-02-18T00:57:14.7782119Z",
+  "updatedAt": "2026-02-18T00:57:14.7875785Z",
+  "agents": {
+    "Planning": {
+      "status": "in_progress",
+      "startedAt": "2026-02-18T00:57:14.7875275Z",
+      "completedAt": null,
+      "additionalData": null
+    }
+  },
+  "artifacts": {
+    "code": [],
+    "tests": [],
+    "docs": []
+  },
+  "decisions": [],
+  "questions": [],
+  "tokenUsage": {
+    "totalInputTokens": 0,
+    "totalOutputTokens": 0,
+    "totalTokens": 0,
+    "totalCost": 0,
+    "complexity": "XS",
+    "agents": {}
+  }
+}
