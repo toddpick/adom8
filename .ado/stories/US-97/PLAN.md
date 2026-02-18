@@ -1,0 +1,107 @@
+# Planning Analysis for US-97
+
+## Story Overview
+
+**ID:** US-97  
+**Title:** Show "1 Premium Request" Instead of "$0.00" for Copilot-Delegated Coding  
+**State:** Story Planning  
+**Created:** 2026-02-18
+
+### Description
+<div><span>Coding Agent card should show &quot;1 Premium Request&quot; instead of &quot;Cost: $0.00&quot; when delegated to GitHub Copilot<br></span><div><br> </div><div>Description:<br> </div><span>As a user viewing the dashboard, when the Coding Agent delegates work to GitHub Copilot Coding Agent, I want the cost display to show &quot;1 Premium Request&quot; instead of &quot;Cost: $0.00&quot; so it accurately reflects that a GitHub Copilot premium request was consumed rather than implying the step was free.</span><br> </div><div><span><br></span> </div><div><span><span>Technical Notes:<br></span><div><br> </div><div>All changes are in index.html<br> </div><div>Detection: check the agent's strategy, codingStrategy, or model field to determine if Copilot was used — investigate the actual data shape returned by the API<br> </div><div>The agent detail card's cost rendering logic needs a conditional branch for Copilot delegation<br> </div><span>Consider using a GitHub Copilot icon (✦ or similar) next to &quot;1 Premium Request&quot;</span><br></span> </div><div><span><br></span> </div>
+
+### Acceptance Criteria
+<div><span>&nbsp;When the Coding Agent used Copilot delegation (strategy is copilot or github), the cost field displays &quot;1 Premium Request&quot; instead of &quot;$0.00&quot;<br></span><div>&nbsp;Normal agentic coding (non-Copilot) continues to show the actual dollar cost as before<br> </div><div>&nbsp;The &quot;1 Premium Request&quot; text is styled appropriately (e.g., with a distinct icon or color to differentiate from dollar costs)<br> </div><div>&nbsp;Works in both the story card summary and the agent detail view<br> </div><span>&nbsp;Works correctly in both light and dark mode</span><br> </div>
+
+---
+
+## Technical Analysis
+
+### Problem Analysis
+The dashboard currently shows 'Cost: $0.00' for GitHub Copilot delegated coding tasks, which is misleading as it implies the operation was free. Users need to understand that a premium GitHub Copilot request was consumed. The display should differentiate between actual dollar costs (for regular AI coding) and premium request consumption (for Copilot delegation).
+
+### Recommended Approach
+Modify the cost rendering logic in dashboard/index.html to detect when an agent used GitHub Copilot delegation by checking the agent's strategy, codingStrategy, or model field. Add conditional rendering to show '1 Premium Request' with appropriate styling instead of '$0.00' when Copilot was used. Ensure the change works in both story card summary and agent detail views, with proper light/dark mode support.
+
+### Affected Files
+
+- `dashboard/index.html`
+
+
+### Complexity Estimate
+**Story Points:** 5
+
+### Architecture Considerations
+Frontend-only change in the single-file SPA dashboard. No backend API changes required. The solution involves modifying JavaScript rendering logic to conditionally display cost information based on agent strategy detection.
+
+---
+
+## Implementation Plan
+
+### Sub-Tasks
+
+1. Investigate the actual API response structure to identify Copilot delegation indicators
+
+2. Locate the cost rendering logic in the dashboard JavaScript
+
+3. Implement detection logic for GitHub Copilot usage
+
+4. Add conditional rendering for '1 Premium Request' display
+
+5. Style the premium request indicator with appropriate icon and colors
+
+6. Ensure functionality works in both story card and detail views
+
+7. Test light and dark mode compatibility
+
+8. Verify non-Copilot agents continue showing dollar costs correctly
+
+
+### Dependencies
+
+
+- Understanding of the current API response format for agent data
+
+- Access to existing CSS classes and styling conventions
+
+- Knowledge of the dashboard's light/dark mode implementation
+
+
+
+---
+
+## Risk Assessment
+
+### Identified Risks
+
+- API data structure might not contain clear Copilot delegation indicators
+
+- Changes might affect other cost display areas unintentionally
+
+- Icon rendering might not work consistently across browsers
+
+- Styling might not integrate well with existing design system
+
+
+---
+
+## Assumptions Made
+
+- The API already returns sufficient data to detect Copilot delegation
+
+- The dashboard uses consistent CSS classes for styling
+
+- The '✦' Unicode character is acceptable for the icon
+
+- Light/dark mode is controlled by CSS classes or data attributes
+
+
+---
+
+## Testing Strategy
+Manual testing in browser with both Copilot-delegated and regular coding agents. Test scenarios: 1) Verify '1 Premium Request' appears for Copilot agents, 2) Verify dollar amounts still show for regular agents, 3) Test both story card and detail views, 4) Test light and dark modes, 5) Test icon rendering across different browsers, 6) Verify styling consistency with existing design.
+
+---
+
+*Generated by Planning Agent*  
+*Timestamp: 2026-02-18T05:11:31.9438850Z*

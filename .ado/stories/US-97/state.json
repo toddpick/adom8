@@ -1,0 +1,75 @@
+{
+  "workItemId": 97,
+  "currentState": "AI Docs",
+  "createdAt": "2026-02-18T05:11:10.3065801Z",
+  "updatedAt": "2026-02-18T05:18:17.5096428Z",
+  "agents": {
+    "Planning": {
+      "status": "in_progress",
+      "startedAt": "2026-02-18T05:11:10.3080639Z",
+      "completedAt": null,
+      "additionalData": null
+    },
+    "Coding": {
+      "status": "completed",
+      "startedAt": null,
+      "completedAt": "2026-02-18T05:17:51.6147637Z",
+      "additionalData": {
+        "mode": "copilot",
+        "copilotPrNumber": 78,
+        "issueNumber": 77,
+        "filesChanged": 1,
+        "linesAdded": 30,
+        "linesDeleted": 2,
+        "durationMinutes": 6.2352882733333335,
+        "commitCount": 2
+      }
+    },
+    "Testing": {
+      "status": "skipped",
+      "startedAt": null,
+      "completedAt": "2026-02-18T05:17:51.6148967Z",
+      "additionalData": {
+        "reason": "Copilot coding agent already runs tests"
+      }
+    },
+    "Review": {
+      "status": "in_progress",
+      "startedAt": "2026-02-18T05:17:59.0831693Z",
+      "completedAt": null,
+      "additionalData": null
+    },
+    "Documentation": {
+      "status": "in_progress",
+      "startedAt": "2026-02-18T05:18:17.5096405Z",
+      "completedAt": null,
+      "additionalData": null
+    }
+  },
+  "artifacts": {
+    "code": [
+      "dashboard/index.html"
+    ],
+    "tests": [],
+    "docs": []
+  },
+  "decisions": [],
+  "questions": [],
+  "tokenUsage": {
+    "totalInputTokens": 0,
+    "totalOutputTokens": 0,
+    "totalTokens": 0,
+    "totalCost": 0,
+    "complexity": "XS",
+    "agents": {
+      "Coding": {
+        "inputTokens": 0,
+        "outputTokens": 0,
+        "totalTokens": 0,
+        "estimatedCost": 0,
+        "model": "copilot-coding-agent",
+        "callCount": 1
+      }
+    }
+  }
+}
