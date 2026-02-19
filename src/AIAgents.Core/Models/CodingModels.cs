@@ -31,6 +31,21 @@ public sealed record CodingContext
     public string ExistingFilesSummary { get; init; } = "";
 
     /// <summary>
+    /// Repository-relative folder containing supporting files materialized from the ADO work item.
+    /// </summary>
+    public string StoryDocumentsFolder { get; init; } = string.Empty;
+
+    /// <summary>
+    /// Repository-relative paths to image attachments materialized from the ADO work item.
+    /// </summary>
+    public IReadOnlyList<string> AttachedImagePaths { get; init; } = [];
+
+    /// <summary>
+    /// Repository-relative paths to document attachments materialized from the ADO work item.
+    /// </summary>
+    public IReadOnlyList<string> AttachedDocumentPaths { get; init; } = [];
+
+    /// <summary>
     /// The feature branch name (e.g., "feature/US-123").
     /// Used by Copilot strategy to instruct Copilot which branch to target.
     /// </summary>

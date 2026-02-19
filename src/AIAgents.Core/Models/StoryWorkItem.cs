@@ -16,6 +16,7 @@ public sealed record StoryWorkItem
     public string? IterationPath { get; init; }
     public int? StoryPoints { get; init; }
     public IReadOnlyList<string> Tags { get; init; } = [];
+    public IReadOnlyList<WorkItemAttachment> Attachments { get; init; } = [];
     public DateTime CreatedDate { get; init; }
     public DateTime ChangedDate { get; init; }
 

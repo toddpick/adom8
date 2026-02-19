@@ -50,4 +50,13 @@ public interface IAzureDevOpsClient
         string description,
         string state,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Downloads supporting artifacts (images and documents) referenced by a work item into the local repository workspace.
+    /// Files are materialized under the story folder so coding agents can inspect them directly.
+    /// </summary>
+    Task<WorkItemSupportingArtifacts> DownloadSupportingArtifactsAsync(
+        int workItemId,
+        string repositoryPath,
+        CancellationToken cancellationToken = default);
 }

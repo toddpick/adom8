@@ -42,7 +42,13 @@ public sealed class AgenticCodingStrategy : ICodingStrategy
         // Build prompts for the agentic loop
         var systemPrompt = CodingAgentService.BuildSystemPrompt();
         var userPrompt = CodingAgentService.BuildUserPrompt(
-            context.WorkItem, context.PlanMarkdown, context.ExistingFilesSummary, context.CodingGuidelines);
+            context.WorkItem,
+            context.PlanMarkdown,
+            context.ExistingFilesSummary,
+            context.CodingGuidelines,
+            context.StoryDocumentsFolder,
+            context.AttachedImagePaths,
+            context.AttachedDocumentPaths);
 
         // Scale MaxRounds by complexity from the planning decision
         var maxRounds = CodingAgentService.GetMaxRoundsForComplexity(context.State);

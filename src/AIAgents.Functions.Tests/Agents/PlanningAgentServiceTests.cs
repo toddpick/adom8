@@ -64,6 +64,8 @@ public sealed class PlanningAgentServiceTests
 
         _adoMock.Setup(a => a.GetWorkItemAsync(wi.Id, It.IsAny<CancellationToken>()))
             .ReturnsAsync(wi);
+        _adoMock.Setup(a => a.DownloadSupportingArtifactsAsync(wi.Id, It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new WorkItemSupportingArtifacts());
 
         _gitMock.Setup(g => g.EnsureBranchAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(@"C:\repos\test");

@@ -10,6 +10,10 @@ using Microsoft.VisualStudio.Services.Common;
 using Microsoft.VisualStudio.Services.WebApi;
 using Microsoft.VisualStudio.Services.WebApi.Patch;
 using Microsoft.VisualStudio.Services.WebApi.Patch.Json;
+using System.Net;
+using System.Net.Http.Headers;
+using System.Text;
+using System.Text.RegularExpressions;
 
 namespace AIAgents.Core.Services;
 
@@ -174,6 +178,85 @@ public sealed class AzureDevOpsClient : IAzureDevOpsClient, IDisposable
         return workItemId;
     }
 
+    public async Task<WorkItemSupportingArtifacts> DownloadSupportingArtifactsAsync(
+        int workItemId,
+        string repositoryPath,
+        CancellationToken cancellationToken = default)
+    {
+        var workItem = await GetWorkItemAsync(workItemId, cancellationToken);
+        var supportingAttachments = workItem.Attachments
+            .Where(a => a.IsImage || a.IsDocument)
+            .ToList();
+
+        if (supportingAttachments.Count == 0)
+        {
+            return new WorkItemSupportingArtifacts();
+        }
+
+        var outputDir = Path.Combine(repositoryPath, ".ado", "stories", $"US-{workItemId}", "documents");
+        Directory.CreateDirectory(outputDir);
+
+        var imagePaths = new List<string>();
+        var documentPaths = new List<string>();
+        var allPaths = new List<string>();
+        using var httpClient = CreateAdoHttpClient();
+
+        foreach (var attachment in supportingAttachments)
+        {
+            try
+            {
+                using var response = await httpClient.GetAsync(attachment.Url, cancellationToken);
+                if (!response.IsSuccessStatusCode)
+                {
+                    _logger.LogWarning(
+                        "Failed to download attachment for WI-{WorkItemId}: {Url} (status {StatusCode})",
+                        workItemId, attachment.Url, response.StatusCode);
+                    continue;
+                }
+
+                var bytes = await response.Content.ReadAsByteArrayAsync(cancellationToken);
+                if (bytes.Length == 0)
+                {
+                    continue;
+                }
+
+                var fileName = EnsureSupportingFileName(attachment.FileName, response.Content.Headers.ContentType?.MediaType, attachment.IsImage);
+                var fullPath = GetUniquePath(Path.Combine(outputDir, fileName));
+                await File.WriteAllBytesAsync(fullPath, bytes, cancellationToken);
+
+                var relativePath = Path.GetRelativePath(repositoryPath, fullPath).Replace('\\', '/');
+                allPaths.Add(relativePath);
+
+                if (attachment.IsImage)
+                {
+                    imagePaths.Add(relativePath);
+                }
+                else
+                {
+                    documentPaths.Add(relativePath);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex,
+                    "Failed to materialize attachment for WI-{WorkItemId}: {Url}",
+                    workItemId, attachment.Url);
+            }
+        }
+
+        _logger.LogInformation(
+            "Materialized {Count} supporting attachment(s) for WI-{WorkItemId} ({Images} images, {Documents} documents)",
+            allPaths.Count, workItemId, imagePaths.Count, documentPaths.Count);
+
+        return new WorkItemSupportingArtifacts
+        {
+            StoryDocumentsFolder = Path.GetRelativePath(repositoryPath, outputDir).Replace('\\', '/'),
+            ImagePaths = imagePaths,
+            DocumentPaths = documentPaths,
+            AllPaths = allPaths
+        };
+    }
+
     public void Dispose()
     {
         if (_connection.IsValueCreated)
@@ -185,6 +268,7 @@ public sealed class AzureDevOpsClient : IAzureDevOpsClient, IDisposable
     private static StoryWorkItem MapToStoryWorkItem(WorkItem workItem)
     {
         var fields = workItem.Fields;
+        var attachments = ExtractAttachments(workItem, fields);
 
         return new StoryWorkItem
         {
@@ -201,6 +285,7 @@ public sealed class AzureDevOpsClient : IAzureDevOpsClient, IDisposable
             Tags = GetField<string>(fields, "System.Tags")?
                 .Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
                 .ToList() ?? [],
+            Attachments = attachments,
             CreatedDate = GetField<DateTime>(fields, "System.CreatedDate"),
             ChangedDate = GetField<DateTime>(fields, "System.ChangedDate"),
 
@@ -246,6 +331,191 @@ public sealed class AzureDevOpsClient : IAzureDevOpsClient, IDisposable
     private static T? GetField<T>(IDictionary<string, object> fields, string key)
     {
         return fields.TryGetValue(key, out var value) && value is T typed ? typed : default;
+    }
+
+    private static IReadOnlyList<WorkItemAttachment> ExtractAttachments(
+        WorkItem workItem,
+        IDictionary<string, object> fields)
+    {
+        var map = new Dictionary<string, WorkItemAttachment>(StringComparer.OrdinalIgnoreCase);
+
+        void AddAttachment(string? url, string? fileName)
+        {
+            if (string.IsNullOrWhiteSpace(url))
+                return;
+
+            var normalizedUrl = WebUtility.HtmlDecode(url.Trim());
+            if (map.ContainsKey(normalizedUrl))
+                return;
+
+            var resolvedName = string.IsNullOrWhiteSpace(fileName)
+                ? GetFileNameFromUrl(normalizedUrl)
+                : fileName;
+
+            map[normalizedUrl] = new WorkItemAttachment
+            {
+                Url = normalizedUrl,
+                FileName = resolvedName,
+                IsImage = LooksLikeImage(normalizedUrl, resolvedName),
+                IsDocument = LooksLikeDocument(normalizedUrl, resolvedName)
+            };
+        }
+
+        if (workItem.Relations is not null)
+        {
+            foreach (var rel in workItem.Relations)
+            {
+                if (!string.Equals(rel.Rel, "AttachedFile", StringComparison.OrdinalIgnoreCase) &&
+                    (rel.Url?.Contains("/_apis/wit/attachments/", StringComparison.OrdinalIgnoreCase) != true))
+                {
+                    continue;
+                }
+
+                object? nameObj = null;
+                rel.Attributes?.TryGetValue("name", out nameObj);
+                AddAttachment(rel.Url, nameObj?.ToString());
+            }
+        }
+
+        var description = GetField<string>(fields, "System.Description");
+        foreach (var imageUrl in ExtractImageUrls(description))
+        {
+            AddAttachment(imageUrl, null);
+        }
+
+        var acceptance = GetField<string>(fields, "Microsoft.VSTS.Common.AcceptanceCriteria");
+        foreach (var imageUrl in ExtractImageUrls(acceptance))
+        {
+            AddAttachment(imageUrl, null);
+        }
+
+        return map.Values.ToList();
+    }
+
+    private static IEnumerable<string> ExtractImageUrls(string? html)
+    {
+        if (string.IsNullOrWhiteSpace(html))
+            return [];
+
+        var matches = Regex.Matches(html, "<img[^>]*src=[\"'](?<src>[^\"']+)[\"'][^>]*>", RegexOptions.IgnoreCase);
+        return matches
+            .Select(m => m.Groups["src"].Value)
+            .Where(src => !string.IsNullOrWhiteSpace(src));
+    }
+
+    private static bool LooksLikeImage(string? url, string? fileName)
+    {
+        var target = (fileName ?? url ?? string.Empty).ToLowerInvariant();
+        return target.EndsWith(".png") ||
+               target.EndsWith(".jpg") ||
+               target.EndsWith(".jpeg") ||
+               target.EndsWith(".gif") ||
+               target.EndsWith(".webp") ||
+               target.EndsWith(".svg") ||
+               target.EndsWith(".bmp");
+    }
+
+    private static bool LooksLikeDocument(string? url, string? fileName)
+    {
+        var target = (fileName ?? url ?? string.Empty).ToLowerInvariant();
+        return target.EndsWith(".pdf") ||
+               target.EndsWith(".md") ||
+               target.EndsWith(".txt") ||
+               target.EndsWith(".doc") ||
+               target.EndsWith(".docx") ||
+               target.EndsWith(".rtf") ||
+               target.EndsWith(".xls") ||
+               target.EndsWith(".xlsx") ||
+               target.EndsWith(".csv") ||
+               target.EndsWith(".ppt") ||
+               target.EndsWith(".pptx") ||
+               target.EndsWith(".json") ||
+               target.EndsWith(".yml") ||
+               target.EndsWith(".yaml");
+    }
+
+    private static string GetFileNameFromUrl(string url)
+    {
+        if (Uri.TryCreate(url, UriKind.Absolute, out var uri))
+        {
+            var query = uri.Query;
+            var fileNameMatch = Regex.Match(query, @"(?:\?|&)fileName=([^&]+)", RegexOptions.IgnoreCase);
+            if (fileNameMatch.Success)
+            {
+                return Uri.UnescapeDataString(fileNameMatch.Groups[1].Value);
+            }
+
+            var segment = uri.Segments.LastOrDefault()?.Trim('/');
+            if (!string.IsNullOrWhiteSpace(segment))
+            {
+                return segment;
+            }
+        }
+
+        return $"attachment-{Guid.NewGuid():N}.png";
+    }
+
+    private HttpClient CreateAdoHttpClient()
+    {
+        var token = Convert.ToBase64String(Encoding.ASCII.GetBytes($":{_options.Pat}"));
+        var client = new HttpClient { Timeout = TimeSpan.FromSeconds(60) };
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Basic", token);
+        return client;
+    }
+
+    private static string EnsureSupportingFileName(string fileName, string? contentType, bool isImage)
+    {
+        var safeName = string.Concat(fileName.Select(c => Path.GetInvalidFileNameChars().Contains(c) ? '_' : c));
+        if (string.IsNullOrWhiteSpace(safeName))
+        {
+            safeName = $"attachment-{Guid.NewGuid():N}";
+        }
+
+        if (!Path.HasExtension(safeName))
+        {
+            safeName += contentType?.ToLowerInvariant() switch
+            {
+                "image/jpeg" => ".jpg",
+                "image/gif" => ".gif",
+                "image/webp" => ".webp",
+                "image/svg+xml" => ".svg",
+                "image/bmp" => ".bmp",
+                "application/pdf" => ".pdf",
+                "text/plain" => ".txt",
+                "text/markdown" => ".md",
+                "application/json" => ".json",
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document" => ".docx",
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" => ".xlsx",
+                "application/vnd.openxmlformats-officedocument.presentationml.presentation" => ".pptx",
+                _ => ".png"
+            };
+
+            if (!isImage && safeName.EndsWith(".png", StringComparison.OrdinalIgnoreCase))
+            {
+                safeName = Path.ChangeExtension(safeName, ".bin");
+            }
+        }
+
+        return safeName;
+    }
+
+    private static string GetUniquePath(string fullPath)
+    {
+        if (!File.Exists(fullPath))
+            return fullPath;
+
+        var directory = Path.GetDirectoryName(fullPath) ?? string.Empty;
+        var baseName = Path.GetFileNameWithoutExtension(fullPath);
+        var extension = Path.GetExtension(fullPath);
+
+        for (var index = 1; index <= 1000; index++)
+        {
+            var candidate = Path.Combine(directory, $"{baseName}-{index}{extension}");
+            if (!File.Exists(candidate))
+                return candidate;
+        }
+
+        return Path.Combine(directory, $"{baseName}-{Guid.NewGuid():N}{extension}");
     }
 
     private static string? GetIdentityField(IDictionary<string, object> fields, string key)

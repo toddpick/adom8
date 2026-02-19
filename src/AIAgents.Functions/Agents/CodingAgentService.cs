@@ -81,6 +81,9 @@ public sealed class CodingAgentService : IAgentService
             var branchName = $"feature/US-{task.WorkItemId}";
             var repoPath = await _gitOps.EnsureBranchAsync(branchName, cancellationToken);
 
+            // Materialize work-item supporting files so coding agents can inspect local documents and visuals
+            var supportingArtifacts = await _adoClient.DownloadSupportingArtifactsAsync(task.WorkItemId, repoPath, cancellationToken);
+
             await using var context = _contextFactory.Create(task.WorkItemId, repoPath);
             var state = await context.LoadStateAsync(cancellationToken);
             state.CurrentState = "AI Code";
@@ -114,6 +117,9 @@ public sealed class CodingAgentService : IAgentService
                 PlanMarkdown = plan,
                 CodingGuidelines = codebaseCtx,
                 ExistingFilesSummary = fileListSummary,
+                StoryDocumentsFolder = supportingArtifacts.StoryDocumentsFolder,
+                AttachedImagePaths = supportingArtifacts.ImagePaths,
+                AttachedDocumentPaths = supportingArtifacts.DocumentPaths,
                 BranchName = branchName,
                 CorrelationId = task.CorrelationId
             };
@@ -401,7 +407,14 @@ public sealed class CodingAgentService : IAgentService
     /// <summary>
     /// Build user prompt with story context for the agentic loop.
     /// </summary>
-    internal static string BuildUserPrompt(StoryWorkItem workItem, string plan, string fileList, string codebaseContext)
+    internal static string BuildUserPrompt(
+        StoryWorkItem workItem,
+        string plan,
+        string fileList,
+        string codebaseContext,
+        string? storyDocumentsFolder = null,
+        IReadOnlyList<string>? attachedImagePaths = null,
+        IReadOnlyList<string>? attachedDocumentPaths = null)
     {
         var prompt = $"""
             ## Story
@@ -415,6 +428,26 @@ public sealed class CodingAgentService : IAgentService
             ## Repository File Listing
             {fileList}
             """;
+
+        if (!string.IsNullOrWhiteSpace(storyDocumentsFolder))
+        {
+            prompt += $"\n\n## Story Supporting Files Folder\nAll supporting files from ADO (attachments and pasted visuals) are available in this repository folder:\n- {storyDocumentsFolder}\nReview this folder before implementing.";
+        }
+
+        if (attachedImagePaths is not null && attachedImagePaths.Count > 0)
+        {
+            prompt += $"\n\n## Attached Visual References\n" +
+                      "The story includes image attachments materialized in this repository. " +
+                      "Inspect these files before editing UI/layout code:\n" +
+                      string.Join("\n", attachedImagePaths.Select(path => $"- {path}"));
+        }
+
+        if (attachedDocumentPaths is not null && attachedDocumentPaths.Count > 0)
+        {
+            prompt += $"\n\n## Attached Document References\n" +
+                      "The story includes supporting documents. Read these files for requirements and implementation details:\n" +
+                      string.Join("\n", attachedDocumentPaths.Select(path => $"- {path}"));
+        }
 
         if (!string.IsNullOrWhiteSpace(codebaseContext))
             prompt += $"\n\n## Additional Codebase Context\n{codebaseContext}";

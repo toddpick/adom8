@@ -58,6 +58,8 @@ public sealed class CodingAgentServiceTests
         var state = MockAIResponses.SampleState(wi.Id, "AI Code");
 
         _adoMock.Setup(a => a.GetWorkItemAsync(wi.Id, It.IsAny<CancellationToken>())).ReturnsAsync(wi);
+        _adoMock.Setup(a => a.DownloadSupportingArtifactsAsync(wi.Id, It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new WorkItemSupportingArtifacts());
         _gitMock.Setup(g => g.EnsureBranchAsync(It.IsAny<string>(), It.IsAny<CancellationToken>())).ReturnsAsync(@"C:\repos\test");
         _gitMock.Setup(g => g.ListFilesAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new List<string> { "src/Program.cs", "dashboard/index.html" });

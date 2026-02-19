@@ -62,6 +62,9 @@ public sealed class PlanningAgentService : IAgentService
         var branchName = $"feature/US-{task.WorkItemId}";
         var repoPath = await _gitOps.EnsureBranchAsync(branchName, cancellationToken);
 
+        // 2b. Materialize supporting files (images/documents) into the story workspace/repo
+        var supportingArtifacts = await _adoClient.DownloadSupportingArtifactsAsync(task.WorkItemId, repoPath, cancellationToken);
+
         // 3. Get existing code context
         var existingFiles = await _gitOps.ListFilesAsync(repoPath, cancellationToken);
         var fileListSummary = string.Join("\n", existingFiles.Take(100));
@@ -135,6 +138,9 @@ If unverified external dependencies are detected, add a warning note in the tech
 **Acceptance Criteria:** {workItem.AcceptanceCriteria ?? "No acceptance criteria"}
 **Tags:** {string.Join(", ", workItem.Tags)}
 {placeholderWarning}
+    {(supportingArtifacts.AllPaths.Count > 0
+        ? $"## Supporting Documents\nAll supporting files for this story were materialized under `{supportingArtifacts.StoryDocumentsFolder}`. Inspect these before planning implementation:\n{string.Join("\n", supportingArtifacts.AllPaths.Select(path => $"- {path}"))}\n"
+        : string.Empty)}
 ## Existing Repository Files
 {fileListSummary}
 

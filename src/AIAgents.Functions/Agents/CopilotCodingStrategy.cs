@@ -270,6 +270,39 @@ public sealed class CopilotCodingStrategy : ICodingStrategy
             sb.AppendLine();
         }
 
+        if (!string.IsNullOrWhiteSpace(context.StoryDocumentsFolder))
+        {
+            sb.AppendLine("## Story Supporting Files Folder");
+            sb.AppendLine();
+            sb.AppendLine("All supporting files from Azure DevOps are materialized in this branch folder. Review it before implementation:");
+            sb.AppendLine($"- `{context.StoryDocumentsFolder}`");
+            sb.AppendLine();
+        }
+
+        if (context.AttachedImagePaths.Count > 0)
+        {
+            sb.AppendLine("## Attached Visual References");
+            sb.AppendLine();
+            sb.AppendLine("The following story image attachments were materialized into the branch. Inspect them when implementing UI/layout changes:");
+            foreach (var path in context.AttachedImagePaths)
+            {
+                sb.AppendLine($"- `{path}`");
+            }
+            sb.AppendLine();
+        }
+
+        if (context.AttachedDocumentPaths.Count > 0)
+        {
+            sb.AppendLine("## Attached Document References");
+            sb.AppendLine();
+            sb.AppendLine("The following supporting documents were materialized into the branch. Read them before implementing:");
+            foreach (var path in context.AttachedDocumentPaths)
+            {
+                sb.AppendLine($"- `{path}`");
+            }
+            sb.AppendLine();
+        }
+
         sb.AppendLine("## Implementation Plan");
         sb.AppendLine();
         sb.AppendLine(context.PlanMarkdown);
