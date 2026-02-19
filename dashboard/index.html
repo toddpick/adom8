@@ -2058,6 +2058,7 @@
             background: #ddd;
             outline: none;
             -webkit-appearance: none;
+            appearance: none;
         }
 
         .volume-slider::-webkit-slider-thumb {
@@ -2603,6 +2604,19 @@
             animation: stepPulse 2s ease-in-out infinite;
         }
 
+        .agent-step.active-now .agent-step-icon {
+            transform: scale(1.12);
+            box-shadow: 0 0 0 4px rgba(0, 120, 212, 0.2), 0 8px 18px rgba(0, 0, 0, 0.2);
+        }
+
+        .agent-step.copilot_delegated.active-now .agent-step-icon {
+            box-shadow: 0 0 0 4px rgba(156, 39, 176, 0.2), 0 8px 18px rgba(0, 0, 0, 0.2);
+        }
+
+        .agent-step.awaiting_code.active-now .agent-step-icon {
+            box-shadow: 0 0 0 4px rgba(255, 152, 0, 0.2), 0 8px 18px rgba(0, 0, 0, 0.2);
+        }
+
         .agent-step.copilot_delegated .agent-step-icon {
             background: #f3e5f5;
             border-color: #9c27b0;
@@ -2702,6 +2716,20 @@
             background: #fdfaff;
         }
 
+        .agent-detail-item.active-now {
+            border-left-width: 6px;
+            transform: translateY(-1px);
+            box-shadow: 0 6px 18px rgba(0, 120, 212, 0.18);
+        }
+
+        .agent-detail-item.copilot_delegated.active-now {
+            box-shadow: 0 6px 18px rgba(156, 39, 176, 0.18);
+        }
+
+        .agent-detail-item.awaiting_code.active-now {
+            box-shadow: 0 6px 18px rgba(255, 152, 0, 0.18);
+        }
+
         .agent-detail-item.failed {
             border-left-color: #f44336;
             background: #fffafa;
@@ -2778,6 +2806,13 @@
             display: flex;
             align-items: center;
             gap: 4px;
+        }
+
+        .agent-detail-description {
+            margin-top: 8px;
+            font-size: 0.78rem;
+            color: #666;
+            line-height: 1.35;
         }
 
         /* Dark Mode Overrides */
@@ -2896,6 +2931,18 @@
             border-color: #0078d4;
         }
 
+        body.dark-mode .agent-step.active-now .agent-step-icon {
+            box-shadow: 0 0 0 4px rgba(100, 181, 246, 0.24), 0 8px 18px rgba(0, 0, 0, 0.42);
+        }
+
+        body.dark-mode .agent-step.copilot_delegated.active-now .agent-step-icon {
+            box-shadow: 0 0 0 4px rgba(206, 147, 216, 0.24), 0 8px 18px rgba(0, 0, 0, 0.42);
+        }
+
+        body.dark-mode .agent-step.awaiting_code.active-now .agent-step-icon {
+            box-shadow: 0 0 0 4px rgba(255, 183, 77, 0.24), 0 8px 18px rgba(0, 0, 0, 0.42);
+        }
+
         body.dark-mode .agent-step.needs_revision .agent-step-icon {
             background: rgba(255, 152, 0, 0.15);
             border-color: #ff9800;
@@ -2962,6 +3009,18 @@
             background: rgba(156, 39, 176, 0.08);
         }
 
+        body.dark-mode .agent-detail-item.active-now {
+            box-shadow: 0 6px 18px rgba(100, 181, 246, 0.22);
+        }
+
+        body.dark-mode .agent-detail-item.copilot_delegated.active-now {
+            box-shadow: 0 6px 18px rgba(206, 147, 216, 0.22);
+        }
+
+        body.dark-mode .agent-detail-item.awaiting_code.active-now {
+            box-shadow: 0 6px 18px rgba(255, 183, 77, 0.22);
+        }
+
         body.dark-mode .agent-detail-item.failed {
             background: rgba(244, 67, 54, 0.08);
         }
@@ -2999,6 +3058,10 @@
 
         body.dark-mode .agent-detail-metrics {
             color: #aaa;
+        }
+
+        body.dark-mode .agent-detail-description {
+            color: #b0b0b0;
         }
 
     </style>
@@ -4388,6 +4451,29 @@
             return map[agent] || '🤖';
         }
 
+        function getAgentDescription(agentName) {
+            const descriptions = {
+                Planning: 'Analyzes requirements and defines implementation steps.',
+                Coding: 'Implements code changes for the approved plan.',
+                Testing: 'Runs tests and validates the implementation behavior.',
+                Review: 'Evaluates quality, risk, and readiness for merge.',
+                Documentation: 'Updates user-facing and technical documentation.',
+                Deployment: 'Handles release steps and deployment readiness checks.'
+            };
+            return descriptions[agentName] || 'Processes this stage of the delivery pipeline.';
+        }
+
+        function getEffectiveAgentStatus(agentName, rawStatus, agentData) {
+            const normalized = normalizeAgentStatus(rawStatus);
+            const skipReason = safeText(agentData?.additionalData?.reason, '').toLowerCase();
+            const isTestingSkippedByCopilot =
+                agentName === 'Testing' &&
+                normalized === 'skipped' &&
+                skipReason.includes('copilot');
+
+            return isTestingSkippedByCopilot ? 'completed' : normalized;
+        }
+
         // Store stories globally for filtering
         let allStories = [];
         let currentSearchText = '';
@@ -4458,7 +4544,9 @@
                     return true;
                 }
             }
-            return false;
+            const tokenAgents = story.tokenUsage?.agents || {};
+            return Object.values(tokenAgents).some(agent =>
+                safeText(agent?.model, '').toLowerCase().includes('copilot'));
         }
 
         function getStoryStatus(story) {
@@ -4487,8 +4575,9 @@
             
             // Check for any in-progress or copilot-delegated
             for (const name of agentNames) {
-                const status = normalizeAgentStatus(story.agents?.[name]);
+                const rawStatus = normalizeAgentStatus(story.agents?.[name]);
                 const agentData = story.agentDetails?.[name];
+                const status = getEffectiveAgentStatus(name, rawStatus, agentData);
                 const isCopilotDelegated = agentData?.additionalData?.mode === 'copilot-delegated';
                 if (status === 'in_progress' || status === 'awaiting_code' || isCopilotDelegated) {
                     return 'in-progress';
@@ -4586,12 +4675,14 @@
             agentNames.forEach(name => {
                 const status = normalizeAgentStatus(story.agents[name]);
                 const agentData = story.agentDetails?.[name];
+                const effectiveStatus = getEffectiveAgentStatus(name, status, agentData);
                 const isCopilotDelegated = agentData?.additionalData?.mode === 'copilot-delegated';
-                const cardStatus = isCopilotDelegated ? 'copilot_delegated' : status;
+                const cardStatus = isCopilotDelegated ? 'copilot_delegated' : safeStatus(effectiveStatus);
+                const isActive = cardStatus === 'in_progress' || cardStatus === 'awaiting_code' || cardStatus === 'copilot_delegated';
                 const emoji = getAgentEmoji(name);
                 
                 const step = document.createElement('div');
-                step.className = `agent-step ${cardStatus}`;
+                step.className = `agent-step ${cardStatus} ${isActive ? 'active-now' : ''}`;
                 step.innerHTML = `
                     <div class="agent-step-icon">${isCopilotDelegated ? '🤖' : emoji}</div>
                     <div class="agent-step-label">${name}</div>
@@ -4610,9 +4701,18 @@
                 const tokInfo = story.tokenUsage?.agents?.[name];
                 const timing = story.agentTimings?.[name];
                 const agentData = story.agentDetails?.[name];
+                const effectiveStatus = getEffectiveAgentStatus(name, status, agentData);
                 const isCopilotDelegated = agentData?.additionalData?.mode === 'copilot-delegated';
                 const isCopilotCompleted = agentData?.additionalData?.mode === 'copilot';
-                const cardStatus = isCopilotDelegated ? 'copilot_delegated' : safeStatus(status);
+                const cardStatus = isCopilotDelegated ? 'copilot_delegated' : safeStatus(effectiveStatus);
+                const isActive = cardStatus === 'in_progress' || cardStatus === 'awaiting_code' || cardStatus === 'copilot_delegated';
+                const rawSkipReason = safeText(agentData?.additionalData?.reason, '');
+                const isTestingSkipped = name === 'Testing' && status === 'skipped';
+                const isTestingSkippedByCopilot = isTestingSkipped && rawSkipReason.toLowerCase().includes('copilot');
+                const descriptionText = isTestingSkipped && rawSkipReason
+                    ? `${getAgentDescription(name)} Skipped because ${rawSkipReason}.`
+                    : getAgentDescription(name);
+                const safeDescriptionText = escapeHtml(descriptionText);
                 
                 // Compute duration display
                 let durationStr = '—';
@@ -4638,13 +4738,22 @@
                         <span>📁 Files: ${safeFilesChanged}</span>
                         <span>📝 +${safeLinesAdded}/-${safeLinesDeleted} lines</span>
                         <span>⏱️ Duration: ${safeDurationMinutes > 0 ? safeDurationMinutes.toFixed(1) + 'm' : '—'}</span>
-                        <span>💰 Cost: 1 premium credit</span>
+                        <span>💰 Cost: 1 Premium Credit</span>
                         <span>🤖 Mode: Copilot</span>
                     `;
                 } else {
+                    const tokenModel = safeText(tokInfo?.model, '').toLowerCase();
+                    const isGitHubCodingAgent = name === 'Coding' && (
+                        isCopilotCompleted ||
+                        isCopilotDelegated ||
+                        tokenModel.includes('copilot')
+                    );
+                    const costDisplay = isGitHubCodingAgent
+                        ? '1 Premium Credit'
+                        : (tokInfo ? '$' + tokInfo.estimatedCost.toFixed(2) : '—');
                     metricsHtml = `
                         <span>🎯 Tokens: ${tokInfo ? tokInfo.totalTokens.toLocaleString() : '—'}</span>
-                        <span>💰 Cost: ${tokInfo ? '$' + tokInfo.estimatedCost.toFixed(2) : '—'}</span>
+                        <span>💰 Cost: ${costDisplay}</span>
                         <span>⏱️ Duration: ${durationStr}</span>
                     `;
                 }
@@ -4661,18 +4770,24 @@
                 const agentDisplayName = escapeHtml(safeText(agentAssignee, 'copilot').replace(/^./, (char) => char.toUpperCase()));
                 const issueNum = safeInteger(agentData?.additionalData?.issueNumber, 0);
                 const githubIssueUrl = issueNum > 0 ? `https://github.com/toddpick/adom8/issues/${issueNum}` : null;
+                const badgeText = isCopilotDelegated
+                    ? `${agentDisplayName} Working`
+                    : isTestingSkippedByCopilot
+                        ? 'Skipped (GitHub already tested)'
+                        : formatStatusText(effectiveStatus, name);
                 
                 const detailItem = document.createElement('div');
-                detailItem.className = `agent-detail-item ${cardStatus}`;
+                detailItem.className = `agent-detail-item ${cardStatus} ${isActive ? 'active-now' : ''}`;
                 detailItem.innerHTML = `
                     <div class="agent-detail-header">
                         <span style="font-size: 1.2rem;">${isCopilotDelegated || isCopilotCompleted ? '🤖' : emoji}</span>
                         <span class="agent-detail-name">${name} Agent${isCopilotDelegated ? ` (${agentDisplayName})` : isCopilotCompleted ? ` (${agentDisplayName} ✓)` : ''}</span>
-                        <span class="agent-detail-badge ${cardStatus}">${isCopilotDelegated ? `${agentDisplayName} Working` : formatStatusText(status, name)}</span>
+                        <span class="agent-detail-badge ${cardStatus}">${badgeText}</span>
                     </div>
                     <div class="agent-detail-metrics">
                         ${metricsHtml}
                     </div>
+                    <div class="agent-detail-description">${safeDescriptionText}</div>
                     ${isCopilotDelegated ? `
                         <div class="github-working" style="margin-top: 10px;">
                             <svg class="github-spinner" viewBox="0 0 16 16" fill="currentColor">
@@ -4731,7 +4846,8 @@
         function calculateStoryProgress(story, agentNames) {
             let completed = 0;
             agentNames.forEach(name => {
-                const status = normalizeAgentStatus(story.agents[name]);
+                const rawStatus = normalizeAgentStatus(story.agents[name]);
+                const status = getEffectiveAgentStatus(name, rawStatus, story.agentDetails?.[name]);
                 if (status === 'completed' || status === 'skipped') {
                     completed++;
                 }
