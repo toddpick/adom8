@@ -69,7 +69,7 @@ public sealed class PlanningAgentService : IAgentService
         // 3. Get existing code context
         var existingFiles = await _gitOps.ListFilesAsync(repoPath, cancellationToken);
         var fileListSummary = string.Join("\n", existingFiles.Take(100));
-        var targetedFileContext = await BuildTargetedFileContextAsync(repoPath, existingFiles, cancellationToken);
+        var targetedFileContext = await BuildTargetedFileContextAsync(repoPath, existingFiles, workItem, cancellationToken);
 
         // 4. Create story context
         await using var context = _contextFactory.Create(task.WorkItemId, repoPath);
@@ -457,33 +457,127 @@ Analyze this story and create a comprehensive implementation plan.";
     private async Task<string> BuildTargetedFileContextAsync(
         string repoPath,
         IReadOnlyList<string> existingFiles,
+        StoryWorkItem workItem,
         CancellationToken ct)
     {
+        var candidates = GetTargetedCandidateFiles(existingFiles, workItem);
+        if (candidates.Count == 0)
+            return string.Empty;
+
+        var storyText = string.Join("\n", new[]
+        {
+            workItem.Title,
+            StripHtml(workItem.Description),
+            StripHtml(workItem.AcceptanceCriteria)
+        }.Where(value => !string.IsNullOrWhiteSpace(value)));
+
+        var keywords = GetTargetedKeywords(storyText);
+        var sb = new StringBuilder();
+        sb.AppendLine("## Targeted File Excerpts");
+        sb.AppendLine("The following excerpts are from likely-affected files and should be used for implementation analysis.");
+        sb.AppendLine();
+        var appendedSnippet = false;
+
+        foreach (var path in candidates)
+        {
+            var content = await _gitOps.ReadFileAsync(repoPath, path, ct);
+            if (string.IsNullOrWhiteSpace(content))
+                continue;
+
+            var snippet = ExtractKeywordSnippets(content, keywords, contextLines: 10, maxChars: 3200);
+            if (string.IsNullOrWhiteSpace(snippet))
+                continue;
+
+            sb.AppendLine($"### {path}");
+            sb.AppendLine("```text");
+            sb.AppendLine(snippet);
+            sb.AppendLine("```");
+            sb.AppendLine();
+            appendedSnippet = true;
+        }
+
+        return appendedSnippet ? sb.ToString() : string.Empty;
+    }
+
+    private static List<string> GetTargetedCandidateFiles(IReadOnlyList<string> existingFiles, StoryWorkItem workItem)
+    {
+        var candidates = new List<string>();
+
+        void AddCandidate(string path)
+        {
+            if (candidates.Contains(path, StringComparer.OrdinalIgnoreCase))
+                return;
+            candidates.Add(path);
+        }
+
         var dashboardPath = existingFiles.FirstOrDefault(path =>
             path.Equals("dashboard/index.html", StringComparison.OrdinalIgnoreCase));
+        if (dashboardPath is not null)
+        {
+            AddCandidate(dashboardPath);
+        }
 
-        if (dashboardPath is null)
-            return string.Empty;
+        var storyText = string.Join("\n", new[]
+        {
+            workItem.Title,
+            StripHtml(workItem.Description),
+            StripHtml(workItem.AcceptanceCriteria)
+        }.Where(value => !string.IsNullOrWhiteSpace(value)));
 
-        var content = await _gitOps.ReadFileAsync(repoPath, dashboardPath, ct);
-        if (string.IsNullOrWhiteSpace(content))
-            return string.Empty;
+        var pathMatches = Regex.Matches(storyText, @"(?<path>[A-Za-z0-9_./\-]+?\.[A-Za-z0-9]{1,10})");
+        foreach (Match match in pathMatches)
+        {
+            var rawPath = match.Groups["path"].Value.Trim().TrimEnd('.', ',', ';', ':', ')', ']');
+            if (string.IsNullOrWhiteSpace(rawPath))
+                continue;
 
-        var keywords = new[]
+            var normalized = rawPath.Replace('\\', '/');
+            var matched = existingFiles.FirstOrDefault(file =>
+                file.Equals(normalized, StringComparison.OrdinalIgnoreCase) ||
+                file.EndsWith(normalized, StringComparison.OrdinalIgnoreCase));
+
+            if (!string.IsNullOrWhiteSpace(matched))
+            {
+                AddCandidate(matched);
+            }
+        }
+
+        return candidates.Take(3).ToList();
+    }
+
+    private static IReadOnlyList<string> GetTargetedKeywords(string storyText)
+    {
+        var keywords = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
             "provision-btn",
             "function-key-btn",
             "codebase-badge",
+            "btn-scan-codebase",
             "story-header-title",
             "getStoryTitle",
-            "US-99: US-99"
+            "top-nav",
+            "header-tools"
         };
 
-        var snippet = ExtractKeywordSnippets(content, keywords, contextLines: 10, maxChars: 8000);
-        if (string.IsNullOrWhiteSpace(snippet))
+        foreach (Match match in Regex.Matches(storyText, @"\b[a-z0-9_\-]{4,}\b", RegexOptions.IgnoreCase))
+        {
+            var token = match.Value;
+            if (token.Length >= 4)
+            {
+                keywords.Add(token);
+            }
+        }
+
+        return keywords.Take(24).ToList();
+    }
+
+    private static string StripHtml(string? html)
+    {
+        if (string.IsNullOrWhiteSpace(html))
             return string.Empty;
 
-        return $"## Targeted File Excerpts\nThe following excerpts are from likely-affected UI files and should be used for implementation analysis.\n\n### {dashboardPath}\n```text\n{snippet}\n```";
+        var withoutTags = Regex.Replace(html, @"<[^>]+>", " ");
+        return WebUtility.HtmlDecode(withoutTags);
     }
 
     private static string ExtractKeywordSnippets(string content, IReadOnlyList<string> keywords, int contextLines, int maxChars)
