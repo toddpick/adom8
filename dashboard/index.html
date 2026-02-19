@@ -1444,6 +1444,18 @@
             }
         }
 
+        /* Responsive layout for top-nav controls */
+        @media (max-width: 1023px) {
+            .top-nav {
+                flex-wrap: wrap;
+                padding: 8px 16px;
+            }
+            .top-nav .nav-spacer {
+                flex-basis: 100%;
+                height: 0;
+            }
+        }
+
         /* Current Work Item */
         .work-item-panel {
             background: #fff;
@@ -3013,6 +3025,13 @@
             🧩 <span id="provision-btn-text">PROVISION ADO</span>
         </button>
         
+        <button class="function-key-btn" id="function-key-btn" onclick="openFunctionKeyPrompt()" title="Set Function Key for secured actions" aria-label="Set Function Key">🔓</button>
+        
+        <span class="codebase-badge not-initialized" id="codebase-badge" title="Codebase documentation status">
+            <span id="codebase-badge-label">⚠ Codebase Not Initialized</span>
+            <button class="codebase-scan-btn" id="btn-scan-codebase" onclick="openScanModal(); event.stopPropagation();" title="Initialize codebase documentation" aria-label="Initialize or re-analyze codebase">🔄</button>
+        </span>
+        
         <button class="reset-btn" id="reset-btn" onclick="handleReset()" title="Clear all activity data and reset dashboard" aria-label="Reset dashboard data">
             🔄 <span id="reset-btn-text">RESET</span>
         </button>
@@ -3151,7 +3170,6 @@
                         <div class="subtitle">Real-time monitoring of autonomous AI agents processing Azure DevOps work items</div>
                     </div>
                     <div class="header-tools">
-                        <button class="function-key-btn" id="function-key-btn" onclick="openFunctionKeyPrompt()" title="Set Function Key for secured actions" aria-label="Set Function Key">🔓</button>
                         <div class="ai-status-bar" id="ai-status-bar">
                             <div class="ai-provider-card claude not-configured" id="provider-claude">
                                 <div>
@@ -3182,10 +3200,6 @@
                                 <span class="ai-provider-status-dot not-configured" id="provider-copilot-dot"></span>
                             </div>
                         </div>
-                        <span class="codebase-badge not-initialized" id="codebase-badge" title="Codebase documentation status">
-                            <span id="codebase-badge-label">⚠ Codebase Not Initialized</span>
-                            <button class="codebase-scan-btn" id="btn-scan-codebase" onclick="openScanModal(); event.stopPropagation();" title="Initialize codebase documentation" aria-label="Initialize or re-analyze codebase">🔄</button>
-                        </span>
                     </div>
                 </div>
 
