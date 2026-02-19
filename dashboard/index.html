@@ -4452,7 +4452,13 @@
                 return 'pending';
             }
 
+            const workflowState = safeText(story.state || story.currentState || story.workItemState || '', '').toLowerCase();
+
             if (normalizeAgentStatus(story.agents?.Planning) === 'needs_revision') {
+                return 'needs-revision';
+            }
+
+            if (workflowState === 'needs revision') {
                 return 'needs-revision';
             }
 
@@ -4482,6 +4488,10 @@
             });
             if (allCompleted) {
                 return 'completed';
+            }
+
+            if (workflowState === 'story planning' || workflowState.startsWith('ai ')) {
+                return 'in-progress';
             }
             
             return 'pending';

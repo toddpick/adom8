@@ -1,4 +1,5 @@
 using System.Net;
+using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using AIAgents.Core.Constants;
@@ -68,6 +69,7 @@ public sealed class PlanningAgentService : IAgentService
         // 3. Get existing code context
         var existingFiles = await _gitOps.ListFilesAsync(repoPath, cancellationToken);
         var fileListSummary = string.Join("\n", existingFiles.Take(100));
+        var targetedFileContext = await BuildTargetedFileContextAsync(repoPath, existingFiles, cancellationToken);
 
         // 4. Create story context
         await using var context = _contextFactory.Create(task.WorkItemId, repoPath);
@@ -143,6 +145,8 @@ If unverified external dependencies are detected, add a warning note in the tech
         : string.Empty)}
 ## Existing Repository Files
 {fileListSummary}
+
+{targetedFileContext}
 
 {await _codebaseContext.LoadRelevantContextAsync(repoPath, workItem.Title, workItem.Description, cancellationToken)}
 
@@ -448,5 +452,105 @@ Analyze this story and create a comprehensive implementation plan.";
         var start = Math.Max(0, index - radius);
         var end = Math.Min(text.Length, index + radius);
         return text[start..end].Trim();
+    }
+
+    private async Task<string> BuildTargetedFileContextAsync(
+        string repoPath,
+        IReadOnlyList<string> existingFiles,
+        CancellationToken ct)
+    {
+        var dashboardPath = existingFiles.FirstOrDefault(path =>
+            path.Equals("dashboard/index.html", StringComparison.OrdinalIgnoreCase));
+
+        if (dashboardPath is null)
+            return string.Empty;
+
+        var content = await _gitOps.ReadFileAsync(repoPath, dashboardPath, ct);
+        if (string.IsNullOrWhiteSpace(content))
+            return string.Empty;
+
+        var keywords = new[]
+        {
+            "provision-btn",
+            "function-key-btn",
+            "codebase-badge",
+            "story-header-title",
+            "getStoryTitle",
+            "US-99: US-99"
+        };
+
+        var snippet = ExtractKeywordSnippets(content, keywords, contextLines: 10, maxChars: 8000);
+        if (string.IsNullOrWhiteSpace(snippet))
+            return string.Empty;
+
+        return $"## Targeted File Excerpts\nThe following excerpts are from likely-affected UI files and should be used for implementation analysis.\n\n### {dashboardPath}\n```text\n{snippet}\n```";
+    }
+
+    private static string ExtractKeywordSnippets(string content, IReadOnlyList<string> keywords, int contextLines, int maxChars)
+    {
+        var lines = content.Replace("\r\n", "\n").Split('\n');
+        if (lines.Length == 0)
+            return string.Empty;
+
+        var ranges = new List<(int Start, int End)>();
+
+        for (var index = 0; index < lines.Length; index++)
+        {
+            var line = lines[index];
+            if (!keywords.Any(keyword => line.Contains(keyword, StringComparison.OrdinalIgnoreCase)))
+                continue;
+
+            var start = Math.Max(0, index - contextLines);
+            var end = Math.Min(lines.Length - 1, index + contextLines);
+            ranges.Add((start, end));
+        }
+
+        if (ranges.Count == 0)
+        {
+            var fallbackLineCount = Math.Min(lines.Length, 160);
+            ranges.Add((0, fallbackLineCount - 1));
+        }
+
+        ranges.Sort((left, right) => left.Start.CompareTo(right.Start));
+        var merged = new List<(int Start, int End)>();
+        foreach (var range in ranges)
+        {
+            if (merged.Count == 0)
+            {
+                merged.Add(range);
+                continue;
+            }
+
+            var last = merged[^1];
+            if (range.Start <= last.End + 1)
+            {
+                merged[^1] = (last.Start, Math.Max(last.End, range.End));
+            }
+            else
+            {
+                merged.Add(range);
+            }
+        }
+
+        var sb = new StringBuilder();
+        foreach (var (start, end) in merged)
+        {
+            sb.AppendLine($"--- lines {start + 1}-{end + 1} ---");
+            for (var index = start; index <= end; index++)
+            {
+                sb.AppendLine($"{index + 1,5}: {lines[index]}");
+                if (sb.Length >= maxChars)
+                {
+                    return sb.ToString();
+                }
+            }
+            sb.AppendLine();
+            if (sb.Length >= maxChars)
+            {
+                break;
+            }
+        }
+
+        return sb.ToString();
     }
 }

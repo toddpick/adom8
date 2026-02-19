@@ -71,6 +71,8 @@ public sealed class PlanningAgentServiceTests
             .ReturnsAsync(@"C:\repos\test");
         _gitMock.Setup(g => g.ListFilesAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new List<string> { "src/Program.cs", "README.md" });
+        _gitMock.Setup(g => g.ReadFileAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync("<button id=\"provision-btn\"></button>\n<button id=\"function-key-btn\"></button>\n<span id=\"codebase-badge\"></span>");
 
         _contextMock.Setup(c => c.LoadStateAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(state);
