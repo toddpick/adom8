@@ -4507,7 +4507,10 @@
 
             const safeWorkItemId = safeInteger(story.workItemId, 0);
             const resolvedTitle = getStoryTitle(story, safeWorkItemId);
-            const safeTitle = escapeHtml(resolvedTitle || `US-${safeWorkItemId}`);
+            const safeTitle = escapeHtml(resolvedTitle || '');
+            const storyHeaderTitle = resolvedTitle
+                ? `US-${safeWorkItemId}: ${safeTitle}`
+                : `US-${safeWorkItemId}`;
             const safeCurrentAgent = escapeHtml(safeText(story.currentAgent, 'Ready'));
             const safeProgress = Math.max(0, Math.min(100, safeInteger(progress, 0)));
             
@@ -4528,7 +4531,7 @@
                 <span class="story-chevron">▶</span>
                 <span class="story-status-dot ${storyStatus}"></span>
                 <div class="story-header-info">
-                    <div class="story-header-title">US-${safeWorkItemId}: ${safeTitle}</div>
+                    <div class="story-header-title">${storyHeaderTitle}</div>
                     <div class="story-header-meta">
                         <span>${safeCurrentAgent}</span>
                         ${costDisplay}
