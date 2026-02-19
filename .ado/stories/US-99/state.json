@@ -2,7 +2,7 @@
   "workItemId": 99,
   "currentState": "AI Review",
   "createdAt": "2026-02-19T08:48:20.7263543Z",
-  "updatedAt": "2026-02-19T09:41:55.5460857Z",
+  "updatedAt": "2026-02-19T09:42:03.3958896Z",
   "agents": {
     "Planning": {
       "status": "in_progress",
@@ -32,6 +32,12 @@
       "additionalData": {
         "reason": "Copilot coding agent already runs tests"
       }
+    },
+    "Review": {
+      "status": "in_progress",
+      "startedAt": "2026-02-19T09:42:03.3958646Z",
+      "completedAt": null,
+      "additionalData": null
     }
   },
   "artifacts": {
