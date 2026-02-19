@@ -2,11 +2,11 @@
   "workItemId": 99,
   "currentState": "Story Planning",
   "createdAt": "2026-02-19T08:48:20.7263543Z",
-  "updatedAt": "2026-02-19T08:48:20.7355546Z",
+  "updatedAt": "2026-02-19T09:17:30.5774732Z",
   "agents": {
     "Planning": {
       "status": "in_progress",
-      "startedAt": "2026-02-19T08:48:20.7354977Z",
+      "startedAt": "2026-02-19T09:17:30.576862Z",
       "completedAt": null,
       "additionalData": null
     }

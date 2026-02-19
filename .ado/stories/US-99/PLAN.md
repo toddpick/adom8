@@ -8,20 +8,20 @@
 **Created:** 2026-02-19
 
 ### Description
-<div>As an operator, I want the Lock button and the Codebase Initialized control positioned next to the Provision ADO button in the top action bar so that these critical controls are visible, grouped, and do not block execution actions. </div><div><br> </div><div>here is a picture<br><img src="https://dev.azure.com/my-credit-plan/b36853d4-13ad-4a75-813f-1f4fd40508b6/_apis/wit/attachments/e849618f-dbe9-45cf-9749-6e5fba395f79?fileName=image.png" alt=Image><br> </div>
+<div>As an operator, I want the Lock button and Codebase Initialized control next to Provision ADO on the Dashboard so controls are visible, grouped, and not blocking actions.&nbsp; </div><div><br> </div><div>Additional requirement: fix story card header to show US-99: Move Lock and Codebase Initialized controls next to Provision ADO (not US-99: US-99). </div><div><br> </div><div><img src="https://dev.azure.com/my-credit-plan/b36853d4-13ad-4a75-813f-1f4fd40508b6/_apis/wit/attachments/00a2e10d-c5ab-41a6-9b42-3cd8b60ba512?fileName=image.png" alt=Image><br> </div>
 
 ### Acceptance Criteria
-<ul><li>Lock button is moved into the same top action cluster as Provision ADO. </li><li>Codebase Initialized control is moved into the same top action cluster as Provision ADO. </li><li>Control order is intuitive and consistent on desktop resolutions. </li><li>Existing behaviors and permissions for Lock, Provision ADO, and Codebase Initialized remain unchanged. </li><li>Clicking Provision ADO and neighboring controls is not obstructed by overlapping/positioning issues. </li><li>UI remains responsive and usable on standard laptop viewport widths. </li><li>Scope is layout/placement only; no business logic changes. </li> </ul>
+<div>Lock and Codebase controls move next to Provision ADO. Keep behavior unchanged. No click overlap. Responsive layout. Header must render US-99 plus full title, not duplicate ID. </div><div><span>explicit acceptance criteria (3–5 testable bullets),<br></span><div>exact UI location references (which section/card/button),<br> </div><div>expected before/after behavior,<br> </div><span>any attached files called out by name and purpose.</span><br> </div><div><br> </div>
 
 ---
 
 ## Technical Analysis
 
 ### Problem Analysis
-This is a UI/UX layout task requiring repositioning of three controls (Lock button, Codebase Initialized control, Provision ADO button) into a unified top action bar cluster. The story aims to improve operator workflow by grouping related controls and preventing execution blocking. However, the current codebase context shows primarily backend Azure Functions code with minimal frontend visibility.
+This is a UI layout reorganization task for the Dashboard. The story requests moving two controls (Lock button and Codebase Initialized control) to be positioned next to the Provision ADO button, plus fixing a story card header display issue. The attached screenshots should provide visual context for the desired layout changes. However, the acceptance criteria contains template placeholder text that needs to be replaced with specific, testable requirements.
 
 ### Recommended Approach
-Based on the repository structure showing a dashboard/index.html file (~1854 lines), this appears to be a single-file SPA implementation. The approach would involve: 1) Locating the current HTML elements for Lock, Provision ADO, and Codebase Initialized controls, 2) Identifying the existing CSS layout structure, 3) Modifying the HTML structure to group these controls together, 4) Updating CSS to ensure proper spacing, alignment, and responsive behavior, 5) Testing click interactions to prevent overlap issues. However, without access to the actual dashboard source code, specific implementation details cannot be determined.
+This would be a frontend-only change to the dashboard/index.html file (single-file SPA). The implementation would involve: 1) Locating the current positions of the Lock button, Codebase Initialized control, and Provision ADO button in the HTML/CSS, 2) Restructuring the HTML to group these three controls together, 3) Updating CSS classes and styles to ensure proper spacing and responsive behavior, 4) Fixing the story card header rendering logic to display the full title instead of duplicating the ID. The changes would be purely cosmetic layout adjustments without affecting the underlying JavaScript functionality of the controls.
 
 ### Affected Files
 
@@ -29,10 +29,10 @@ Based on the repository structure showing a dashboard/index.html file (~1854 lin
 
 
 ### Complexity Estimate
-**Story Points:** 5
+**Story Points:** 3
 
 ### Architecture Considerations
-Frontend-only change to single-file SPA dashboard. No backend API changes required since this is purely a layout/positioning modification without business logic changes.
+Single-file SPA modification - HTML structure reorganization and CSS styling updates within the existing dashboard/index.html file. No backend changes required.
 
 ---
 
@@ -40,29 +40,27 @@ Frontend-only change to single-file SPA dashboard. No backend API changes requir
 
 ### Sub-Tasks
 
-1. Analyze current HTML structure of action bar area
+1. Analyze current dashboard layout and identify target UI elements
 
-2. Identify existing CSS classes and layout patterns
+2. Restructure HTML to group Lock, Codebase Initialized, and Provision ADO controls
 
-3. Create new grouped layout structure for the three controls
+3. Update CSS classes and styles for proper spacing and alignment
 
-4. Update CSS for proper spacing and alignment
+4. Implement responsive layout adjustments for different screen sizes
 
-5. Implement responsive design for laptop viewports
+5. Fix story card header rendering to show full title instead of duplicate ID
 
-6. Test click interactions and prevent overlap issues
+6. Test layout on different screen sizes and browsers
 
-7. Verify existing functionality remains unchanged
+7. Verify all control functionality remains unchanged
 
 
 ### Dependencies
 
 
-- Access to dashboard/index.html source code
+- Access to supporting documents (.ado/stories/US-99/documents/) to understand desired layout
 
-- Understanding of current CSS framework/styling approach
-
-- Knowledge of existing JavaScript event handlers for the controls
+- Understanding of current dashboard UI structure and CSS framework used
 
 
 
@@ -72,34 +70,34 @@ Frontend-only change to single-file SPA dashboard. No backend API changes requir
 
 ### Identified Risks
 
-- Breaking existing click handlers or event bindings during restructuring
+- Breaking existing control functionality during layout changes
 
-- Responsive design issues on different screen sizes
+- Responsive layout issues on mobile devices
 
-- CSS conflicts with existing styling
+- CSS conflicts with existing styles
 
-- Accessibility impact from layout changes
+- Accessibility issues if proper focus order is not maintained
 
 
 ---
 
 ## Assumptions Made
 
-- The dashboard is implemented as a single-file SPA in dashboard/index.html
+- The dashboard uses standard HTML/CSS without a complex framework
 
-- All three controls (Lock, Provision ADO, Codebase Initialized) currently exist in the UI
+- The supporting screenshots show the desired end state
 
-- Current controls have existing CSS classes that can be modified
+- Current control functionality should remain completely unchanged
 
-- No backend API changes are needed for this layout change
+- The story card header issue is in the same dashboard file
 
 
 ---
 
 ## Testing Strategy
-Manual testing approach: 1) Visual verification of control positioning and grouping, 2) Click testing to ensure no overlap or interaction issues, 3) Responsive testing across different laptop screen sizes (1366x768, 1920x1080, etc.), 4) Functional testing to verify Lock, Provision ADO, and Codebase Initialized behaviors remain unchanged, 5) Cross-browser compatibility testing if required.
+Manual testing approach: 1) Visual verification that controls are properly positioned next to each other, 2) Responsive testing across different screen sizes (mobile, tablet, desktop), 3) Functional testing to ensure Lock button and Codebase Initialized control behavior is unchanged, 4) Cross-browser compatibility testing, 5) Accessibility testing for proper tab order and screen reader support, 6) Verification that story card header displays correctly with full title.
 
 ---
 
 *Generated by Planning Agent*  
-*Timestamp: 2026-02-19T08:48:44.9766985Z*
+*Timestamp: 2026-02-19T09:17:57.5013655Z*
