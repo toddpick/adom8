@@ -121,7 +121,7 @@ Click **Fine-grained tokens** → **Generate new token**:
 
 ## 3. Customize Your ADO Board (States & Fields)
 
-This is the most critical step. The agent pipeline transitions User Stories through custom states that **don't exist by default** in Azure DevOps. You must add them.
+This is the most critical step. The agent pipeline keeps User Stories in a single active AI state and tracks stage ownership through a custom field.
 
 ### 3a. Create an Inherited Process
 
@@ -151,12 +151,7 @@ Azure DevOps doesn't let you modify built-in processes directly. You need to cre
 
 | State Name | State Category | Color (suggested) | Purpose |
 |------------|---------------|-------------------|---------|
-| `Story Planning` | In Progress | 🔵 Blue | AI Planning Agent is generating the implementation plan |
-| `AI Code` | In Progress | 🟣 Purple | AI Coding Agent is generating source code |
-| `AI Test` | In Progress | 🟠 Orange | AI Testing Agent is generating unit/integration tests |
-| `AI Review` | In Progress | 🟡 Yellow | AI Review Agent is performing code review |
-| `AI Docs` | In Progress | 🔵 Dark Blue | AI Documentation Agent is generating docs + PR |
-| `AI Deployment` | In Progress | ⚫ Gray | AI Deployment Agent is evaluating merge/deploy |
+| `AI Agent` | In Progress | 🔵 Blue | Single active state while AI pipeline is processing |
 | `Code Review` | In Progress | 🟢 Green | Waiting for human code review (Autonomy Level 3) |
 | `Needs Revision` | In Progress | 🔴 Red | Review score too low — human intervention required |
 | `Agent Failed` | In Progress | 🔴 Dark Red | Agent exhausted retries or hit a permanent error |
@@ -173,21 +168,36 @@ Azure DevOps doesn't let you modify built-in processes directly. You need to cre
 1. Go to your project's **Boards → Boards**
 2. Click ⚙️ **Configure team settings** (gear icon top-right of the board)
 3. Click the **Columns** tab
-4. Add columns matching the pipeline flow. Suggested layout:
+4. Add columns matching the simplified flow. Suggested layout:
 
 ```
-New → Story Planning → AI Code → AI Test → AI Review → AI Docs → AI Deployment → Code Review → Needs Revision → Agent Failed → Ready for QA → Ready for Deployment → Deployed
+New → AI Agent → Code Review → Needs Revision → Agent Failed → Ready for QA → Ready for Deployment → Deployed
 ```
 
-Map each column to its matching state. This gives you a visual Kanban board showing stories flowing through the AI pipeline.
+Map each column to its matching state. This keeps workflow states clean and avoids AI stage state explosion.
 
 > **Note:** You don't need to add a "Closed" column — Azure DevOps automatically includes a rightmost column for the **Completed** category (which contains "Deployed" and the default "Closed" state). Stories in "Deployed" will appear in that final column. The default "Closed" state can be used to archive stories that are fully done.
 
-### 3e. Add Custom Fields
+### 3e. Visualize Active Agent on Board Cards
+
+Azure Boards cannot dynamically map swimlanes to custom fields, but you can still get lane-like visibility:
+
+1. Go to **Boards → Boards → ⚙️ Team settings → Cards**
+2. Add `Current AI Agent` to card fields so active ownership is visible on each card
+3. Add card style rules for `Current AI Agent` values:
+  - `Planning Agent`
+  - `Coding Agent`
+  - `Testing Agent`
+  - `Review Agent`
+  - `Documentation Agent`
+  - `Deployment Agent`
+4. Save filters or queries by `Current AI Agent` for focused views
+
+### 3f. Add Custom Fields
 
 Still in **Organization Settings → Process → User Story**:
 
-The AI pipeline uses **21 custom fields** organized into three groups: **Input Fields** (you set per-story), **Model Override Fields** (optional per-story AI model control), and **AI Tracking** (written automatically by agents).
+The AI pipeline uses **22 custom fields** organized into three groups: **Input Fields** (you set per-story), **Model Override Fields** (optional per-story AI model control), and **AI Tracking** (written automatically by agents).
 
 #### Input Fields — "AI Agent Settings" Group
 
@@ -354,13 +364,22 @@ These fields are written automatically by the agents during processing. They sho
     - **Page:** Details
 
 20. Click **+ New field**:
+  - **Name:** `Current AI Agent`
+  - **Type:** Picklist (string)
+  - **Items:** `Planning Agent`, `Coding Agent`, `Testing Agent`, `Review Agent`, `Documentation Agent`, `Deployment Agent`
+  - **Default:** *(blank)*
+  - **Description:** Active AI owner for this story (blank means no AI agent currently working)
+  - **Group:** Select **AI Tracking**
+  - **Page:** Details
+
+21. Click **+ New field**:
     - **Name:** `AI Critical Issues`
     - **Type:** Integer
     - **Description:** Critical issues found during code review
     - **Group:** Select **AI Tracking**
     - **Page:** Details
 
-21. Click **+ New field**:
+22. Click **+ New field**:
     - **Name:** `AI Deployment Decision`
     - **Type:** String
     - **Description:** Final deployment action taken (e.g., "Auto-merged", "Assigned for human review")
@@ -391,6 +410,7 @@ These fields are written automatically by the agents during processing. They sho
 | AI Tracking | AI Tests Generated | 12 |
 | AI Tracking | AI PR Number | 42 |
 | AI Tracking | AI Last Agent | Deployment |
+| AI Tracking | Current AI Agent | Review Agent *(or blank when idle)* |
 | AI Tracking | AI Critical Issues | 0 |
 | AI Tracking | AI Deployment Decision | Auto-merged PR #42 |
 
@@ -717,7 +737,7 @@ Generate a webhook secret with: `openssl rand -hex 32` (or `python -c "import se
 **Step 3: Verify the integration:**
 
 1. Create a user story in ADO with high story points (≥ your threshold)
-2. Move it to "Story Planning" to trigger the pipeline
+2. Move it to "AI Agent" to trigger the pipeline
 3. After the Planning agent completes, watch the Coding agent — it should:
    - Create a GitHub Issue titled `[US-{id}] {story title}`
    - Assign the issue to `@copilot`
@@ -805,6 +825,7 @@ This connects Azure DevOps to your Function App. When a work item's state change
    - **Area path:** *(leave as `[Any]` or scope to specific area)*
    - **Work item type:** `User Story`
    - **Field:** `State`
+  - **Value filter (recommended):** `AI Agent`
 6. Click **Next**
 7. Configure the action:
   - **URL:** `https://<YOUR_FUNCTION_APP>.azurewebsites.net/api/webhook?code=<FUNCTION_KEY>`
@@ -830,7 +851,7 @@ This connects Azure DevOps to your Function App. When a work item's state change
    - **Acceptance Criteria:** `Given a GET request to /hello, When the server is running, Then it returns 200 with the hello message`
    - *(Optional)* **Autonomy Level:** `3 - Review & Pause` (default)
    - *(Optional)* **AI Minimum Review Score:** `85` (default)
-3. Change the state to **`Story Planning`**
+3. Change the state to **`AI Agent`**
 4. **Watch the pipeline work:**
 
 | What to check | Where |
@@ -844,9 +865,12 @@ This connects Azure DevOps to your Function App. When a work item's state change
 
 **Expected flow:**
 ```
-Story Planning → AI Code → AI Test → AI Review → AI Docs → AI Deployment → Code Review
-                                                                            (Level 3 stops here)
+AI Agent (Current AI Agent updates: Planning → Coding → Testing → Review → Documentation → Deployment)
+→ Code Review (Level 3 stops here)
 ```
+
+While AI is actively processing, **State** stays `AI Agent` and **Current AI Agent** shows the active worker.
+When no AI worker is active (handoff/idle), **Current AI Agent** is blank.
 
 5. You should see a **PR created** in your repository and a **comment on the work item** summarizing what each agent did.
 

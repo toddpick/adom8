@@ -1,4 +1,5 @@
 using System.Text.Json;
+using AIAgents.Core.Constants;
 using AIAgents.Core.Interfaces;
 using AIAgents.Functions.Models;
 using AIAgents.Functions.Services;
@@ -79,10 +80,11 @@ public sealed class ResumePipeline
             return new NotFoundObjectResult(new { error = $"Branch '{branchName}' not found. Push code before resuming." });
         }
 
-        // Update ADO state
+        // Update ADO state + current AI agent
         try
         {
-            await _adoClient.UpdateWorkItemStateAsync(workItemId, "AI Test", cancellationToken);
+            await _adoClient.UpdateWorkItemStateAsync(workItemId, AIPipelineNames.ProcessingState, cancellationToken);
+            await _adoClient.UpdateWorkItemFieldAsync(workItemId, CustomFieldNames.Paths.CurrentAIAgent, AIPipelineNames.CurrentAgentValues.Testing, cancellationToken);
         }
         catch (Exception ex)
         {

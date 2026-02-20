@@ -90,8 +90,9 @@ public sealed class CodingAgentService : IAgentService
             state.Agents["Coding"] = AgentStatus.InProgress();
             await context.SaveStateAsync(state, cancellationToken);
 
-            // Update ADO state so the board reflects the current agent
-            await _adoClient.UpdateWorkItemStateAsync(workItem.Id, "AI Code", cancellationToken);
+            await _adoClient.UpdateWorkItemStateAsync(workItem.Id, AIPipelineNames.ProcessingState, cancellationToken);
+            try { await _adoClient.UpdateWorkItemFieldAsync(workItem.Id, CustomFieldNames.Paths.CurrentAIAgent, AIPipelineNames.CurrentAgentValues.Coding, cancellationToken); }
+            catch { /* field may not exist yet */ }
 
             // Read the plan
             var plan = await context.ReadArtifactAsync("PLAN.md", cancellationToken)
@@ -161,6 +162,9 @@ public sealed class CodingAgentService : IAgentService
                 try { await _adoClient.UpdateWorkItemFieldAsync(workItem.Id, CustomFieldNames.Paths.LastAgent, "Coding", cancellationToken); }
                 catch { /* field may not exist yet */ }
 
+                try { await _adoClient.UpdateWorkItemFieldAsync(workItem.Id, CustomFieldNames.Paths.CurrentAIAgent, string.Empty, cancellationToken); }
+                catch { /* field may not exist yet */ }
+
                 await _activityLogger.LogAsync("Coding", task.WorkItemId,
                     $"Delegated to @{agentName} (Issue #{result.CopilotMetrics?.IssueNumber}). Pipeline paused.",
                     "info", cancellationToken);
@@ -221,8 +225,8 @@ public sealed class CodingAgentService : IAgentService
 
             try { await _adoClient.UpdateWorkItemFieldAsync(workItem.Id, CustomFieldNames.Paths.LastAgent, "Coding", cancellationToken); }
             catch { /* field may not exist yet */ }
-
-            await _adoClient.UpdateWorkItemStateAsync(workItem.Id, "AI Test", cancellationToken);
+            try { await _adoClient.UpdateWorkItemFieldAsync(workItem.Id, CustomFieldNames.Paths.CurrentAIAgent, string.Empty, cancellationToken); }
+            catch { /* field may not exist yet */ }
 
             var nextTask = new AgentTask
             {

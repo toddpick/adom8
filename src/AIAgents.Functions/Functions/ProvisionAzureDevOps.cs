@@ -4,6 +4,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using AIAgents.Core.Configuration;
+using AIAgents.Core.Constants;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Azure.Functions.Worker;
@@ -26,12 +27,7 @@ public sealed class ProvisionAzureDevOps
 {
     private static readonly string[] RequiredStates =
     [
-        "Story Planning",
-        "AI Code",
-        "AI Test",
-        "AI Review",
-        "AI Docs",
-        "AI Deployment",
+        AIPipelineNames.ProcessingState,
         "Code Review",
         "Needs Revision",
         "Agent Failed",
@@ -63,6 +59,7 @@ public sealed class ProvisionAzureDevOps
         new("AI Tests Generated", "Custom.AITestsGenerated", "integer"),
         new("AI PR Number", "Custom.AIPRNumber", "integer"),
         new("AI Last Agent", "Custom.AILastAgent", "string"),
+        new("Current AI Agent", "Custom.CurrentAIAgent", "string"),
         new("AI Critical Issues", "Custom.AICriticalIssues", "integer"),
         new("AI Deployment Decision", "Custom.AIDeploymentDecision", "string")
     ];
@@ -215,6 +212,8 @@ public sealed class ProvisionAzureDevOps
         }
 
         manualSteps.Add("If custom fields were created but not visible on forms, add them to User Story layout groups (AI Agent Settings / AI Model Settings / AI Tracking).");
+        manualSteps.Add("Configure 'Current AI Agent' as a picklist with values: Planning Agent, Coding Agent, Testing Agent, Review Agent, Documentation Agent, Deployment Agent. Leave default blank.");
+        manualSteps.Add("For Azure Boards visualization, add 'Current AI Agent' to card fields and create card style rules per agent value.");
 
         var ready = errors.Count == 0 && missingStates.Count == 0;
         var summary = ready

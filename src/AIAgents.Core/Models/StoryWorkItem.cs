@@ -113,6 +113,9 @@ public sealed record StoryWorkItem
     /// <summary>Last agent that processed this story.</summary>
     public string? AILastAgent { get; init; }
 
+    /// <summary>Current AI agent actively processing this story (blank when idle).</summary>
+    public string? CurrentAIAgent { get; init; }
+
     /// <summary>Critical issues found during review.</summary>
     public int? AICriticalIssues { get; init; }
 

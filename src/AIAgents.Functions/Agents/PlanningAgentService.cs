@@ -78,6 +78,10 @@ public sealed class PlanningAgentService : IAgentService
         state.Agents["Planning"] = AgentStatus.InProgress();
         await context.SaveStateAsync(state, cancellationToken);
 
+        await _adoClient.UpdateWorkItemStateAsync(workItem.Id, AIPipelineNames.ProcessingState, cancellationToken);
+        try { await _adoClient.UpdateWorkItemFieldAsync(workItem.Id, CustomFieldNames.Paths.CurrentAIAgent, AIPipelineNames.CurrentAgentValues.Planning, cancellationToken); }
+        catch { /* field may not exist yet */ }
+
         // 5. Detect placeholder text before calling AI
         var placeholderWarning = DetectPlaceholders(workItem);
 
@@ -238,7 +242,7 @@ Analyze this story and create a comprehensive implementation plan.";
 
             rejectComment += $"<br/><br/><b>Complexity Estimate:</b> {planResult.Complexity} story points" +
                 $"<br/><b>Risks:</b> {string.Join(", ", planResult.Risks)}" +
-                $"<br/><br/><i>Please address the blockers and questions above, then move the story back to 'Story Planning' to re-trigger the pipeline.</i>";
+                $"<br/><br/><i>Please address the blockers and questions above, then move the story back to 'AI Agent' to re-trigger the pipeline.</i>";
 
             await _adoClient.AddWorkItemCommentAsync(workItem.Id, rejectComment, cancellationToken);
 
@@ -260,6 +264,9 @@ Analyze this story and create a comprehensive implementation plan.";
             await context.SaveStateAsync(state, cancellationToken);
 
             try { await _adoClient.UpdateWorkItemFieldAsync(workItem.Id, CustomFieldNames.Paths.LastAgent, "Planning", cancellationToken); }
+            catch { /* field may not exist yet */ }
+
+            try { await _adoClient.UpdateWorkItemFieldAsync(workItem.Id, CustomFieldNames.Paths.CurrentAIAgent, string.Empty, cancellationToken); }
             catch { /* field may not exist yet */ }
 
             // Move story to Needs Revision — do NOT enqueue Coding agent
@@ -293,8 +300,8 @@ Analyze this story and create a comprehensive implementation plan.";
         try { await _adoClient.UpdateWorkItemFieldAsync(workItem.Id, CustomFieldNames.Paths.LastAgent, "Planning", cancellationToken); }
         catch { /* field may not exist yet */ }
 
-        // 13. Transition ADO state and enqueue next agent
-        await _adoClient.UpdateWorkItemStateAsync(workItem.Id, "AI Code", cancellationToken);
+        try { await _adoClient.UpdateWorkItemFieldAsync(workItem.Id, CustomFieldNames.Paths.CurrentAIAgent, string.Empty, cancellationToken); }
+        catch { /* field may not exist yet */ }
 
         var nextTask = new AgentTask
         {

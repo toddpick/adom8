@@ -76,6 +76,12 @@ public sealed class StoryStatus
     [JsonPropertyName("currentAgent")]
     public string? CurrentAgent { get; init; }
 
+    [JsonPropertyName("currentAiAgent")]
+    public string? CurrentAiAgent { get; init; }
+
+    [JsonPropertyName("workItemState")]
+    public string? WorkItemState { get; init; }
+
     [JsonPropertyName("progress")]
     public int Progress { get; init; }
 

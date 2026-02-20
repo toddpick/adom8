@@ -1,4 +1,5 @@
 using System.Text.Json;
+using AIAgents.Core.Constants;
 using AIAgents.Core.Interfaces;
 using AIAgents.Core.Telemetry;
 using AIAgents.Functions.Models;
@@ -26,12 +27,12 @@ public sealed class OrchestratorWebhook
     private readonly TelemetryClient _telemetry;
 
     // Maps ADO work item states to the agent that processes them.
-    // ONLY "Story Planning" is here — all other transitions are handled by direct
+    // ONLY "AI Agent" is here — all other transitions are handled by direct
     // EnqueueAsync calls within each agent. This prevents double-dispatch where
     // both the webhook AND the agent enqueue the next step, causing exponential reruns.
     private static readonly Dictionary<string, AgentType> s_stateToAgent = new(StringComparer.OrdinalIgnoreCase)
     {
-        ["Story Planning"] = AgentType.Planning
+        [AIPipelineNames.ProcessingState] = AgentType.Planning
     };
 
     public OrchestratorWebhook(

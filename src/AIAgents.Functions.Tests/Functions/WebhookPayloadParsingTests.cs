@@ -13,12 +13,12 @@ public sealed class WebhookPayloadParsingTests
     /// <summary>
     /// Maps ADO work item states to expected agent types.
     /// This mirrors the static dictionary in OrchestratorWebhook.
-    /// Only "Story Planning" is mapped — all other transitions are handled
+    /// Only "AI Agent" is mapped — all other transitions are handled
     /// by direct EnqueueAsync calls within each agent (prevents double-dispatch).
     /// </summary>
     private static readonly Dictionary<string, AgentType> s_expectedMapping = new(StringComparer.OrdinalIgnoreCase)
     {
-        ["Story Planning"] = AgentType.Planning
+        ["AI Agent"] = AgentType.Planning
     };
 
     // ── Payload deserialization ──
@@ -35,13 +35,13 @@ public sealed class WebhookPayloadParsingTests
                 "fields": {
                     "System.State": {
                         "oldValue": "New",
-                        "newValue": "Story Planning"
+                        "newValue": "AI Agent"
                     }
                 },
                 "revision": {
                     "id": 12345,
                     "fields": {
-                        "System.State": "Story Planning"
+                        "System.State": "AI Agent"
                     }
                 }
             }
@@ -56,7 +56,7 @@ public sealed class WebhookPayloadParsingTests
         Assert.Equal(100, payload.Resource.Id);
         Assert.Equal(12345, payload.Resource.WorkItemId);
         Assert.Equal("New", payload.Resource.Fields!.State!.OldValue);
-        Assert.Equal("Story Planning", payload.Resource.Fields.State.NewValue);
+        Assert.Equal("AI Agent", payload.Resource.Fields.State.NewValue);
     }
 
     [Fact]
@@ -119,7 +119,7 @@ public sealed class WebhookPayloadParsingTests
     // ── State-to-agent mapping ──
 
     [Theory]
-    [InlineData("Story Planning", AgentType.Planning)]
+    [InlineData("AI Agent", AgentType.Planning)]
     public void StateMapping_KnownStates_MapToCorrectAgents(string state, AgentType expectedAgent)
     {
         Assert.True(s_expectedMapping.TryGetValue(state, out var agent));
@@ -134,6 +134,7 @@ public sealed class WebhookPayloadParsingTests
     [InlineData("Ready for QA")]
     [InlineData("Deployed")]
     [InlineData("Needs Revision")]
+    [InlineData("Story Planning")]
     [InlineData("AI Code")]
     [InlineData("AI Test")]
     [InlineData("AI Review")]
@@ -146,8 +147,8 @@ public sealed class WebhookPayloadParsingTests
     [Fact]
     public void StateMapping_CaseInsensitive()
     {
-        Assert.True(s_expectedMapping.TryGetValue("story planning", out _));
-        Assert.True(s_expectedMapping.TryGetValue("STORY PLANNING", out _));
+        Assert.True(s_expectedMapping.TryGetValue("ai agent", out _));
+        Assert.True(s_expectedMapping.TryGetValue("AI AGENT", out _));
     }
 
     // ── Work item ID extraction logic ──

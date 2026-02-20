@@ -64,8 +64,9 @@ public sealed class DeploymentAgentService : IAgentService
         state.Agents["Deployment"] = AgentStatus.InProgress();
         await context.SaveStateAsync(state, cancellationToken);
 
-        // Update ADO state so the board reflects the current agent
-        await _adoClient.UpdateWorkItemStateAsync(workItem.Id, "AI Deployment", cancellationToken);
+        await _adoClient.UpdateWorkItemStateAsync(workItem.Id, AIPipelineNames.ProcessingState, cancellationToken);
+        try { await _adoClient.UpdateWorkItemFieldAsync(workItem.Id, CustomFieldNames.Paths.CurrentAIAgent, AIPipelineNames.CurrentAgentValues.Deployment, cancellationToken); }
+        catch { /* field may not exist yet */ }
 
         var autonomyLevel = workItem.AutonomyLevel;
         var minimumScore = workItem.MinimumReviewScore;
@@ -94,6 +95,9 @@ public sealed class DeploymentAgentService : IAgentService
         };
         state.CurrentState = decision.FinalState;
         await context.SaveStateAsync(state, cancellationToken);
+
+        try { await _adoClient.UpdateWorkItemFieldAsync(workItem.Id, CustomFieldNames.Paths.CurrentAIAgent, string.Empty, cancellationToken); }
+        catch { /* field may not exist yet */ }
 
         // Update ADO work item state
         await _adoClient.UpdateWorkItemStateAsync(workItem.Id, decision.FinalState, cancellationToken);

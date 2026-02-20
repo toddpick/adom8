@@ -1,4 +1,5 @@
 using System.Text.Json;
+using AIAgents.Core.Constants;
 using AIAgents.Core.Interfaces;
 using AIAgents.Core.Telemetry;
 using AIAgents.Functions.Models;
@@ -244,6 +245,11 @@ public sealed class AgentTaskDispatcher
                     if (agentTask.WorkItemId > 0)
                     {
                         await PostFailureCommentAsync(agentTask, result, cancellationToken);
+                        await _adoClient.UpdateWorkItemFieldAsync(
+                            agentTask.WorkItemId,
+                            CustomFieldNames.Paths.CurrentAIAgent,
+                            string.Empty,
+                            cancellationToken);
                         await _adoClient.UpdateWorkItemStateAsync(
                             agentTask.WorkItemId, "Agent Failed", cancellationToken);
                     }

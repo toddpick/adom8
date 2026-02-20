@@ -342,8 +342,10 @@ public sealed class CopilotBridgeWebhook
         catch { /* field may not exist yet */ }
 
         // Skip Testing — Copilot coding agent already runs tests during its session.
-        // Go directly to AI Review state.
-        await _adoClient.UpdateWorkItemStateAsync(workItemId, "AI Review", cancellationToken);
+        // Continue pipeline in consolidated AI Agent state at Review.
+        await _adoClient.UpdateWorkItemStateAsync(workItemId, AIPipelineNames.ProcessingState, cancellationToken);
+        try { await _adoClient.UpdateWorkItemFieldAsync(workItemId, CustomFieldNames.Paths.CurrentAIAgent, AIPipelineNames.CurrentAgentValues.Review, cancellationToken); }
+        catch { /* field may not exist yet */ }
 
         await _adoClient.AddWorkItemCommentAsync(workItemId,
             $"<b>🤖 AI Coding Agent Complete (GitHub Copilot)</b><br/>" +

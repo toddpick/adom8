@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.Json;
+using AIAgents.Core.Constants;
 using AIAgents.Core.Interfaces;
 using AIAgents.Core.Telemetry;
 using AIAgents.Functions.Models;
@@ -141,6 +142,7 @@ public sealed class DeadLetterQueueHandler
             try
             {
                 await _adoClient.AddWorkItemCommentAsync(task.WorkItemId, comment, ct);
+                await _adoClient.UpdateWorkItemFieldAsync(task.WorkItemId, CustomFieldNames.Paths.CurrentAIAgent, string.Empty, ct);
                 await _adoClient.UpdateWorkItemStateAsync(task.WorkItemId, "Agent Failed", ct);
             }
             catch (Exception ex)

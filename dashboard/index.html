@@ -4553,15 +4553,19 @@
             if (!story || !story.agents) {
                 return 'pending';
             }
-
-            const workflowState = safeText(story.state || story.currentState || story.workItemState || '', '').toLowerCase();
+            const currentAiAgent = safeText(story.currentAiAgent || '', '');
 
             if (normalizeAgentStatus(story.agents?.Planning) === 'needs_revision') {
                 return 'needs-revision';
             }
 
+            const workflowState = safeText(story.state || story.currentState || story.workItemState || '', '').toLowerCase();
             if (workflowState === 'needs revision') {
                 return 'needs-revision';
+            }
+
+            if (currentAiAgent) {
+                return 'in-progress';
             }
 
             const agentNames = ['Planning', 'Coding', 'Testing', 'Review', 'Documentation', 'Deployment'];
@@ -4593,7 +4597,7 @@
                 return 'completed';
             }
 
-            if (workflowState === 'story planning' || workflowState.startsWith('ai ')) {
+            if (workflowState === 'ai agent') {
                 return 'in-progress';
             }
             

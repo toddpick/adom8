@@ -156,7 +156,7 @@ public sealed class PlanningAgentServiceTests
 
         await service.ExecuteAsync(task);
 
-        _adoMock.Verify(a => a.UpdateWorkItemStateAsync(12345, "AI Code", It.IsAny<CancellationToken>()), Times.Once);
+        _adoMock.Verify(a => a.UpdateWorkItemStateAsync(12345, "AI Agent", It.IsAny<CancellationToken>()), Times.Once);
         _adoMock.Verify(a => a.AddWorkItemCommentAsync(12345, It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 

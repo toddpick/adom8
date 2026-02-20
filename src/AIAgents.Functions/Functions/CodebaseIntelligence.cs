@@ -1,5 +1,6 @@
 using System.Text.Json;
 using AIAgents.Core.Configuration;
+using AIAgents.Core.Constants;
 using AIAgents.Core.Interfaces;
 using AIAgents.Core.Models;
 using AIAgents.Functions.Models;
@@ -184,12 +185,12 @@ public sealed class CodebaseIntelligence
             var description = BuildCodebaseScanStoryDescription();
 
             var workItemId = await _adoClient.CreateWorkItemAsync(
-                title, description, "Story Planning", cancellationToken);
+                title, description, AIPipelineNames.ProcessingState, cancellationToken);
 
             await _activityLogger.LogAsync(
                 "CodebaseDocumentation",
                 workItemId,
-                "Codebase scan story created and set to Story Planning (Copilot path)",
+                "Codebase scan story created and set to AI Agent (Copilot path)",
                 cancellationToken: cancellationToken);
 
             _logger.LogInformation("Created codebase scan story {WorkItemId} for Copilot path", workItemId);

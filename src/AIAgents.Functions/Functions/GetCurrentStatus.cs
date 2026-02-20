@@ -90,9 +90,11 @@ public sealed class GetCurrentStatus
                 Title = string.IsNullOrWhiteSpace(activeStory.Title)
                     ? $"US-{activeStory.WorkItemId}"
                     : activeStory.Title,
-                State = activeStory.CurrentAgent != null
-                    ? $"AI {activeStory.CurrentAgent}"
-                    : null,
+                State = !string.IsNullOrWhiteSpace(activeStory.CurrentAiAgent)
+                    ? activeStory.CurrentAiAgent
+                    : activeStory.CurrentAgent != null
+                        ? $"{activeStory.CurrentAgent} Agent"
+                        : null,
                 AutonomyLevel = autonomyLevel,
                 ElapsedTime = elapsed
             };
@@ -348,6 +350,8 @@ public sealed class GetCurrentStatus
         }
 
         var titleById = new Dictionary<int, string>();
+        var stateById = new Dictionary<int, string>();
+        var currentAgentById = new Dictionary<int, string?>();
 
         var fetchTasks = distinctIds.Select(async id =>
         {
@@ -360,6 +364,8 @@ public sealed class GetCurrentStatus
                     lock (titleById)
                     {
                         titleById[id] = title;
+                        stateById[id] = workItem.State;
+                        currentAgentById[id] = workItem.CurrentAIAgent;
                     }
                 }
             }
@@ -374,15 +380,43 @@ public sealed class GetCurrentStatus
         for (var index = 0; index < stories.Count; index++)
         {
             var story = stories[index];
+            var mappedCurrentAgent = currentAgentById.TryGetValue(story.WorkItemId, out var fieldValue)
+                ? MapCurrentAgentField(fieldValue)
+                : null;
+            var mergedAgents = new Dictionary<string, string>(story.Agents, StringComparer.OrdinalIgnoreCase);
+
+            if (!string.IsNullOrWhiteSpace(mappedCurrentAgent))
+            {
+                mergedAgents[mappedCurrentAgent] = "in_progress";
+            }
+
             if (titleById.TryGetValue(story.WorkItemId, out var resolvedTitle))
             {
                 stories[index] = new StoryStatus
                 {
                     WorkItemId = story.WorkItemId,
                     Title = resolvedTitle,
-                    CurrentAgent = story.CurrentAgent,
+                    CurrentAgent = mappedCurrentAgent ?? story.CurrentAgent,
+                    CurrentAiAgent = currentAgentById.GetValueOrDefault(story.WorkItemId),
+                    WorkItemState = stateById.GetValueOrDefault(story.WorkItemId),
                     Progress = story.Progress,
-                    Agents = story.Agents,
+                    Agents = mergedAgents,
+                    AgentDetails = story.AgentDetails,
+                    TokenUsage = story.TokenUsage,
+                    AgentTimings = story.AgentTimings
+                };
+            }
+            else
+            {
+                stories[index] = new StoryStatus
+                {
+                    WorkItemId = story.WorkItemId,
+                    Title = story.Title,
+                    CurrentAgent = mappedCurrentAgent ?? story.CurrentAgent,
+                    CurrentAiAgent = currentAgentById.GetValueOrDefault(story.WorkItemId),
+                    WorkItemState = stateById.GetValueOrDefault(story.WorkItemId),
+                    Progress = story.Progress,
+                    Agents = mergedAgents,
                     AgentDetails = story.AgentDetails,
                     TokenUsage = story.TokenUsage,
                     AgentTimings = story.AgentTimings
@@ -411,5 +445,24 @@ public sealed class GetCurrentStatus
         if (ts.TotalMinutes >= 1)
             return $"{(int)ts.TotalMinutes}m {ts.Seconds}s";
         return $"{ts.Seconds}s";
+    }
+
+    private static string? MapCurrentAgentField(string? currentAIAgent)
+    {
+        if (string.IsNullOrWhiteSpace(currentAIAgent))
+        {
+            return null;
+        }
+
+        return currentAIAgent.Trim().ToLowerInvariant() switch
+        {
+            "planning agent" => "Planning",
+            "coding agent" => "Coding",
+            "testing agent" => "Testing",
+            "review agent" => "Review",
+            "documentation agent" => "Documentation",
+            "deployment agent" => "Deployment",
+            _ => null
+        };
     }
 }

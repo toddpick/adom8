@@ -122,7 +122,7 @@ public sealed class DocumentationAgentServiceTests
 
         Assert.Equal("AI Deployment", _capturedState.CurrentState);
         Assert.Equal("completed", _capturedState.Agents["Documentation"].Status);
-        _adoMock.Verify(a => a.UpdateWorkItemStateAsync(12345, "AI Deployment", It.IsAny<CancellationToken>()), Times.Once);
+        _adoMock.Verify(a => a.UpdateWorkItemStateAsync(12345, "AI Agent", It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]

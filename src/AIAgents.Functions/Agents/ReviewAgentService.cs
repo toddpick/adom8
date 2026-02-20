@@ -62,8 +62,9 @@ public sealed class ReviewAgentService : IAgentService
         state.Agents["Review"] = AgentStatus.InProgress();
         await context.SaveStateAsync(state, cancellationToken);
 
-        // Update ADO state so the board reflects the current agent
-        await _adoClient.UpdateWorkItemStateAsync(workItem.Id, "AI Review", cancellationToken);
+        await _adoClient.UpdateWorkItemStateAsync(workItem.Id, AIPipelineNames.ProcessingState, cancellationToken);
+        try { await _adoClient.UpdateWorkItemFieldAsync(workItem.Id, CustomFieldNames.Paths.CurrentAIAgent, AIPipelineNames.CurrentAgentValues.Review, cancellationToken); }
+        catch { /* field may not exist yet */ }
 
         // Review ONLY coding artifacts — do NOT include test files or non-code artifacts.
         // This keeps the review focused and avoids sending excessive content to the AI.
@@ -230,8 +231,8 @@ Perform a comprehensive code review.";
         // Track last agent in ADO
         try { await _adoClient.UpdateWorkItemFieldAsync(workItem.Id, CustomFieldNames.Paths.LastAgent, "Review", cancellationToken); }
         catch { /* field may not exist yet */ }
-
-        await _adoClient.UpdateWorkItemStateAsync(workItem.Id, "AI Docs", cancellationToken);
+        try { await _adoClient.UpdateWorkItemFieldAsync(workItem.Id, CustomFieldNames.Paths.CurrentAIAgent, string.Empty, cancellationToken); }
+        catch { /* field may not exist yet */ }
 
         var nextTask = new AgentTask
         {

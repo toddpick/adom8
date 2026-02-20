@@ -111,6 +111,12 @@ public static class CustomFieldNames
     /// Name of the last agent that processed this story.
     /// </summary>
     public const string LastAgent = "Custom.AILastAgent";
+
+    /// <summary>
+    /// Name of the AI agent currently working this story.
+    /// Kept blank when no AI agent is actively processing.
+    /// </summary>
+    public const string CurrentAIAgent = "Custom.CurrentAIAgent";
     
     /// <summary>
     /// Number of critical issues found during code review.
@@ -138,6 +144,7 @@ public static class CustomFieldNames
         public const string TestsGenerated = "/fields/" + CustomFieldNames.TestsGenerated;
         public const string PRNumber = "/fields/" + CustomFieldNames.PRNumber;
         public const string LastAgent = "/fields/" + CustomFieldNames.LastAgent;
+        public const string CurrentAIAgent = "/fields/" + CustomFieldNames.CurrentAIAgent;
         public const string CriticalIssues = "/fields/" + CustomFieldNames.CriticalIssues;
         public const string DeploymentDecision = "/fields/" + CustomFieldNames.DeploymentDecision;
 

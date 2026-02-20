@@ -65,8 +65,9 @@ public sealed class DocumentationAgentService : IAgentService
         state.Agents["Documentation"] = AgentStatus.InProgress();
         await context.SaveStateAsync(state, cancellationToken);
 
-        // Update ADO state so the board reflects the current agent
-        await _adoClient.UpdateWorkItemStateAsync(workItem.Id, "AI Docs", cancellationToken);
+        await _adoClient.UpdateWorkItemStateAsync(workItem.Id, AIPipelineNames.ProcessingState, cancellationToken);
+        try { await _adoClient.UpdateWorkItemFieldAsync(workItem.Id, CustomFieldNames.Paths.CurrentAIAgent, AIPipelineNames.CurrentAgentValues.Documentation, cancellationToken); }
+        catch { /* field may not exist yet */ }
 
         // Gather all artifacts
         var plan = await context.ReadArtifactAsync("PLAN.md", cancellationToken) ?? "";
@@ -187,9 +188,8 @@ Generate comprehensive documentation for these changes.";
         // Track last agent in ADO
         try { await _adoClient.UpdateWorkItemFieldAsync(workItem.Id, CustomFieldNames.Paths.LastAgent, "Documentation", cancellationToken); }
         catch { /* field may not exist yet */ }
-
-        // Update ADO state before enqueuing next agent
-        await _adoClient.UpdateWorkItemStateAsync(workItem.Id, "AI Deployment", cancellationToken);
+        try { await _adoClient.UpdateWorkItemFieldAsync(workItem.Id, CustomFieldNames.Paths.CurrentAIAgent, string.Empty, cancellationToken); }
+        catch { /* field may not exist yet */ }
 
         // Enqueue Deployment agent (handles merge/deploy based on autonomy level)
         var nextTask = new AgentTask

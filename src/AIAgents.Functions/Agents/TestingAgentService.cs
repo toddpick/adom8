@@ -62,6 +62,10 @@ public sealed class TestingAgentService : IAgentService
         state.Agents["Testing"] = AgentStatus.InProgress();
         await context.SaveStateAsync(state, cancellationToken);
 
+        await _adoClient.UpdateWorkItemStateAsync(workItem.Id, AIPipelineNames.ProcessingState, cancellationToken);
+        try { await _adoClient.UpdateWorkItemFieldAsync(workItem.Id, CustomFieldNames.Paths.CurrentAIAgent, AIPipelineNames.CurrentAgentValues.Testing, cancellationToken); }
+        catch { /* field may not exist yet */ }
+
         // Read the plan and generated code
         var plan = await context.ReadArtifactAsync("PLAN.md", cancellationToken) ?? "";
 
@@ -173,8 +177,8 @@ Generate comprehensive tests for this implementation.";
         // Track last agent in ADO
         try { await _adoClient.UpdateWorkItemFieldAsync(workItem.Id, CustomFieldNames.Paths.LastAgent, "Testing", cancellationToken); }
         catch { /* field may not exist yet */ }
-
-        await _adoClient.UpdateWorkItemStateAsync(workItem.Id, "AI Review", cancellationToken);
+        try { await _adoClient.UpdateWorkItemFieldAsync(workItem.Id, CustomFieldNames.Paths.CurrentAIAgent, string.Empty, cancellationToken); }
+        catch { /* field may not exist yet */ }
 
         var nextTask = new AgentTask
         {

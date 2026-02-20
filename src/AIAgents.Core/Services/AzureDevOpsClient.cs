@@ -322,6 +322,7 @@ public sealed class AzureDevOpsClient : IAzureDevOpsClient, IDisposable
             AIPRNumber = GetField<double?>(fields, CustomFieldNames.PRNumber) is double prn
                 ? (int)prn : null,
             AILastAgent = GetField<string>(fields, CustomFieldNames.LastAgent),
+            CurrentAIAgent = GetField<string>(fields, CustomFieldNames.CurrentAIAgent),
             AICriticalIssues = GetField<double?>(fields, CustomFieldNames.CriticalIssues) is double ci
                 ? (int)ci : null,
             AIDeploymentDecision = GetField<string>(fields, CustomFieldNames.DeploymentDecision)
