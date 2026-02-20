@@ -4699,12 +4699,12 @@
                     const err = await res.text();
                     btnEl.textContent = 'Failed';
                     btnEl.style.background = '#f44336';
-                    alert('Resume failed: ' + err);
+                    showToast('Resume failed: ' + err, 'error');
                 }
             } catch (e) {
                 btnEl.textContent = 'Error';
                 btnEl.style.background = '#f44336';
-                alert('Resume error: ' + e.message);
+                showToast('Resume error: ' + e.message, 'error');
             }
         }
 
