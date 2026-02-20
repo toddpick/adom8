@@ -212,7 +212,7 @@
 
         /* Top Nav Bar (ADO-style) */
         .top-nav {
-            background: #e5e7eb;
+            background: #fff;
             color: #111;
             padding: 8px 24px;
             display: flex;
@@ -222,16 +222,15 @@
             position: sticky;
             top: 0;
             z-index: 100;
-            border-bottom: 1px solid #d1d5db;
-            box-shadow: 0 1px 2px rgba(0,0,0,0.06);
+            box-shadow: 0 1px 3px rgba(0,0,0,0.3);
         }
 
         .top-nav-menu-toggle {
             display: none;
-            background: #f3f4f6;
-            border: 1px solid #c4c9d1;
+            background: none;
+            border: 1px solid #555;
             border-radius: 6px;
-            color: #111;
+            color: #fff;
             font-size: 1rem;
             font-weight: 700;
             cursor: pointer;
@@ -300,13 +299,26 @@
         }
 
         .top-nav .nav-separator {
-            color: #6b7280;
+            color: #555;
             font-size: 1.1rem;
         }
 
         .top-nav .nav-project {
             font-weight: 600;
-            color: #374151;
+            color: #111;
+        }
+
+        body.dark-mode .top-nav {
+            background: #1e1e1e;
+            color: #fff;
+        }
+
+        body.dark-mode .top-nav .nav-logo {
+            color: #fff;
+        }
+
+        body.dark-mode .top-nav .nav-project {
+            color: #e0e0e0;
         }
 
         .top-nav .nav-spacer {
@@ -2020,98 +2032,25 @@
             font-weight: 700;
             font-size: 0.9rem;
             margin-bottom: 4px;
-            background: #f3f4f6;
-            border: 1px solid #d1d5db;
+        }
+
         .toast-message {
             font-size: 0.8rem;
             color: #666;
-            color: #6b7280;
+        }
 
         .toast-close {
             background: none;
             border: none;
             color: #999;
             font-size: 1.2rem;
-            color: #111;
+            cursor: pointer;
             padding: 0;
             line-height: 1;
             flex-shrink: 0;
         }
 
         .toast-close:hover {
-
-        .top-nav .reset-btn {
-            background: #f3f4f6;
-            color: #1f2937;
-            border-color: #d1d5db;
-        }
-
-        .top-nav .reset-btn:hover {
-            background: #e5e7eb;
-            color: #111;
-        }
-
-        .top-nav .notification-bell,
-        .top-nav .settings-gear,
-        .top-nav .dark-toggle {
-            border-color: #c4c9d1;
-            color: #1f2937;
-            background: #f3f4f6;
-        }
-
-        .top-nav .notification-bell:hover,
-        .top-nav .settings-gear:hover,
-        .top-nav .dark-toggle:hover {
-            border-color: #9ca3af;
-            color: #111;
-            background: #e5e7eb;
-        }
-
-        body.dark-mode .top-nav {
-            background: #1e1e1e;
-            color: #fff;
-            border-bottom-color: transparent;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.3);
-        }
-
-        body.dark-mode .top-nav .nav-logo { color: #fff; }
-        body.dark-mode .top-nav .nav-separator { color: #555; }
-        body.dark-mode .top-nav .nav-project { color: #e0e0e0; }
-
-        body.dark-mode .top-stat-pill {
-            background: #2a2a2a;
-            border-color: #3a3a3a;
-            color: #aaa;
-        }
-
-        body.dark-mode .top-stat-pill .value { color: #f0f0f0; }
-
-        body.dark-mode .top-nav .reset-btn {
-            background: #555;
-            color: #ccc;
-            border-color: #666;
-        }
-
-        body.dark-mode .top-nav .reset-btn:hover {
-            background: #666;
-            color: #fff;
-        }
-
-        body.dark-mode .top-nav .notification-bell,
-        body.dark-mode .top-nav .settings-gear,
-        body.dark-mode .top-nav .dark-toggle {
-            border-color: #555;
-            color: #ccc;
-            background: none;
-        }
-
-        body.dark-mode .top-nav .notification-bell:hover,
-        body.dark-mode .top-nav .settings-gear:hover,
-        body.dark-mode .top-nav .dark-toggle:hover {
-            border-color: #888;
-            color: #fff;
-            background: rgba(255,255,255,0.08);
-        }
             color: #333;
         }
 
