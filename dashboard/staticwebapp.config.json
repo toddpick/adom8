@@ -1,4 +1,8 @@
 {
+  "globalHeaders": {
+    "Content-Security-Policy": "frame-ancestors 'none'",
+    "X-Frame-Options": "DENY"
+  },
   "navigationFallback": {
     "rewrite": "/index.html"
   },
