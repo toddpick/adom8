@@ -16,15 +16,31 @@
         body {
             font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, Roboto, Oxygen, Ubuntu, sans-serif;
             background:
-                radial-gradient(circle, rgba(255,215,0,0.18) 1px, transparent 1px),
-                radial-gradient(circle, rgba(200,150,255,0.14) 1px, transparent 1px),
-                radial-gradient(circle, rgba(255,182,193,0.12) 1px, transparent 1px),
-                linear-gradient(135deg, #fce4ec 0%, #f3e5f5 30%, #ede7f6 55%, #e8eaf6 75%, #fff8e1 100%);
-            background-size: 80px 80px, 120px 120px, 60px 60px, 100% 100%;
-            background-position: 0 0, 40px 40px, 20px 20px, 0 0;
+                radial-gradient(ellipse 80% 60% at 20% 0%, rgba(255, 20, 147, 0.70) 0%, transparent 60%),
+                radial-gradient(ellipse 80% 60% at 80% 0%, rgba(148, 87, 235, 0.70) 0%, transparent 60%),
+                radial-gradient(ellipse 50% 40% at 50% 5%,  rgba(255, 215,  0, 0.50) 0%, transparent 50%),
+                radial-gradient(ellipse 40% 30% at 10% 55%, rgba(255, 105, 180, 0.35) 0%, transparent 50%),
+                radial-gradient(ellipse 40% 30% at 90% 55%, rgba(120,  60, 220, 0.35) 0%, transparent 50%),
+                radial-gradient(ellipse 60% 40% at 50% 100%, rgba(80,  0, 160, 0.90) 0%, transparent 60%),
+                linear-gradient(170deg, #04000d 0%, #140030 35%, #3a005f 65%, #180038 100%);
             background-attachment: fixed;
             min-height: 100vh;
             color: #333;
+        }
+
+        /* Semi-transparent overlay so dashboard content remains readable over the Taylor Swift background */
+        body::before {
+            content: '';
+            position: fixed;
+            inset: 0;
+            z-index: -1;
+            background:
+                radial-gradient(circle, rgba(255,215,0,0.18) 1px, transparent 1px),
+                radial-gradient(circle, rgba(200,150,255,0.14) 1px, transparent 1px),
+                radial-gradient(circle, rgba(255,182,193,0.12) 1px, transparent 1px),
+                linear-gradient(135deg, rgba(252,228,236,0.82) 0%, rgba(243,229,245,0.82) 30%, rgba(237,231,246,0.82) 55%, rgba(232,234,246,0.82) 75%, rgba(255,248,225,0.82) 100%);
+            background-size: 80px 80px, 120px 120px, 60px 60px, 100% 100%;
+            background-position: 0 0, 40px 40px, 20px 20px, 0 0;
         }
 
         .container {
@@ -353,14 +369,23 @@
         /* Dark Mode — Taylor Swift Midnights era */
         body.dark-mode {
             background:
+                radial-gradient(ellipse 80% 60% at 20% 0%, rgba(220, 10, 120, 0.55) 0%, transparent 60%),
+                radial-gradient(ellipse 80% 60% at 80% 0%, rgba(110, 50, 200, 0.55) 0%, transparent 60%),
+                radial-gradient(ellipse 50% 40% at 50% 5%,  rgba(255, 200,  0, 0.40) 0%, transparent 50%),
+                radial-gradient(ellipse 60% 40% at 50% 100%, rgba(50,  0, 110, 0.95) 0%, transparent 60%),
+                linear-gradient(170deg, #010003 0%, #0a001a 35%, #1a0040 65%, #0d0025 100%);
+            background-attachment: fixed;
+            color: #e0e0e0;
+        }
+
+        body.dark-mode::before {
+            background:
                 radial-gradient(circle, rgba(255,215,0,0.12) 1px, transparent 1px),
                 radial-gradient(circle, rgba(180,120,255,0.10) 1px, transparent 1px),
                 radial-gradient(circle, rgba(255,150,180,0.08) 1px, transparent 1px),
-                linear-gradient(135deg, #1a0a2e 0%, #2d1b3e 30%, #1e1228 55%, #0d1a2e 75%, #1a1206 100%);
+                linear-gradient(135deg, rgba(26,10,46,0.82) 0%, rgba(45,27,62,0.82) 30%, rgba(30,18,40,0.82) 55%, rgba(13,26,46,0.82) 75%, rgba(26,18,6,0.82) 100%);
             background-size: 80px 80px, 120px 120px, 60px 60px, 100% 100%;
             background-position: 0 0, 40px 40px, 20px 20px, 0 0;
-            background-attachment: fixed;
-            color: #e0e0e0;
         }
 
         body.dark-mode .header { color: #e0e0e0; }
@@ -1621,14 +1646,24 @@
         /* Accessibility: simplified background for users who prefer reduced motion */
         @media (prefers-reduced-motion: reduce) {
             body {
-                background: linear-gradient(135deg, #fce4ec 0%, #f3e5f5 30%, #ede7f6 55%, #e8eaf6 75%, #fff8e1 100%);
+                background: linear-gradient(170deg, #04000d 0%, #140030 35%, #3a005f 65%, #180038 100%);
                 background-size: 100% 100%;
                 background-attachment: scroll;
             }
+            body::before {
+                position: absolute;
+                min-height: 100%;
+                background: linear-gradient(135deg, rgba(252,228,236,0.82) 0%, rgba(243,229,245,0.82) 30%, rgba(237,231,246,0.82) 55%, rgba(232,234,246,0.82) 75%, rgba(255,248,225,0.82) 100%);
+                background-size: 100% 100%;
+            }
             body.dark-mode {
-                background: linear-gradient(135deg, #1a0a2e 0%, #2d1b3e 30%, #1e1228 55%, #0d1a2e 75%, #1a1206 100%);
+                background: linear-gradient(170deg, #010003 0%, #0a001a 35%, #1a0040 65%, #0d0025 100%);
                 background-size: 100% 100%;
                 background-attachment: scroll;
+            }
+            body.dark-mode::before {
+                background: linear-gradient(135deg, rgba(26,10,46,0.82) 0%, rgba(45,27,62,0.82) 30%, rgba(30,18,40,0.82) 55%, rgba(13,26,46,0.82) 75%, rgba(26,18,6,0.82) 100%);
+                background-size: 100% 100%;
             }
         }
 
