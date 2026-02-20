@@ -5294,7 +5294,8 @@
 
         async function fetchHealth() {
             try {
-                const response = await fetch(withFunctionKey(HEALTH_URL));
+                const response = await fetch(withFunctionKey(HEALTH_URL), { cache: 'no-store' });
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
                 const data = await response.json();
                 updateHealthPanel(data);
                 updateProviderStatusBar(data);
@@ -5646,7 +5647,7 @@
 
         async function fetchStatus() {
             try {
-                const response = await fetch(withFunctionKey(API_URL));
+                const response = await fetch(withFunctionKey(API_URL), { cache: 'no-store' });
                 if (!response.ok) throw new Error(`HTTP ${response.status}`);
                 const data = await response.json();
 
