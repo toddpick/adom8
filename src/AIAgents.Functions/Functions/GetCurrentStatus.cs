@@ -226,6 +226,19 @@ public sealed class GetCurrentStatus
                         CompletedAt = activity.Timestamp,
                         DurationSeconds = duration
                     };
+
+                    if (activity.Message.Contains("Skipping Testing", StringComparison.OrdinalIgnoreCase) ||
+                        activity.Message.Contains("Testing skipped", StringComparison.OrdinalIgnoreCase))
+                    {
+                        agents["Testing"] = "skipped";
+                        agentDetails["Testing"] = new AgentDetailDto
+                        {
+                            AdditionalData = new Dictionary<string, object>
+                            {
+                                ["skipReason"] = "GitHub Copilot coding agent already validated tests"
+                            }
+                        };
+                    }
                 }
                 else if (activity.Message.Contains("Needs Revision", StringComparison.OrdinalIgnoreCase) ||
                          activity.Message.Contains("Story Not Ready for Coding", StringComparison.OrdinalIgnoreCase) ||
@@ -292,7 +305,7 @@ public sealed class GetCurrentStatus
                 }
             }
 
-            var completedCount = agents.Values.Count(v => v == "completed");
+            var completedCount = agents.Values.Count(v => v is "completed" or "skipped");
             var totalAgents = 6; // Planning, Coding, Testing, Review, Documentation, Deployment
             var progress = (int)((double)completedCount / totalAgents * 100);
 
@@ -385,6 +398,8 @@ public sealed class GetCurrentStatus
         for (var index = 0; index < stories.Count; index++)
         {
             var story = stories[index];
+            var resolvedWorkItemState = stateById.GetValueOrDefault(story.WorkItemId);
+            var isAgentFailedState = string.Equals(resolvedWorkItemState, "Agent Failed", StringComparison.OrdinalIgnoreCase);
             var mappedCurrentAgent = currentAgentById.TryGetValue(story.WorkItemId, out var fieldValue)
                 ? MapCurrentAgentField(fieldValue)
                 : null;
@@ -392,7 +407,7 @@ public sealed class GetCurrentStatus
 
             if (!string.IsNullOrWhiteSpace(mappedCurrentAgent))
             {
-                mergedAgents[mappedCurrentAgent] = "in_progress";
+                mergedAgents[mappedCurrentAgent] = isAgentFailedState ? "failed" : "in_progress";
             }
 
             if (titleById.TryGetValue(story.WorkItemId, out var resolvedTitle))
@@ -403,7 +418,7 @@ public sealed class GetCurrentStatus
                     Title = resolvedTitle,
                     CurrentAgent = mappedCurrentAgent ?? story.CurrentAgent,
                     CurrentAiAgent = currentAgentById.GetValueOrDefault(story.WorkItemId),
-                    WorkItemState = stateById.GetValueOrDefault(story.WorkItemId),
+                    WorkItemState = resolvedWorkItemState,
                     Progress = story.Progress,
                     Agents = mergedAgents,
                     AgentDetails = story.AgentDetails,
@@ -419,7 +434,7 @@ public sealed class GetCurrentStatus
                     Title = story.Title,
                     CurrentAgent = mappedCurrentAgent ?? story.CurrentAgent,
                     CurrentAiAgent = currentAgentById.GetValueOrDefault(story.WorkItemId),
-                    WorkItemState = stateById.GetValueOrDefault(story.WorkItemId),
+                    WorkItemState = resolvedWorkItemState,
                     Progress = story.Progress,
                     Agents = mergedAgents,
                     AgentDetails = story.AgentDetails,

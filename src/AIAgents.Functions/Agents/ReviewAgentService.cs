@@ -62,7 +62,6 @@ public sealed class ReviewAgentService : IAgentService
         state.Agents["Review"] = AgentStatus.InProgress();
         await context.SaveStateAsync(state, cancellationToken);
 
-        await _adoClient.UpdateWorkItemStateAsync(workItem.Id, AIPipelineNames.ProcessingState, cancellationToken);
         try { await _adoClient.UpdateWorkItemFieldAsync(workItem.Id, CustomFieldNames.Paths.CurrentAIAgent, AIPipelineNames.CurrentAgentValues.Review, cancellationToken); }
         catch { /* field may not exist yet */ }
 
@@ -231,7 +230,7 @@ Perform a comprehensive code review.";
         // Track last agent in ADO
         try { await _adoClient.UpdateWorkItemFieldAsync(workItem.Id, CustomFieldNames.Paths.LastAgent, "Review", cancellationToken); }
         catch { /* field may not exist yet */ }
-        try { await _adoClient.UpdateWorkItemFieldAsync(workItem.Id, CustomFieldNames.Paths.CurrentAIAgent, string.Empty, cancellationToken); }
+        try { await _adoClient.UpdateWorkItemFieldAsync(workItem.Id, CustomFieldNames.Paths.CurrentAIAgent, AIPipelineNames.CurrentAgentValues.Documentation, cancellationToken); }
         catch { /* field may not exist yet */ }
 
         var nextTask = new AgentTask

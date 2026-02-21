@@ -16,8 +16,8 @@ namespace AIAgents.Functions.Functions;
 /// Timer-triggered Azure Function that acts as a safety-net for Copilot delegations.
 /// 
 /// Runs every 2 minutes. Checks if any pending Copilot delegation has exceeded
-/// <see cref="CopilotOptions.TimeoutMinutes"/> (default 30 minutes) and falls back
-/// to the built-in agentic coding loop if so.
+/// <see cref="CopilotOptions.TimeoutMinutes"/> (default 30 minutes) and marks it timed out.
+/// It does NOT auto-resume coding; resume is explicit/user-controlled.
 /// 
 /// Primary completion detection is handled by the CopilotBridgeWebhook, which uses
 /// PR-readiness heuristics (draft==false, no [WIP], reviewer requested) to detect
@@ -56,8 +56,8 @@ public sealed class CopilotTimeoutChecker
     }
 
     /// <summary>
-    /// Runs every 2 minutes. Only checks for timed-out delegations and falls back
-    /// to the agentic coding loop. Completion detection is handled by the webhook.
+    /// Runs every 2 minutes. Only checks for timed-out delegations and marks them
+    /// for explicit manual resume. Completion detection is handled by the webhook.
     /// </summary>
     [Function("CopilotTimeoutChecker")]
     public async Task RunAsync(
@@ -130,42 +130,8 @@ public sealed class CopilotTimeoutChecker
             }
         }
 
-        // Persist forceAgentic flag in state.json so ResolveStrategy picks the agentic loop
-        try
-        {
-            var repoPath = await _gitOps.EnsureBranchAsync(delegation.BranchName, cancellationToken);
-            await using var context = _contextFactory.Create(delegation.WorkItemId, repoPath);
-            var state = await context.LoadStateAsync(cancellationToken);
-
-            state.Agents["Coding"] = AgentStatus.InProgress();
-            state.Agents["Coding"].AdditionalData = new Dictionary<string, object>
-            {
-                ["forceAgentic"] = true,
-                ["copilotTimedOut"] = true,
-                ["copilotElapsedMinutes"] = elapsed
-            };
-            await context.SaveStateAsync(state, cancellationToken);
-
-            await _gitOps.CommitAndPushAsync(repoPath,
-                $"[AI Coding] US-{delegation.WorkItemId}: Copilot timed out — falling back to agentic loop",
-                cancellationToken);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to persist forceAgentic flag for WI-{WorkItemId}", delegation.WorkItemId);
-        }
-
-        // Re-enqueue for agentic coding — forceAgentic flag is now in state.json
-        var task = new AgentTask
-        {
-            WorkItemId = delegation.WorkItemId,
-            AgentType = AgentType.Coding,
-            CorrelationId = delegation.CorrelationId
-        };
-        await _taskQueue.EnqueueAsync(task, cancellationToken);
-
         await _activityLogger.LogAsync("Coding", delegation.WorkItemId,
-            $"Copilot timed out after {elapsed:F0}m — falling back to agentic coding loop",
+            $"Copilot timed out after {elapsed:F0}m — waiting for explicit resume (no automatic coding re-run).",
             "warning", cancellationToken);
     }
 
@@ -186,7 +152,7 @@ public sealed class CopilotTimeoutChecker
         // Comment explaining timeout
         var commentBody = JsonSerializer.Serialize(new
         {
-            body = "Copilot coding agent timed out. Falling back to built-in agentic coding loop."
+            body = "Copilot coding agent timed out. No automatic fallback was started; resume explicitly from Azure DevOps when ready."
         });
         var commentContent = new StringContent(commentBody, Encoding.UTF8, "application/json");
         await httpClient.PostAsync(

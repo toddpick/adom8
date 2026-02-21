@@ -21,10 +21,22 @@ namespace AIAgents.Functions.Functions;
 /// It currently automates:
 /// - Service Hook subscription to OrchestratorWebhook (work item state changes)
 /// - Creation of required Custom.AI* fields (best effort)
-/// - Validation of required pipeline states on User Story
+/// - Validation and best-effort creation of required pipeline states on User Story
 /// </summary>
 public sealed class ProvisionAzureDevOps
 {
+    private static readonly string[] CurrentAgentPicklistValues =
+    [
+        AIPipelineNames.CurrentAgentValues.Planning,
+        AIPipelineNames.CurrentAgentValues.Coding,
+        AIPipelineNames.CurrentAgentValues.Testing,
+        AIPipelineNames.CurrentAgentValues.Review,
+        AIPipelineNames.CurrentAgentValues.Documentation,
+        AIPipelineNames.CurrentAgentValues.Deployment
+    ];
+
+    private const string CurrentAgentPicklistName = "ADOm8 Current AI Agent";
+
     private static readonly string[] RequiredStates =
     [
         AIPipelineNames.ProcessingState,
@@ -35,6 +47,18 @@ public sealed class ProvisionAzureDevOps
         "Ready for Deployment",
         "Deployed"
     ];
+
+    private static readonly Dictionary<string, (string Category, string Color)> RequiredStateMetadata =
+        new(StringComparer.OrdinalIgnoreCase)
+        {
+            [AIPipelineNames.ProcessingState] = ("InProgress", "0078D4"),
+            ["Code Review"] = ("InProgress", "107C10"),
+            ["Needs Revision"] = ("InProgress", "D13438"),
+            ["Agent Failed"] = ("InProgress", "A80000"),
+            ["Ready for QA"] = ("Resolved", "107C10"),
+            ["Ready for Deployment"] = ("Resolved", "0B6A0B"),
+            ["Deployed"] = ("Completed", "0B6A0B")
+        };
 
     private static readonly FieldDefinition[] RequiredFields =
     [
@@ -59,7 +83,6 @@ public sealed class ProvisionAzureDevOps
         new("AI Tests Generated", "Custom.AITestsGenerated", "integer"),
         new("AI PR Number", "Custom.AIPRNumber", "integer"),
         new("AI Last Agent", "Custom.AILastAgent", "string"),
-        new("Current AI Agent", "Custom.CurrentAIAgent", "string"),
         new("AI Critical Issues", "Custom.AICriticalIssues", "integer"),
         new("AI Deployment Decision", "Custom.AIDeploymentDecision", "string")
     ];
@@ -101,8 +124,11 @@ public sealed class ProvisionAzureDevOps
         var steps = new List<string>();
         var warnings = new List<string>();
         var errors = new List<string>();
+        var additionalManualSteps = new List<string>();
+        var currentAgentPicklistEnforced = false;
         var createdFields = new List<string>();
         var existingFields = new List<string>();
+        var createdStates = new List<string>();
         var missingStates = new List<string>();
 
         using var adoClient = CreateAdoClient();
@@ -152,10 +178,11 @@ public sealed class ProvisionAzureDevOps
         {
             try
             {
-                var exists = await FieldExistsAsync(adoClient, field.ReferenceName, cancellationToken);
-                if (exists)
+                var fieldStatus = await GetFieldStatusAsync(adoClient, field.ReferenceName, cancellationToken);
+                if (fieldStatus.Exists)
                 {
                     existingFields.Add(field.ReferenceName);
+
                     continue;
                 }
 
@@ -178,7 +205,95 @@ public sealed class ProvisionAzureDevOps
 
         try
         {
+            var currentAgentFieldStatus = await GetCurrentAgentProcessFieldStatusAsync(
+                adoClient,
+                projectInfo.ProcessTemplateName,
+                cancellationToken);
+
+            if (!currentAgentFieldStatus.Exists)
+            {
+                if (!string.IsNullOrWhiteSpace(projectInfo.ProcessTemplateName))
+                {
+                    var createdCurrentAgentPicklist = await TryCreateCurrentAgentPicklistFieldAsync(
+                        adoClient,
+                        projectInfo.ProcessTemplateName,
+                        warnings,
+                        cancellationToken);
+
+                    if (createdCurrentAgentPicklist)
+                    {
+                        currentAgentPicklistEnforced = true;
+                        createdFields.Add(CustomFieldNames.CurrentAIAgent);
+                        steps.Add("Created Current AI Agent picklist field.");
+                        currentAgentFieldStatus = new FieldStatus(true, true, "picklistString");
+                    }
+                }
+
+                if (!currentAgentFieldStatus.Exists)
+                {
+                    warnings.Add("Current AI Agent field is missing. Create it as Picklist (string), not a textbox.");
+                    additionalManualSteps.Add("Create 'Current AI Agent' as Picklist (string) with values: Planning Agent, Coding Agent, Testing Agent, Review Agent, Documentation Agent, Deployment Agent. Leave default blank.");
+                }
+            }
+
+            if (currentAgentFieldStatus.Exists && !currentAgentFieldStatus.IsPicklist)
+            {
+                if (!string.IsNullOrWhiteSpace(projectInfo.ProcessTemplateName))
+                {
+                    var convertedCurrentAgentPicklist = await TryCreateCurrentAgentPicklistFieldAsync(
+                        adoClient,
+                        projectInfo.ProcessTemplateName,
+                        warnings,
+                        cancellationToken);
+
+                    if (convertedCurrentAgentPicklist)
+                    {
+                        currentAgentPicklistEnforced = true;
+                        steps.Add("Converted Current AI Agent field to picklist.");
+                        currentAgentFieldStatus = await GetCurrentAgentProcessFieldStatusAsync(
+                            adoClient,
+                            projectInfo.ProcessTemplateName,
+                            cancellationToken);
+                    }
+                }
+
+                if (!currentAgentFieldStatus.IsPicklist && !currentAgentPicklistEnforced)
+                {
+                    warnings.Add("Current AI Agent exists as a plain text field (textbox). Configure it as a picklist on User Story so the form renders a dropdown.");
+                    additionalManualSteps.Add("In Organization Settings → Boards → Process → User Story → Fields → Current AI Agent, configure allowed values: Planning Agent, Coding Agent, Testing Agent, Review Agent, Documentation Agent, Deployment Agent (default blank). If your process does not allow converting this field to picklist, recreate it as Picklist (string) with reference name Custom.CurrentAIAgent.");
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to validate Current AI Agent field type");
+            warnings.Add($"Could not validate Current AI Agent field type: {ex.Message}");
+        }
+
+        try
+        {
             var existingStateNames = await GetUserStoryStatesAsync(adoClient, projectInfo.Name, cancellationToken);
+            var initialMissingStates = RequiredStates
+                .Where(s => !existingStateNames.Contains(s, StringComparer.OrdinalIgnoreCase))
+                .ToList();
+
+            if (initialMissingStates.Count > 0 && !string.IsNullOrWhiteSpace(projectInfo.ProcessTemplateName))
+            {
+                var autoCreated = await TryCreateMissingStatesAsync(
+                    adoClient,
+                    projectInfo.ProcessTemplateName,
+                    initialMissingStates,
+                    warnings,
+                    cancellationToken);
+
+                if (autoCreated.Count > 0)
+                {
+                    createdStates.AddRange(autoCreated);
+                }
+
+                existingStateNames = await GetUserStoryStatesAsync(adoClient, projectInfo.Name, cancellationToken);
+            }
+
             missingStates.AddRange(RequiredStates.Where(s => !existingStateNames.Contains(s, StringComparer.OrdinalIgnoreCase)));
 
             if (missingStates.Count == 0)
@@ -188,6 +303,11 @@ public sealed class ProvisionAzureDevOps
             else
             {
                 warnings.Add($"{missingStates.Count} required states are missing on User Story.");
+            }
+
+            if (createdStates.Count > 0)
+            {
+                steps.Add($"Created {createdStates.Count} missing User Story states.");
             }
         }
         catch (Exception ex)
@@ -214,6 +334,7 @@ public sealed class ProvisionAzureDevOps
         manualSteps.Add("If custom fields were created but not visible on forms, add them to User Story layout groups (AI Agent Settings / AI Model Settings / AI Tracking).");
         manualSteps.Add("Configure 'Current AI Agent' as a picklist with values: Planning Agent, Coding Agent, Testing Agent, Review Agent, Documentation Agent, Deployment Agent. Leave default blank.");
         manualSteps.Add("For Azure Boards visualization, add 'Current AI Agent' to card fields and create card style rules per agent value.");
+        manualSteps.AddRange(additionalManualSteps);
 
         var ready = errors.Count == 0 && missingStates.Count == 0;
         var summary = ready
@@ -240,6 +361,7 @@ public sealed class ProvisionAzureDevOps
             states = new
             {
                 required = RequiredStates,
+                created = createdStates,
                 missing = missingStates
             },
             steps,
@@ -282,7 +404,7 @@ public sealed class ProvisionAzureDevOps
         CancellationToken cancellationToken)
     {
         using var listResponse = await client.GetAsync(
-            $"{Uri.EscapeDataString(project.Name)}/_apis/hooks/subscriptions?api-version=7.1-preview.1",
+            "_apis/hooks/subscriptions?api-version=7.1-preview.1",
             cancellationToken);
 
         var listJson = await ReadJsonAsync(listResponse, cancellationToken);
@@ -326,7 +448,7 @@ public sealed class ProvisionAzureDevOps
 
         using var request = new HttpRequestMessage(
             HttpMethod.Post,
-            $"{Uri.EscapeDataString(project.Name)}/_apis/hooks/subscriptions?api-version=7.1-preview.1")
+            "_apis/hooks/subscriptions?api-version=7.1-preview.1")
         {
             Content = new StringContent(payload.ToJsonString(), Encoding.UTF8, "application/json")
         };
@@ -358,7 +480,443 @@ public sealed class ProvisionAzureDevOps
         return states;
     }
 
-    private async Task<bool> FieldExistsAsync(HttpClient client, string referenceName, CancellationToken cancellationToken)
+    private async Task<List<string>> TryCreateMissingStatesAsync(
+        HttpClient client,
+        string processTemplateName,
+        IReadOnlyCollection<string> missingStates,
+        List<string> warnings,
+        CancellationToken cancellationToken)
+    {
+        var created = new List<string>();
+
+        var processId = await TryGetProcessIdAsync(client, processTemplateName, cancellationToken);
+        if (string.IsNullOrWhiteSpace(processId))
+        {
+            warnings.Add($"Could not resolve process '{processTemplateName}' for automatic state creation.");
+            return created;
+        }
+
+        var workItemTypeReferenceName = await TryGetProcessWorkItemTypeReferenceNameAsync(
+            client,
+            processId,
+            cancellationToken);
+
+        if (string.IsNullOrWhiteSpace(workItemTypeReferenceName))
+        {
+            warnings.Add("Could not resolve User Story work item type reference in process for automatic state creation.");
+            return created;
+        }
+
+        foreach (var stateName in missingStates)
+        {
+            if (!RequiredStateMetadata.TryGetValue(stateName, out var meta))
+            {
+                warnings.Add($"No metadata configured for state '{stateName}', skipped automatic creation.");
+                continue;
+            }
+
+            var payload = new JsonObject
+            {
+                ["name"] = stateName,
+                ["color"] = meta.Color,
+                ["stateCategory"] = meta.Category
+            };
+
+            using var request = new HttpRequestMessage(
+                HttpMethod.Post,
+                $"_apis/work/processes/{Uri.EscapeDataString(processId)}/workItemTypes/{Uri.EscapeDataString(workItemTypeReferenceName)}/states?api-version=7.1-preview.1")
+            {
+                Content = new StringContent(payload.ToJsonString(), Encoding.UTF8, "application/json")
+            };
+
+            using var response = await client.SendAsync(request, cancellationToken);
+            if (response.IsSuccessStatusCode || response.StatusCode == HttpStatusCode.Conflict)
+            {
+                created.Add(stateName);
+                continue;
+            }
+
+            var body = await response.Content.ReadAsStringAsync(cancellationToken);
+            warnings.Add($"State '{stateName}' was not created automatically ({(int)response.StatusCode}): {body}");
+        }
+
+        return created;
+    }
+
+    private async Task<string?> TryGetProcessIdAsync(HttpClient client, string processTemplateName, CancellationToken cancellationToken)
+    {
+        using var response = await client.GetAsync("_apis/work/processes?api-version=7.1-preview.2", cancellationToken);
+        var json = await ReadJsonAsync(response, cancellationToken);
+        var values = json?["value"]?.AsArray() ?? new JsonArray();
+
+        foreach (var item in values)
+        {
+            var name = item?["name"]?.GetValue<string>();
+            if (!string.Equals(name, processTemplateName, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            return item?["typeId"]?.GetValue<string>() ?? item?["id"]?.GetValue<string>();
+        }
+
+        return null;
+    }
+
+    private async Task<string?> TryGetProcessWorkItemTypeReferenceNameAsync(
+        HttpClient client,
+        string processId,
+        CancellationToken cancellationToken)
+    {
+        using var response = await client.GetAsync(
+            $"_apis/work/processes/{Uri.EscapeDataString(processId)}/workItemTypes?api-version=7.1-preview.2",
+            cancellationToken);
+
+        var json = await ReadJsonAsync(response, cancellationToken);
+        var values = json?["value"]?.AsArray() ?? new JsonArray();
+
+        foreach (var item in values)
+        {
+            var name = item?["name"]?.GetValue<string>();
+            if (!string.Equals(name, "User Story", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            return item?["referenceName"]?.GetValue<string>();
+        }
+
+        return null;
+    }
+
+    private async Task<FieldStatus> GetCurrentAgentProcessFieldStatusAsync(
+        HttpClient client,
+        string? processTemplateName,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(processTemplateName))
+        {
+            return FieldStatus.Missing;
+        }
+
+        var processId = await TryGetProcessIdAsync(client, processTemplateName, cancellationToken);
+        if (string.IsNullOrWhiteSpace(processId))
+        {
+            return FieldStatus.Missing;
+        }
+
+        var workItemTypeReferenceName = await TryGetProcessWorkItemTypeReferenceNameAsync(client, processId, cancellationToken);
+        if (string.IsNullOrWhiteSpace(workItemTypeReferenceName))
+        {
+            return FieldStatus.Missing;
+        }
+
+        return await GetCurrentAgentProcessFieldStatusAsync(
+            client,
+            processId,
+            workItemTypeReferenceName,
+            cancellationToken);
+    }
+
+    private async Task<FieldStatus> GetCurrentAgentProcessFieldStatusAsync(
+        HttpClient client,
+        string processId,
+        string workItemTypeReferenceName,
+        CancellationToken cancellationToken)
+    {
+        using var response = await client.GetAsync(
+            $"_apis/work/processes/{Uri.EscapeDataString(processId)}/workItemTypes/{Uri.EscapeDataString(workItemTypeReferenceName)}/fields?api-version=7.1-preview.2",
+            cancellationToken);
+
+        var json = await ReadJsonAsync(response, cancellationToken);
+        var values = json?["value"]?.AsArray() ?? new JsonArray();
+
+        foreach (var item in values)
+        {
+            var referenceName = item?["referenceName"]?.GetValue<string>();
+            if (!string.Equals(referenceName, CustomFieldNames.CurrentAIAgent, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            var fieldType = item?["type"]?.GetValue<string>() ?? string.Empty;
+            var normalizedType = fieldType.Trim();
+            var isPicklistByType = string.Equals(normalizedType, "picklistString", StringComparison.OrdinalIgnoreCase)
+                                 || string.Equals(normalizedType, "picklist", StringComparison.OrdinalIgnoreCase);
+            var hasPickList = item?["pickList"] is JsonObject;
+            var allowedValues = item?["allowedValues"]?.AsArray();
+            var hasAllowedValues = allowedValues is { Count: > 0 };
+            var isPicklist = isPicklistByType && (hasPickList || hasAllowedValues);
+
+            return new FieldStatus(true, isPicklist, normalizedType);
+        }
+
+        return FieldStatus.Missing;
+    }
+
+    private async Task<bool> TryCreateCurrentAgentPicklistFieldAsync(
+        HttpClient client,
+        string processTemplateName,
+        List<string> warnings,
+        CancellationToken cancellationToken)
+    {
+        var processId = await TryGetProcessIdAsync(client, processTemplateName, cancellationToken);
+        if (string.IsNullOrWhiteSpace(processId))
+        {
+            warnings.Add($"Could not resolve process '{processTemplateName}' to create Current AI Agent picklist field.");
+            return false;
+        }
+
+        var workItemTypeReferenceName = await TryGetProcessWorkItemTypeReferenceNameAsync(client, processId, cancellationToken);
+        if (string.IsNullOrWhiteSpace(workItemTypeReferenceName))
+        {
+            warnings.Add("Could not resolve User Story work item type reference for Current AI Agent picklist creation.");
+            return false;
+        }
+
+        var picklistId = await TryGetOrCreatePicklistIdAsync(client, warnings, cancellationToken);
+        if (string.IsNullOrWhiteSpace(picklistId))
+        {
+            return false;
+        }
+
+        var globalFieldStatus = await GetFieldStatusAsync(client, CustomFieldNames.CurrentAIAgent, cancellationToken);
+        if (!globalFieldStatus.Exists)
+        {
+            var ensuredGlobalBaseField = await TryEnsureCurrentAgentBaseFieldAsync(
+                client,
+                picklistId,
+                warnings,
+                cancellationToken);
+
+            if (!ensuredGlobalBaseField)
+            {
+                warnings.Add("Could not create Current AI Agent base field definition.");
+                return false;
+            }
+        }
+
+        var payload = new JsonObject
+        {
+            ["referenceName"] = CustomFieldNames.CurrentAIAgent,
+            ["name"] = "Current AI Agent",
+            ["description"] = "Active AI owner for this story (blank means no AI agent currently working)",
+            ["type"] = "picklistString",
+            ["required"] = false,
+            ["readOnly"] = false,
+            ["allowGroups"] = false,
+            ["defaultValue"] = string.Empty,
+            ["allowedValues"] = new JsonArray(CurrentAgentPicklistValues.Select(v => JsonValue.Create(v)).ToArray()),
+            ["pickList"] = new JsonObject
+            {
+                ["id"] = picklistId
+            }
+        };
+
+        var attachPayload = new JsonObject
+        {
+            ["referenceName"] = CustomFieldNames.CurrentAIAgent,
+            ["required"] = false,
+            ["defaultValue"] = string.Empty
+        };
+
+        var created = await TryCreateProcessFieldAsync(
+            client,
+            processId,
+            workItemTypeReferenceName,
+            attachPayload,
+            warnings,
+            treatConflictAsSuccess: true,
+            cancellationToken);
+
+        if (!created)
+        {
+            return false;
+        }
+
+        var converted = await TryUpdateProcessFieldAsPicklistAsync(
+            client,
+            processId,
+            workItemTypeReferenceName,
+            payload,
+            warnings,
+            cancellationToken);
+
+        if (converted)
+        {
+            var statusAfterConvert = await GetCurrentAgentProcessFieldStatusAsync(
+                client,
+                processId,
+                workItemTypeReferenceName,
+                cancellationToken);
+
+            if (statusAfterConvert.IsPicklist)
+            {
+                return true;
+            }
+
+            warnings.Add($"Current AI Agent conversion API returned success but field type remains '{statusAfterConvert.Type}'. Retrying with delete/recreate.");
+        }
+
+        var removed = await TryDeleteProcessFieldAsync(
+            client,
+            processId,
+            workItemTypeReferenceName,
+            CustomFieldNames.CurrentAIAgent,
+            warnings,
+            cancellationToken);
+
+        if (!removed)
+        {
+            return false;
+        }
+
+        var recreated = await TryCreateProcessFieldAsync(
+            client,
+            processId,
+            workItemTypeReferenceName,
+            payload,
+            warnings,
+            treatConflictAsSuccess: true,
+            cancellationToken);
+
+        if (!recreated)
+        {
+            return false;
+        }
+
+        return await TryUpdateProcessFieldAsPicklistAsync(
+            client,
+            processId,
+            workItemTypeReferenceName,
+            payload,
+            warnings,
+            cancellationToken);
+    }
+
+    private async Task<string?> TryGetOrCreatePicklistIdAsync(HttpClient client, List<string> warnings, CancellationToken cancellationToken)
+    {
+        using var listResponse = await client.GetAsync("_apis/work/processes/lists?api-version=7.1-preview.1", cancellationToken);
+        var listJson = await ReadJsonAsync(listResponse, cancellationToken);
+        var lists = listJson?["value"]?.AsArray() ?? new JsonArray();
+
+        foreach (var list in lists)
+        {
+            var name = list?["name"]?.GetValue<string>();
+            if (!string.Equals(name, CurrentAgentPicklistName, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            return list?["id"]?.GetValue<string>();
+        }
+
+        var payload = new JsonObject
+        {
+            ["name"] = CurrentAgentPicklistName,
+            ["type"] = "String",
+            ["items"] = new JsonArray(CurrentAgentPicklistValues.Select(v => JsonValue.Create(v)).ToArray())
+        };
+
+        using var request = new HttpRequestMessage(HttpMethod.Post, "_apis/work/processes/lists?api-version=7.1-preview.1")
+        {
+            Content = new StringContent(payload.ToJsonString(), Encoding.UTF8, "application/json")
+        };
+
+        using var response = await client.SendAsync(request, cancellationToken);
+        if (!response.IsSuccessStatusCode)
+        {
+            var body = await response.Content.ReadAsStringAsync(cancellationToken);
+            warnings.Add($"Could not create Current AI Agent picklist ({(int)response.StatusCode}): {body}");
+            return null;
+        }
+
+        var createdJson = await ReadJsonAsync(response, cancellationToken);
+        return createdJson?["id"]?.GetValue<string>();
+    }
+
+    private async Task<bool> TryCreateProcessFieldAsync(
+        HttpClient client,
+        string processId,
+        string workItemTypeReferenceName,
+        JsonObject payload,
+        List<string> warnings,
+        bool treatConflictAsSuccess,
+        CancellationToken cancellationToken)
+    {
+        using var request = new HttpRequestMessage(
+            HttpMethod.Post,
+            $"_apis/work/processes/{Uri.EscapeDataString(processId)}/workItemTypes/{Uri.EscapeDataString(workItemTypeReferenceName)}/fields?api-version=7.1-preview.2")
+        {
+            Content = new StringContent(payload.ToJsonString(), Encoding.UTF8, "application/json")
+        };
+
+        using var response = await client.SendAsync(request, cancellationToken);
+        if (response.IsSuccessStatusCode)
+        {
+            return true;
+        }
+
+        if (response.StatusCode == HttpStatusCode.Conflict)
+        {
+            return treatConflictAsSuccess;
+        }
+
+        var body = await response.Content.ReadAsStringAsync(cancellationToken);
+        warnings.Add($"Could not create Current AI Agent process field with type '{payload["type"]?.GetValue<string>()}' ({(int)response.StatusCode}): {body}");
+        return false;
+    }
+
+    private async Task<bool> TryUpdateProcessFieldAsPicklistAsync(
+        HttpClient client,
+        string processId,
+        string workItemTypeReferenceName,
+        JsonObject payload,
+        List<string> warnings,
+        CancellationToken cancellationToken)
+    {
+        using var request = new HttpRequestMessage(
+            HttpMethod.Patch,
+            $"_apis/work/processes/{Uri.EscapeDataString(processId)}/workItemTypes/{Uri.EscapeDataString(workItemTypeReferenceName)}/fields/{Uri.EscapeDataString(CustomFieldNames.CurrentAIAgent)}?api-version=7.1-preview.2")
+        {
+            Content = new StringContent(payload.ToJsonString(), Encoding.UTF8, "application/json")
+        };
+
+        using var response = await client.SendAsync(request, cancellationToken);
+        if (response.IsSuccessStatusCode)
+        {
+            return true;
+        }
+
+        var body = await response.Content.ReadAsStringAsync(cancellationToken);
+        warnings.Add($"Could not update Current AI Agent process field to picklist ({(int)response.StatusCode}): {body}");
+        return false;
+    }
+
+    private async Task<bool> TryDeleteProcessFieldAsync(
+        HttpClient client,
+        string processId,
+        string workItemTypeReferenceName,
+        string referenceName,
+        List<string> warnings,
+        CancellationToken cancellationToken)
+    {
+        using var request = new HttpRequestMessage(
+            HttpMethod.Delete,
+            $"_apis/work/processes/{Uri.EscapeDataString(processId)}/workItemTypes/{Uri.EscapeDataString(workItemTypeReferenceName)}/fields/{Uri.EscapeDataString(referenceName)}?api-version=7.1-preview.2");
+
+        using var response = await client.SendAsync(request, cancellationToken);
+        if (response.IsSuccessStatusCode || response.StatusCode == HttpStatusCode.NotFound)
+        {
+            return true;
+        }
+
+        var body = await response.Content.ReadAsStringAsync(cancellationToken);
+        warnings.Add($"Could not delete existing Current AI Agent process field before recreation ({(int)response.StatusCode}): {body}");
+        return false;
+    }
+
+    private async Task<FieldStatus> GetFieldStatusAsync(HttpClient client, string referenceName, CancellationToken cancellationToken)
     {
         using var response = await client.GetAsync(
             $"_apis/wit/fields/{Uri.EscapeDataString(referenceName)}?api-version=7.1",
@@ -366,12 +924,15 @@ public sealed class ProvisionAzureDevOps
 
         if (response.StatusCode == HttpStatusCode.NotFound)
         {
-            return false;
+            return FieldStatus.Missing;
         }
 
         if (response.IsSuccessStatusCode)
         {
-            return true;
+            var json = await ReadJsonAsync(response, cancellationToken);
+            var isPicklist = json?["isPicklist"]?.GetValue<bool>() ?? false;
+            var type = json?["type"]?.GetValue<string>() ?? string.Empty;
+            return new FieldStatus(true, isPicklist, type);
         }
 
         var errorContent = await response.Content.ReadAsStringAsync(cancellationToken);
@@ -409,6 +970,59 @@ public sealed class ProvisionAzureDevOps
         return false;
     }
 
+    private async Task<bool> TryEnsureCurrentAgentBaseFieldAsync(
+        HttpClient client,
+        string picklistId,
+        List<string> warnings,
+        CancellationToken cancellationToken)
+    {
+        var picklistPayload = new JsonObject
+        {
+            ["name"] = "Current AI Agent",
+            ["referenceName"] = CustomFieldNames.CurrentAIAgent,
+            ["type"] = "string",
+            ["usage"] = "workItem",
+            ["isPicklist"] = true,
+            ["pickList"] = new JsonObject
+            {
+                ["id"] = picklistId
+            }
+        };
+
+        using var request = new HttpRequestMessage(HttpMethod.Post, "_apis/wit/fields?api-version=7.1")
+        {
+            Content = new StringContent(picklistPayload.ToJsonString(), Encoding.UTF8, "application/json")
+        };
+
+        using var response = await client.SendAsync(request, cancellationToken);
+        if (response.IsSuccessStatusCode || response.StatusCode == HttpStatusCode.Conflict)
+        {
+            var status = await GetFieldStatusAsync(client, CustomFieldNames.CurrentAIAgent, cancellationToken);
+            if (status.Exists)
+            {
+                return true;
+            }
+        }
+        else
+        {
+            var body = await response.Content.ReadAsStringAsync(cancellationToken);
+            warnings.Add($"Picklist-style base field create attempt failed ({(int)response.StatusCode}): {body}");
+        }
+
+        var fallbackCreated = await TryCreateFieldAsync(
+            client,
+            new FieldDefinition("Current AI Agent", CustomFieldNames.CurrentAIAgent, "string"),
+            cancellationToken);
+
+        if (!fallbackCreated)
+        {
+            return false;
+        }
+
+        var finalStatus = await GetFieldStatusAsync(client, CustomFieldNames.CurrentAIAgent, cancellationToken);
+        return finalStatus.Exists;
+    }
+
     private static async Task<JsonObject?> ReadJsonAsync(HttpResponseMessage response, CancellationToken cancellationToken)
     {
         var raw = await response.Content.ReadAsStringAsync(cancellationToken);
@@ -426,6 +1040,11 @@ public sealed class ProvisionAzureDevOps
     }
 
     private sealed record FieldDefinition(string Name, string ReferenceName, string Type);
+
+    private readonly record struct FieldStatus(bool Exists, bool IsPicklist, string Type)
+    {
+        public static FieldStatus Missing => new(false, false, string.Empty);
+    }
 
     private sealed record ProjectInfo(string Id, string Name, string? ProcessTemplateName);
 }
