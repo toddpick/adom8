@@ -1,0 +1,1185 @@
+# Setup Guide — ADOm8 for Azure DevOps
+
+> **End-to-end walkthrough:** from a blank Azure subscription + ADO org to a fully working AI agent pipeline.
+> Estimated time: **20–35 minutes typical** with bootstrap + provisioning (up to 60 minutes if manual ADO process/state steps are required).
+
+> **Fast path (recommended):** If you want maximum automation, use `scripts/bootstrap.ps1` after collecting PATs/API keys. It provisions Azure resources, configures app settings, deploys Functions, rewires dashboard API URL, and deploys dashboard in one run.
+
+> **Key Vault with fast path:** In `scripts/bootstrap.config.json`, set `keyVault.enabled=true` and provide `keyVault.name` to automatically wire managed identity + Key Vault secret references during bootstrap.
+
+> **Production security:** After initial setup, follow `SECURITY_HARDENING.md` to move secrets to Key Vault and apply least-privilege controls.
+
+> **Interactive onboarding (recommended):** Use the public step-by-step guide at **https://adom8.dev/get-started** for a cleaner walkthrough with screenshots and quick-copy snippets. Keep this file as the technical source of truth.
+
+---
+
+## Table of Contents
+
+1. [Prerequisites](#1-prerequisites)
+2. [Create Personal Access Tokens](#2-create-personal-access-tokens)
+   - [2a. Azure DevOps PAT](#2a-azure-devops-pat)
+   - [2b. GitHub PAT](#2b-github-pat-if-using-github-for-code)
+3. [Customize Your ADO Board (States & Fields)](#3-customize-your-ado-board-states--fields)
+4. [Clone the Repository](#4-clone-the-repository)
+5. [Deploy Azure Infrastructure (Terraform)](#5-deploy-azure-infrastructure-terraform)
+   - [5d. VS Enterprise / MSDN Subscription Notes](#5d-visual-studio-enterprise--msdn-subscription-notes)
+6. [Configure the Azure Function App](#6-configure-the-azure-function-app)
+   - [6e. (Optional) GitHub Copilot Hybrid Integration](#6e-optional-github-copilot-hybrid-integration)
+7. [Deploy the Functions Code](#7-deploy-the-functions-code)
+8. [Deploy the Dashboard](#8-deploy-the-dashboard)
+9. [Configure the ADO Service Hook (Webhook)](#9-configure-the-ado-service-hook-webhook)
+10. [End-to-End Test](#10-end-to-end-test)
+11. [CI/CD: Automated Deployments](#11-cicd-automated-deployments)
+12. [Optional: Terraform via Azure DevOps Pipeline](#12-optional-terraform-via-azure-devops-pipeline)
+13. [Local Development](#13-local-development)
+14. [Troubleshooting](#14-troubleshooting)
+15. [Production Hardening](#15-production-hardening)
+
+---
+
+## 1. Prerequisites
+
+Install these before you begin:
+
+| Tool | Version | Install Link |
+|------|---------|-------------|
+| **Azure CLI** | latest | [install](https://learn.microsoft.com/en-us/cli/azure/install-azure-cli) |
+| **.NET 8 SDK** | 8.0+ | [install](https://dotnet.microsoft.com/download/dotnet/8.0) |
+| **Azure Functions Core Tools** | v4 | [install](https://learn.microsoft.com/en-us/azure/azure-functions/functions-run-local) |
+| **Terraform** | ≥ 1.0 | [install](https://www.terraform.io/downloads) |
+| **Git** | latest | [install](https://git-scm.com/downloads) |
+
+**Accounts needed:**
+- Azure subscription with `Contributor` role (to create resources)
+- Azure DevOps organization + project
+- AI API key — one of: [Anthropic (Claude)](https://console.anthropic.com/), [OpenAI](https://platform.openai.com/), or [Azure OpenAI](https://learn.microsoft.com/en-us/azure/ai-services/openai/)
+
+---
+
+## 2. Create Personal Access Tokens
+
+### 2a. Azure DevOps PAT
+
+The agents need a Personal Access Token to read/write work items, push code, create PRs, and (optionally) trigger pipelines.
+
+1. Open Azure DevOps → click your **profile icon** (top-right) → **Personal access tokens**
+2. Click **+ New Token**
+3. Configure:
+   - **Name:** `AI Agent Bot`
+   - **Organization:** your org
+   - **Expiration:** 90 days (or custom)
+   - **Scopes → Custom defined** — select these:
+
+| Scope | Permission |
+|-------|-----------|
+| **Work Items** | Read & Write |
+| **Code** | Read & Write |
+| **Pull Request Threads** | Read & Write |
+| **Service Hooks** | Read, query, & manage |
+| **Build** | Read & Execute *(Level 5 autonomy only)* |
+| **Pipeline Resources** | Use and manage *(Level 5 autonomy only)* |
+
+4. Click **Create** → **copy the token immediately** (you won't see it again)
+
+> **Tip:** If using Azure DevOps Repos (not GitHub) for your code, this same PAT is used for `AzureDevOps__Pat`, `Git__Token`, and code operations.
+
+### 2b. GitHub PAT (if using GitHub for code)
+
+If your target code repository is on GitHub (recommended for POC), you need a GitHub Personal Access Token.
+
+1. Go to [github.com](https://github.com) → click your **profile icon** → **Settings**
+2. Click **Developer settings** → **Personal access tokens**
+3. Choose either **Classic** or **Fine-grained** token:
+
+**Option 1: Classic Token** (simpler)
+
+Click **Tokens (classic)** → **Generate new token (classic)**:
+
+| Scope | Why |
+|-------|-----|
+| **repo** (full control) | Push branches, create PRs |
+| **workflow** | Trigger deploy workflows (Level 5 autonomy) |
+
+**Option 2: Fine-grained Token** (more secure — scoped to one repo)
+
+Click **Fine-grained tokens** → **Generate new token**:
+- **Repository access:** Select your target repo only
+- **Permissions:**
+
+| Permission | Access | Why |
+|------------|--------|-----|
+| **Contents** | Read and Write | Push code to feature branches |
+| **Pull requests** | Read and Write | Create PRs for code review |
+| **Issues** | Read and Write | Create Issues for Copilot coding agent (if using Copilot integration) |
+| **Actions** | Read and Write | Trigger workflow_dispatch (Level 5 autonomy) |
+| **Metadata** | Read | Auto-granted, required |
+
+4. Click **Generate token** → **copy immediately**
+
+> **Tip:** This GitHub PAT is used for three settings: `Git__Token`, `GitHub__Token`, and `GitHub__Owner`/`GitHub__Repo` configuration. It's the same token for all three.
+
+---
+
+## 3. Customize Your ADO Board (States & Fields)
+
+This is the most critical step. The agent pipeline keeps User Stories in a single active AI state and tracks stage ownership through a custom field.
+
+### 3a. Create an Inherited Process
+
+Azure DevOps doesn't let you modify built-in processes directly. You need to create an inherited copy:
+
+1. Go to **Organization Settings** (gear icon, bottom-left of ADO)
+2. Click **Boards → Process**
+3. Find your current process (usually **Agile**, **Scrum**, or **CMMI**)
+4. Click the **⋯** menu → **Create inherited process**
+5. Name it: `Agile - AI Agents` (or similar)
+6. Click **Create process**
+
+### 3b. Switch Your Project to the Inherited Process
+
+1. Still in **Organization Settings → Process**
+2. Click on your new `Agile - AI Agents` process
+3. Click the **Projects** tab
+4. Click **Change team projects to use Agile - AI Agents**
+5. Select your project → **OK**
+
+### 3c. Add Custom States to User Story
+
+1. In your inherited process, click **User Story** under "Work item types"
+2. Click the **States** tab
+3. You'll see the default states (New, Active, Resolved, Closed, Removed)
+4. Click **+ New state** for each of the following — **use the exact names and categories shown:**
+
+| State Name | State Category | Color (suggested) | Purpose |
+|------------|---------------|-------------------|---------|
+| `AI Agent` | In Progress | 🔵 Blue | Single active state while AI pipeline is processing |
+| `Code Review` | In Progress | 🟢 Green | Waiting for human code review (Autonomy Level 3) |
+| `Needs Revision` | In Progress | 🔴 Red | Review score too low — human intervention required |
+| `Agent Failed` | In Progress | 🔴 Dark Red | Agent exhausted retries or hit a permanent error |
+| `Ready for QA` | Resolved | 🟢 Green | All AI agents done — ready for QA testing |
+| `Ready for Deployment` | Resolved | 🟢 Green | PR merged — ready for deployment |
+| `Deployed` | Completed | ✅ Green | Merged + deployed (Autonomy Level 5) |
+
+> **Important:** The **State Name** must match exactly (case-sensitive). The **State Category** controls how Azure DevOps sorts cards on the board and calculates cycle time.
+
+5. After adding all states, click **Save**
+
+### 3d. Arrange the Board Columns (Optional but Recommended)
+
+1. Go to your project's **Boards → Boards**
+2. Click ⚙️ **Configure team settings** (gear icon top-right of the board)
+3. Click the **Columns** tab
+4. Add columns matching the simplified flow. Suggested layout:
+
+```
+New → AI Agent → Code Review → Needs Revision → Agent Failed → Ready for QA → Ready for Deployment → Deployed
+```
+
+Map each column to its matching state. This keeps workflow states clean and avoids AI stage state explosion.
+
+> **Note:** You don't need to add a "Closed" column — Azure DevOps automatically includes a rightmost column for the **Completed** category (which contains "Deployed" and the default "Closed" state). Stories in "Deployed" will appear in that final column. The default "Closed" state can be used to archive stories that are fully done.
+
+### 3e. Visualize Active Agent on Board Cards
+
+Azure Boards cannot dynamically map swimlanes to custom fields, but you can still get lane-like visibility:
+
+1. Go to **Boards → Boards → ⚙️ Team settings → Cards**
+2. Add `Current AI Agent` to card fields so active ownership is visible on each card
+3. Add card style rules for `Current AI Agent` values:
+  - `Planning Agent`
+  - `Coding Agent`
+  - `Testing Agent`
+  - `Review Agent`
+  - `Documentation Agent`
+  - `Deployment Agent`
+4. Save filters or queries by `Current AI Agent` for focused views
+
+> **Color behavior in ADO forms:** You can set a color for the `AI Agent` **state** in workflow settings, but Azure DevOps does **not** support per-option colors inside the `Current AI Agent` dropdown on the work item form.
+>
+> **Best visual match:** Use Board card style rules on `Current AI Agent` so each active agent value gets a matching card color/border/icon while state remains `AI Agent`.
+
+### 3f. (Optional) Auto-Provision ADO with PAT
+
+If you've already deployed the Function App and set `AzureDevOps__OrganizationUrl`, `AzureDevOps__Project`, and `AzureDevOps__Pat`, you can automate most ADO setup:
+
+```bash
+curl -X POST "https://<YOUR_FUNCTION_APP>.azurewebsites.net/api/provision-ado?code=<FUNCTION_KEY>"
+```
+
+What this endpoint does:
+- Validates required User Story states (including `AI Agent`)
+- Creates missing `Custom.AI*` fields (including `Custom.CurrentAIAgent`) when permissions allow
+- Creates/validates the state-change Service Hook subscription
+
+What still may require manual follow-up:
+- Add any missing workflow states in Process → User Story → States
+- Ensure `Current AI Agent` is a picklist with: Planning, Coding, Testing, Review, Documentation, Deployment
+- Add Board card styles for `Current AI Agent` visualization/color coordination
+
+### 3g. Add Custom Fields
+
+Still in **Organization Settings → Process → User Story**:
+
+The AI pipeline uses **22 custom fields** organized into three groups: **Input Fields** (you set per-story), **Model Override Fields** (optional per-story AI model control), and **AI Tracking** (written automatically by agents).
+
+#### Input Fields — "AI Agent Settings" Group
+
+1. Click the **Layout** tab
+2. Click **+ New field** to add the first field:
+   - **Name:** `Autonomy Level`
+   - **Type:** Picklist (string)
+   - **Items:** `1 - Plan Only`, `2 - Code Only`, `3 - Review & Pause`, `4 - Auto-Merge`, `5 - Full Autonomy`
+   - **Default:** `3 - Review & Pause`
+   - **Description:** Controls how far the AI pipeline goes automatically
+   - **Group:** Select **"Create new group"** → name it **AI Agent Settings**
+   - **Page:** Details
+
+3. Click **+ New field** again:
+   - **Name:** `AI Minimum Review Score`
+   - **Type:** Integer
+   - **Default:** `85`
+   - **Description:** Min score (0–100) for auto-merge at Levels 4–5
+   - **Group:** Select **AI Agent Settings**
+   - **Page:** Details
+
+#### Per-Story Model Override Fields — "AI Model Settings" Group
+
+These fields let users override which AI model each agent uses on a per-story basis. Leave them blank to use the system defaults. Most users won't touch these — they exist for stories that need heavier (or lighter) models than the default.
+
+> **Already created!** If you ran the setup script (or followed the API steps above), these 6 fields and their picklists are already created and added to the User Story form. The section below documents what exists so you can verify, set defaults, or add new models later.
+
+All fields in this group use **Picklist (string)** type with a **shared picklist** — update the model list once and all 5 agent fields get the change.
+
+**Fields on the form (AI Model Settings group):**
+
+| # | Field Name | Reference Name (backend) | Type | Picklist | Default Value |
+|---|-----------|--------------------------|------|----------|---------------|
+| 1 | AI Model Tier | `Custom.AIModelTier` | Picklist (string) | Standard, Premium, Economy | *(blank)* — uses system default |
+| 2 | AI Planning Model | `Custom.AIPlanningModel` | Picklist (string) | Shared "AI Models" list | *(blank)* — uses system default |
+| 3 | AI Coding Model | `Custom.AICodingModel` | Picklist (string) | Shared "AI Models" list | *(blank)* — uses system default |
+| 4 | AI Testing Model | `Custom.AITestingModel` | Picklist (string) | Shared "AI Models" list | *(blank)* — uses system default |
+| 5 | AI Review Model | `Custom.AIReviewModel` | Picklist (string) | Shared "AI Models" list | *(blank)* — uses system default |
+| 6 | AI Documentation Model | `Custom.AIDocumentationModel` | Picklist (string) | Shared "AI Models" list | *(blank)* — uses system default |
+| 7 | AI Coding Provider | `Custom.AICodingProvider` | Picklist (string) | Auto, Agentic, Copilot, Claude, Codex | *(blank)* — uses global `Copilot__Model` |
+
+> **Reference names matter!** The backend code reads these exact `Custom.AI*` reference names. If you recreate a field manually instead of using the API, make sure the reference name matches exactly (ADO auto-generates it from the field name, e.g., "AI Planning Model" → `Custom.AIPlanningModel`).
+
+> **Default values:** All model fields default to **blank**, which means "use the system default" (`AI__Model` in Function App settings, currently `claude-sonnet-4-20250514`). You do NOT need to set a default on the fields themselves — blank is intentional. Only fill in a value on a specific User Story when you want to override the default for that story.
+
+**Shared Model Picklist** — All 5 per-agent model fields share this single picklist:
+
+| Picklist Value | Provider | Tier | Best For |
+|---|---|---|---|
+| `claude-opus-4-20250514` | Anthropic | Premium | Complex architecture, difficult refactors |
+| `claude-sonnet-4.5-20250514` | Anthropic | Premium | Latest Sonnet, strong reasoning + code |
+| `claude-sonnet-4-20250514` | Anthropic | Standard | Great all-rounder, default recommendation |
+| `claude-haiku-4.5` | Anthropic | Economy | Fast & cheap, formulaic tasks |
+| `gpt-5.1-codex` | OpenAI | Premium | Code-specialized, large context |
+| `gpt-5.1-codex-mini` | OpenAI | Economy | Code-specialized, budget-friendly |
+| `gpt-4.1` | OpenAI | Standard | Strong reasoning + code generation |
+| `gpt-4o` | OpenAI | Standard | Fast, versatile, good code review |
+| `gpt-5-mini` | OpenAI | Economy | Cheap, handles structured tasks well |
+| `gemini-2.5-pro` | Google | Standard | Long context, good analysis |
+| `gemini-3-flash` | Google | Economy | Fastest, cheapest, great for docs |
+
+> **Important:** The picklist values must match exactly what your AI provider expects as a model identifier. For example, Anthropic uses `claude-sonnet-4-20250514` (with the date suffix). If you enter a model name that doesn't match, the API call will fail with a model-not-found error.
+
+#### How to Add a New Model (e.g., when Opus 4.7 releases)
+
+Since all 5 per-agent model fields share **one picklist**, you only update it once:
+
+**Option A — Via ADO UI (easiest):**
+1. Go to **Organization Settings → Boards → Process → Agile - AI Agents**
+2. Click **User Story** → find any of the 5 model fields (e.g., "AI Planning Model")
+3. Click the field → **Edit** → scroll to the picklist items
+4. Add the new model value (e.g., `claude-opus-4.7-20260801`)
+5. **Done** — all 5 fields automatically get the new option because they share the same picklist
+
+**Option B — Via REST API (scriptable):**
+```powershell
+# The shared picklist ID (find it via the field API if you don't have it)
+$picklistId = "e5b25e1d-0133-4334-86ca-e5c680d75227"
+
+# Get current items, add the new model, PUT to update
+$current = Invoke-RestMethod -Uri "$baseUrl/_apis/work/processes/lists/$picklistId?api-version=7.1-preview.1" -Headers $headers
+$current.items += "claude-opus-4.7-20260801"
+$body = @{ id = $picklistId; name = $current.name; type = "String"; items = $current.items } | ConvertTo-Json
+Invoke-RestMethod -Uri "$baseUrl/_apis/work/processes/lists/$picklistId?api-version=7.1-preview.1" -Method Put -Headers $headers -Body $body
+```
+
+**Option C — No picklist change needed (for one-off use):**
+If you just want to try a new model on one story without adding it to the picklist permanently, you can set it directly via the ADO REST API or the work item API — the backend reads the field value as a string regardless of picklist membership.
+
+> **Remember:** After adding a new model to the picklist, also make sure your Function App has the correct API endpoint and key for that model's provider. For example, to use a Gemini model, you'd need `AI__AgentModels__Planning__Endpoint` set to the Google AI endpoint and `AI__AgentModels__Planning__ApiKey` set to your Google API key.
+
+#### Output Fields — "AI Tracking" Group
+
+These fields are written automatically by the agents during processing. They show up on every user story so you can see exactly what the AI did.
+
+10. Click **+ New field**:
+   - **Name:** `AI Tokens Used`
+   - **Type:** Integer
+   - **Description:** Total tokens consumed across all agents
+   - **Group:** Select **"Create new group"** → name it **AI Tracking**
+   - **Page:** Details
+
+11. Click **+ New field**:
+   - **Name:** `AI Cost`
+   - **Type:** String
+   - **Description:** Estimated USD cost (e.g., "$0.1234")
+   - **Group:** Select **AI Tracking**
+   - **Page:** Details
+
+12. Click **+ New field**:
+   - **Name:** `AI Complexity`
+   - **Type:** String
+   - **Description:** Complexity classification: XS, S, M, L, XL
+   - **Group:** Select **AI Tracking**
+   - **Page:** Details
+
+13. Click **+ New field**:
+   - **Name:** `AI Model`
+   - **Type:** String
+   - **Description:** Per-agent AI model breakdown (e.g., "Planning: gpt-4o, Coding: claude-opus")
+   - **Group:** Select **AI Tracking**
+   - **Page:** Details
+
+14. Click **+ New field**:
+   - **Name:** `AI Review Score`
+   - **Type:** Integer
+   - **Description:** Code review score (0–100) from the Review agent
+   - **Group:** Select **AI Tracking**
+   - **Page:** Details
+
+15. Click **+ New field**:
+   - **Name:** `AI Processing Time`
+   - **Type:** Decimal
+   - **Description:** Total pipeline processing time in seconds
+   - **Group:** Select **AI Tracking**
+   - **Page:** Details
+
+16. Click **+ New field**:
+    - **Name:** `AI Files Generated`
+    - **Type:** Integer
+    - **Description:** Number of source code files generated
+    - **Group:** Select **AI Tracking**
+    - **Page:** Details
+
+17. Click **+ New field**:
+    - **Name:** `AI Tests Generated`
+    - **Type:** Integer
+    - **Description:** Number of test cases generated
+    - **Group:** Select **AI Tracking**
+    - **Page:** Details
+
+18. Click **+ New field**:
+    - **Name:** `AI PR Number`
+    - **Type:** Integer
+    - **Description:** Pull request number created for this story
+    - **Group:** Select **AI Tracking**
+    - **Page:** Details
+
+19. Click **+ New field**:
+    - **Name:** `AI Last Agent`
+    - **Type:** String
+    - **Description:** Last agent that processed this story
+    - **Group:** Select **AI Tracking**
+    - **Page:** Details
+
+20. Click **+ New field**:
+  - **Name:** `Current AI Agent`
+  - **Type:** Picklist (string)
+  - **Items:** `Planning Agent`, `Coding Agent`, `Testing Agent`, `Review Agent`, `Documentation Agent`, `Deployment Agent`
+  - **Default:** *(blank)*
+  - **Description:** Active AI owner for this story (blank means no AI agent currently working)
+  - **Group:** Select **AI Tracking**
+  - **Page:** Details
+
+21. Click **+ New field**:
+    - **Name:** `AI Critical Issues`
+    - **Type:** Integer
+    - **Description:** Critical issues found during code review
+    - **Group:** Select **AI Tracking**
+    - **Page:** Details
+
+22. Click **+ New field**:
+    - **Name:** `AI Deployment Decision`
+    - **Type:** String
+    - **Description:** Final deployment action taken (e.g., "Auto-merged", "Assigned for human review")
+    - **Group:** Select **AI Tracking**
+    - **Page:** Details
+
+> **Note:** ADO auto-generates the reference names from the field names (e.g., `AI Tokens Used` → `Custom.AITokensUsed`). You won't see a separate input for this — it happens automatically.
+
+**What you'll see on each user story after agents process it:**
+
+| Group | Field | Example Value |
+|-------|-------|---------------|
+| AI Agent Settings | Autonomy Level | 3 - Review & Pause |
+| AI Agent Settings | AI Minimum Review Score | 85 |
+| AI Model Settings | AI Model Tier | *(blank = Standard)* |
+| AI Model Settings | AI Planning Model | *(blank = use default)* |
+| AI Model Settings | AI Coding Model | *(blank = use default)* |
+| AI Model Settings | AI Testing Model | *(blank = use default)* |
+| AI Model Settings | AI Review Model | *(blank = use default)* |
+| AI Model Settings | AI Documentation Model | *(blank = use default)* |
+| AI Tracking | AI Tokens Used | 24,500 |
+| AI Tracking | AI Cost | $0.1234 |
+| AI Tracking | AI Complexity | M |
+| AI Tracking | AI Model | Coding: gpt-4o, Planning: gpt-4o, Review: gpt-4o-mini |
+| AI Tracking | AI Review Score | 92 |
+| AI Tracking | AI Processing Time | 45.3 |
+| AI Tracking | AI Files Generated | 5 |
+| AI Tracking | AI Tests Generated | 12 |
+| AI Tracking | AI PR Number | 42 |
+| AI Tracking | AI Last Agent | Deployment |
+| AI Tracking | Current AI Agent | Review Agent *(or blank when idle)* |
+| AI Tracking | AI Critical Issues | 0 |
+| AI Tracking | AI Deployment Decision | Auto-merged PR #42 |
+
+**Model override resolution order** (most specific wins):
+
+| Priority | Source | Example |
+|----------|--------|---------|
+| 1 (highest) | Per-agent field on story | `AI Coding Model = "claude-opus-4-20250514"` |
+| 2 | Model Tier on story | `AI Model Tier = "Premium"` → looks up tier config |
+| 3 | Config per-agent default | `AI__AgentModels__Coding__Model = "codex-mini-latest"` |
+| 4 (lowest) | Global default | `AI__Model = "claude-sonnet-4-20250514"` |
+
+> **Tip:** 99% of the time, just leave the Model Settings fields blank and the system defaults are used. Set `AI Model Tier = "Premium"` when you have a complex story that needs heavier models. Use the per-agent fields when you want surgical control (e.g., trying Opus on just the Coding agent for one story).
+
+**Autonomy Level reference (picklist values):**
+
+| Picklist Value | Pipeline Stops After |
+|---------------|---------------------|
+| `1 - Plan Only` | Planning agent — generates plan, no code |
+| `2 - Code Only` | Testing agent — generates code + tests, no review/merge |
+| `3 - Review & Pause` | All agents run → pauses at "Code Review" for human approval |
+| `4 - Auto-Merge` | All agents run → auto-merges PR if review score meets threshold |
+| `5 - Full Autonomy` | All agents run → auto-merges + triggers deployment pipeline |
+
+> **Tip:** If you skip the AI Tracking fields, the pipeline still works — it just won't display the values on the work item. The agents gracefully handle missing fields. But you MUST add the two AI Agent Settings fields (Autonomy Level and Minimum Review Score) for the pipeline to function correctly. The AI Model Settings fields are entirely optional — skip them if you don't need per-story model control.
+
+---
+
+## 4. Clone the Repository
+
+```bash
+git clone https://github.com/toddpick/adom8.git
+cd adom8
+```
+
+---
+
+## 5. Deploy Azure Infrastructure (Terraform)
+
+Terraform creates: Resource Group, Storage Account (queues + state), Function App (Consumption plan), Static Web App (dashboard), and Application Insights.
+
+### 5a. Authenticate to Azure
+
+```bash
+az login
+az account set --subscription "<YOUR_SUBSCRIPTION_ID>"
+```
+
+### 5b. Configure Terraform Variables
+
+```bash
+cd infrastructure
+
+# Create your variables file from the example
+cp terraform.tfvars.example terraform.tfvars
+```
+
+Edit `terraform.tfvars`:
+
+```hcl
+resource_group_name  = "ai-agents-rg"
+location             = "eastus"            # Choose your preferred region
+environment          = "dev"
+function_app_name    = "ai-agents-func-YOURNAME"    # Must be globally unique
+storage_account_name = "aiagentsstoryourname"        # Globally unique, lowercase, no hyphens, 3-24 chars
+static_web_app_name  = "ai-agent-dashboard-YOURNAME" # Globally unique
+alert_email          = "your-email@example.com"      # Receives monitoring alert notifications
+```
+
+### 5c. Run Terraform
+
+```bash
+terraform init        # Download providers
+terraform plan        # Preview what will be created — review carefully
+terraform apply       # Type 'yes' to confirm
+```
+
+On success you'll see outputs like:
+
+```
+function_app_name         = "ai-agents-func-YOURNAME"
+function_app_url          = "https://ai-agents-func-YOURNAME.azurewebsites.net"
+orchestrator_webhook_url  = "https://ai-agents-func-YOURNAME.azurewebsites.net/api/OrchestratorWebhook"
+dashboard_url             = "https://your-dashboard.azurestaticapps.net"
+```
+
+**Save these values** — you'll need them in the next steps.
+
+> To see outputs later: `terraform output`  
+> For sensitive values: `terraform output -raw storage_connection_string`
+
+### 5d. Visual Studio Enterprise / MSDN Subscription Notes
+
+If you're deploying under a **Visual Studio Enterprise** (or other MSDN) subscription, you may encounter a **"Dynamic VMs quota = 0"** error when Terraform tries to create the Consumption plan. This is a known limitation — the Terraform API creates the plan differently than the Azure CLI.
+
+**Workaround:** Create the Function App via Azure CLI first, then import into Terraform:
+
+```bash
+# 1. Create the function app (Azure auto-creates the consumption plan named "<Region>Plan")
+az functionapp create \
+  --name <YOUR_FUNCTION_APP_NAME> \
+  --resource-group ai-agents-rg \
+  --storage-account <YOUR_STORAGE_ACCOUNT> \
+  --consumption-plan-location eastus \
+  --runtime dotnet-isolated \
+  --runtime-version 8 \
+  --os-type Windows \
+  --app-insights <YOUR_FUNCTION_APP_NAME>-insights \
+  --functions-version 4
+
+# 2. Import both resources into Terraform state
+terraform import azurerm_service_plan.functions \
+  "/subscriptions/<SUB_ID>/resourceGroups/ai-agents-rg/providers/Microsoft.Web/serverFarms/EastUSPlan"
+
+terraform import azurerm_windows_function_app.agents \
+  "/subscriptions/<SUB_ID>/resourceGroups/ai-agents-rg/providers/Microsoft.Web/sites/<YOUR_FUNCTION_APP_NAME>"
+
+# 3. Apply remaining resources (alerts, etc.)
+terraform apply
+```
+
+> **Cost note:** This entire POC runs on free-tier or near-free resources. A typical Visual Studio Enterprise subscription gets $150/month in Azure credits — this POC will use **< $5/month** even with regular usage. The Consumption (Y1) plan gives you 1 million free executions/month.
+
+---
+
+## 6. Configure the Azure Function App
+
+Set the application settings that the Functions code reads at runtime. Replace every `<placeholder>` with your actual values.
+
+### Option A: GitHub as code repository (recommended for POC)
+
+```bash
+az functionapp config appsettings set \
+  --name <YOUR_FUNCTION_APP_NAME> \
+  --resource-group ai-agents-rg \
+  --settings \
+    "AI__Provider=Claude" \
+    "AI__Model=claude-sonnet-4-20250514" \
+    "AI__ApiKey=<YOUR_AI_API_KEY>" \
+    "AI__MaxTokens=4096" \
+    "AI__Temperature=0.3" \
+    "AzureDevOps__OrganizationUrl=https://dev.azure.com/<YOUR_ORG>" \
+    "AzureDevOps__Pat=<YOUR_ADO_PAT>" \
+    "AzureDevOps__Project=<YOUR_PROJECT>" \
+    "Git__Provider=GitHub" \
+    "Git__RepositoryUrl=https://github.com/<OWNER>/<REPO>.git" \
+    "Git__Username=x-token-auth" \
+    "Git__Token=<YOUR_GITHUB_PAT>" \
+    "Git__Email=ai-agent@your-org.com" \
+    "Git__Name=AI Agent Bot" \
+    "GitHub__Owner=<GITHUB_OWNER_OR_ORG>" \
+    "GitHub__Repo=<GITHUB_REPO_NAME>" \
+    "GitHub__Token=<YOUR_GITHUB_PAT>" \
+    "GitHub__DeployWorkflow=deploy.yml" \
+    "Deployment__PipelineName=Deploy-To-Production" \
+    "Deployment__DefaultAutonomyLevel=3" \
+    "Deployment__DefaultMinimumReviewScore=85"
+```
+
+### Option B: Azure DevOps Repos as code repository
+
+```bash
+az functionapp config appsettings set \
+  --name <YOUR_FUNCTION_APP_NAME> \
+  --resource-group ai-agents-rg \
+  --settings \
+    "AI__Provider=Claude" \
+    "AI__Model=claude-sonnet-4-20250514" \
+    "AI__ApiKey=<YOUR_AI_API_KEY>" \
+    "AI__MaxTokens=4096" \
+    "AI__Temperature=0.3" \
+    "AzureDevOps__OrganizationUrl=https://dev.azure.com/<YOUR_ORG>" \
+    "AzureDevOps__Pat=<YOUR_ADO_PAT>" \
+    "AzureDevOps__Project=<YOUR_PROJECT>" \
+    "Git__Provider=AzureDevOps" \
+    "Git__RepositoryUrl=https://dev.azure.com/<YOUR_ORG>/<YOUR_PROJECT>/_git/<YOUR_REPO>" \
+    "Git__Username=x-token-auth" \
+    "Git__Token=<YOUR_ADO_PAT>" \
+    "Git__Email=ai-agent@your-org.com" \
+    "Git__Name=AI Agent Bot" \
+    "Deployment__PipelineName=Deploy-To-Production" \
+    "Deployment__PipelineId=" \
+    "Deployment__DefaultAutonomyLevel=3" \
+    "Deployment__DefaultMinimumReviewScore=85"
+```
+
+**AI Provider options:**
+
+| Provider | AI__Provider | AI__Endpoint | AI__Model |
+|----------|-------------|-------------|-----------|
+| Anthropic (Claude) | `Claude` | *(leave empty)* | `claude-sonnet-4-20250514` |
+| OpenAI | `OpenAI` | *(leave empty)* | `gpt-4o` |
+| Azure OpenAI | `AzureOpenAI` | `https://<resource>.openai.azure.com/` | your deployment name |
+
+**Git Provider options:**
+
+| Setting | GitHub | Azure DevOps Repos |
+|---------|--------|--------------------|
+| `Git__Provider` | `GitHub` | `AzureDevOps` |
+| `Git__RepositoryUrl` | `https://github.com/owner/repo.git` | `https://dev.azure.com/org/project/_git/repo` |
+| `Git__Token` | GitHub PAT with `repo` scope | ADO PAT with `Code: Read & Write` |
+| `GitHub__*` settings | **Required** (Owner, Repo, Token) | Not needed |
+| Level 5 deploy trigger | `GitHub__DeployWorkflow` (e.g., `deploy.yml`) | `Deployment__PipelineId` (numeric) |
+
+### 6c. (Optional) Per-Agent Model Defaults
+
+By default, all agents use the global `AI__Model`. To assign different models to specific agents at the config level:
+
+```bash
+az functionapp config appsettings set \
+  --name <YOUR_FUNCTION_APP_NAME> \
+  --resource-group ai-agents-rg \
+  --settings \
+    "AI__AgentModels__Planning__Model=claude-sonnet-4-20250514" \
+    "AI__AgentModels__Coding__Model=claude-sonnet-4-20250514" \
+    "AI__AgentModels__Testing__Model=gpt-4o-mini" \
+    "AI__AgentModels__Review__Model=gpt-4o" \
+    "AI__AgentModels__Documentation__Model=gemini-2.0-flash"
+```
+
+If an agent needs a different provider/endpoint/key (e.g., Testing uses OpenAI while default is Claude):
+
+```bash
+az functionapp config appsettings set \
+  --name <YOUR_FUNCTION_APP_NAME> \
+  --resource-group ai-agents-rg \
+  --settings \
+    "AI__AgentModels__Testing__Provider=OpenAI" \
+    "AI__AgentModels__Testing__Model=gpt-4o-mini" \
+    "AI__AgentModels__Testing__ApiKey=sk-..." \
+    "AI__AgentModels__Documentation__Provider=OpenAI" \
+    "AI__AgentModels__Documentation__Model=gemini-2.0-flash" \
+    "AI__AgentModels__Documentation__Endpoint=https://generativelanguage.googleapis.com/v1beta/openai" \
+    "AI__AgentModels__Documentation__ApiKey=AIza..."
+```
+
+### 6d. (Optional) Model Tier Presets
+
+Tiers let users pick "Premium" or "Economy" on a user story to switch all agents at once. Configure the tier→model mappings:
+
+```bash
+az functionapp config appsettings set \
+  --name <YOUR_FUNCTION_APP_NAME> \
+  --resource-group ai-agents-rg \
+  --settings \
+    "AI__ModelTiers__Premium__Planning__Model=claude-opus-4-20250514" \
+    "AI__ModelTiers__Premium__Coding__Model=claude-opus-4-20250514" \
+    "AI__ModelTiers__Premium__Review__Model=claude-sonnet-4-20250514" \
+    "AI__ModelTiers__Economy__Testing__Model=gpt-4o-mini" \
+    "AI__ModelTiers__Economy__Documentation__Model=gemini-2.0-flash" \
+    "AI__ModelTiers__Economy__Planning__Model=gpt-4o-mini" \
+    "AI__ModelTiers__Economy__Coding__Model=gpt-4o-mini" \
+    "AI__ModelTiers__Economy__Review__Model=gpt-4o-mini"
+```
+
+> **How it works:** When a user sets `AI Model Tier = "Premium"` on a story, every agent checks the `AI:ModelTiers:Premium:{agentName}` config. Agents not defined in the tier fall back to the config-level per-agent defaults, then to the global default. Per-agent fields on the story (e.g., `AI Coding Model = "codex-mini-latest"`) always take highest priority.
+
+> **Note:** For Level 5 autonomy, GitHub dispatches a `workflow_dispatch` event to the configured GitHub Actions workflow. Azure DevOps triggers an ADO pipeline by ID.
+
+### 6e. (Optional) GitHub Copilot Hybrid Integration
+
+The Coding agent supports a **hybrid strategy**: for complex stories it can delegate coding to [GitHub Copilot's coding agent](https://docs.github.com/en/copilot/using-github-copilot/using-the-copilot-coding-agent) instead of the built-in agentic tool-use loop. This is **disabled by default** — zero impact until you explicitly enable it.
+
+**How it works:**
+
+1. The Coding agent checks story complexity (story points from the Planning agent)
+2. Stories at or above the threshold → creates an ephemeral GitHub Issue, assigns it to `@copilot`
+3. Copilot's coding agent picks up the issue and creates a PR
+4. A webhook bridge (`/api/copilot-webhook`) catches the PR, reconciles changes onto the pipeline branch, and resumes the sequential pipeline (Testing → Review → Documentation → Deployment)
+5. If Copilot doesn't respond within the timeout, the system falls back to the built-in agentic loop
+
+**Prerequisites:**
+
+- GitHub Copilot Business or Enterprise plan with the Copilot coding agent enabled
+- Repository must have Copilot coding agent enabled in **Settings → Copilot → Coding agent**
+- GitHub PAT must have `repo` scope (classic token) **or** `Issues: Read and Write` permission (fine-grained token) — the PAT needs to create Issues and assign them to `@copilot`
+
+**Step 1: Add Copilot configuration settings:**
+
+```bash
+az functionapp config appsettings set \
+  --name <YOUR_FUNCTION_APP_NAME> \
+  --resource-group ai-agents-rg \
+  --settings \
+    "Copilot__Enabled=true" \
+    "Copilot__Mode=Auto" \
+    "Copilot__ComplexityThreshold=8" \
+    "Copilot__CreateIssue=true" \
+    "Copilot__WebhookSecret=<YOUR_WEBHOOK_SECRET>" \
+    "Copilot__TimeoutMinutes=30" \
+    "Copilot__AutoCloseCopilotPr=true"
+```
+
+Generate a webhook secret with: `openssl rand -hex 32` (or `python -c "import secrets; print(secrets.token_hex(32))"` on Windows).
+
+> **💡 Copilot-only setup (no AI API key needed for coding):**
+> Set `Copilot__Mode=Always` to send **all** coding work to Copilot, regardless of story complexity.
+> This is ideal if you only have a GitHub Copilot subscription and no Claude/OpenAI API key.
+> The other agents (Planning, Testing, Review, etc.) still require an AI API key.
+
+**Configuration reference:**
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| `Copilot__Enabled` | `false` | Master switch — enables Copilot as an alternative coding strategy |
+| `Copilot__Mode` | `Auto` | `Auto` = threshold-based (complex stories only), `Always` = every story goes to Copilot |
+| `Copilot__ComplexityThreshold` | `8` | Story points ≥ this value → delegate to Copilot. Only used when Mode=Auto |
+| `Copilot__CreateIssue` | `true` | Auto-create GitHub Issue and assign to `@copilot`. Set `false` for manual trigger |
+| `Copilot__WebhookSecret` | *(empty)* | HMAC-SHA256 secret for validating GitHub webhook payloads. **Required for production** |
+| `Copilot__TimeoutMinutes` | `30` | Max wait time before falling back to the agentic loop |
+| `Copilot__AutoCloseCopilotPr` | `true` | Auto-close Copilot's PR after reconciling changes onto the pipeline branch |
+
+**Step 2: Register the GitHub webhook:**
+
+1. Go to your GitHub repo → **Settings → Webhooks → Add webhook**
+2. **Payload URL:** `https://<YOUR_FUNCTION_APP>.azurewebsites.net/api/copilot-webhook?code=<YOUR_FUNCTION_KEY>`
+3. **Content type:** `application/json`
+4. **Secret:** The same value you used for `Copilot__WebhookSecret`
+5. **Which events?** Select **Pull requests** only
+6. Click **Add webhook**
+
+> **Tip:** Get your function key from the Azure Portal: Function App → Functions → CopilotBridgeWebhook → Function Keys, or via `az functionapp function keys list --name <APP> --resource-group ai-agents-rg --function-name CopilotBridgeWebhook`.
+
+**Step 3: Verify the integration:**
+
+1. Create a user story in ADO with high story points (≥ your threshold)
+2. Move it to "AI Agent" to trigger the pipeline
+3. After the Planning agent completes, watch the Coding agent — it should:
+   - Create a GitHub Issue titled `[US-{id}] {story title}`
+   - Assign the issue to `@copilot`
+   - The dashboard shows a purple "Copilot" card with a pulsing animation
+4. When Copilot creates a PR, the webhook bridge reconciles changes and resumes the pipeline
+
+**Dashboard indicators:**
+
+- **Purple card with pulsing border** — Copilot delegation in progress, waiting for PR
+- **Purple "Mode: 🤖 Copilot" badge** — Coding completed via Copilot (shows files/lines/duration instead of tokens/cost)
+
+---
+
+## 7. Deploy the Functions Code
+
+```bash
+cd src/AIAgents.Functions
+
+# Build
+dotnet publish -c Release --output ./publish
+
+# Deploy to Azure
+func azure functionapp publish <YOUR_FUNCTION_APP_NAME>
+```
+
+Verify it deployed:
+
+```bash
+# Should return a list of your functions
+func azure functionapp list-functions <YOUR_FUNCTION_APP_NAME>
+```
+
+You should see: `OrchestratorWebhook`, `AgentTaskDispatcher`, `GetCurrentStatus`.
+
+---
+
+## 8. Deploy the Dashboard
+
+### Option A: Azure CLI (quick)
+
+```bash
+# Get the deployment token
+cd infrastructure
+DEPLOY_TOKEN=$(terraform output -raw dashboard_api_key)
+
+# Deploy
+cd ../dashboard
+npx @azure/static-web-apps-cli deploy \
+  --deployment-token $DEPLOY_TOKEN \
+  --app-location "."
+```
+
+### Option B: GitHub Actions (automated — push to deploy)
+
+1. Get your deployment token:
+   ```bash
+   terraform output -raw dashboard_api_key
+   ```
+2. In your GitHub repo → **Settings → Secrets and variables → Actions**
+3. Add secret: `AZURE_STATIC_WEB_APPS_API_TOKEN` = the token
+4. Any push to `main` that changes `dashboard/**` will auto-deploy
+
+### Update Dashboard API URL
+
+Open `dashboard/index.html` and set the API URL to your Function App:
+
+```javascript
+const API_URL = 'https://<YOUR_FUNCTION_APP>.azurewebsites.net/api';
+```
+
+Re-deploy the dashboard after this change.
+
+### Provision most ADO setup from the dashboard
+
+After the dashboard is live and your Function App has Azure DevOps settings configured (`AzureDevOps__OrganizationUrl`, `AzureDevOps__Project`, `AzureDevOps__Pat`), open the dashboard and use:
+
+- **Codebase Intelligence → `PROVISION ADO`**
+
+This runs the same `/api/provision-ado` automation and handles most board/process setup (states, fields, and service hook) with follow-up guidance for anything still manual.
+
+---
+
+## 9. Configure the ADO Service Hook (Webhook)
+
+This connects Azure DevOps to your Function App. When a work item's state changes, ADO sends a webhook that triggers the agent pipeline.
+
+1. Go to your ADO project → **Project Settings** (gear, bottom-left)
+2. Under **General**, click **Service hooks**
+3. Click **+ Create subscription**
+4. Choose **Web Hooks** → **Next**
+5. Configure the trigger:
+   - **Trigger on this type of event:** `Work item updated`
+   - **Area path:** *(leave as `[Any]` or scope to specific area)*
+   - **Work item type:** `User Story`
+   - **Field:** `State`
+  - **Value filter (recommended):** `AI Agent`
+6. Click **Next**
+7. Configure the action:
+  - **URL:** `https://<YOUR_FUNCTION_APP>.azurewebsites.net/api/webhook?code=<FUNCTION_KEY>`
+  - **HTTP headers:** add `x-ado-agent-secret: <WEBHOOK_SHARED_SECRET>`
+   - **Resource details to send:** `All`
+   - **Messages to send:** `All`
+8. Click **Test** → you should see a `200 OK` response with `{"status":"skipped",...}` (expected — the test payload isn't a real state change)
+9. Click **Finish**
+
+> **Required security baseline:** Webhook calls must include a Function key and a shared secret header.
+> - Function key URL format: `https://...azurewebsites.net/api/webhook?code=<FUNCTION_KEY>`
+> - Shared secret header: `x-ado-agent-secret: <WEBHOOK_SHARED_SECRET>`
+> - Get function key from: Azure Portal → Function App → Functions → OrchestratorWebhook → Function Keys
+
+---
+
+## 10. End-to-End Test
+
+1. Go to your ADO **Boards** → **Work Items**
+2. Create a new **User Story**:
+   - **Title:** `Create a hello world REST API endpoint`
+   - **Description:** `Build a simple GET /hello endpoint that returns { "message": "Hello, World!" } with proper error handling and logging.`
+   - **Acceptance Criteria:** `Given a GET request to /hello, When the server is running, Then it returns 200 with the hello message`
+   - *(Optional)* **Autonomy Level:** `3 - Review & Pause` (default)
+   - *(Optional)* **AI Minimum Review Score:** `85` (default)
+3. Change the state to **`AI Agent`**
+4. **Watch the pipeline work:**
+
+| What to check | Where |
+|---------------|-------|
+| Agent pipeline running | Dashboard URL from Step 8 |
+| Queue messages | Azure Portal → Storage Account → Queues → `agent-tasks` |
+| Function logs | Azure Portal → Function App → Monitor, or `az functionapp log stream --name <name> --resource-group ai-agents-rg` |
+| Detailed telemetry | Azure Portal → Application Insights → Transaction search |
+| Generated artifacts | Your repo → branch `feature/US-<id>` → `.ado/stories/US-<id>/` |
+| Work item state progression | ADO Boards — watch the card move through columns |
+
+**Expected flow:**
+```
+AI Agent (Current AI Agent updates: Planning → Coding → Testing → Review → Documentation → Deployment)
+→ Code Review (Level 3 stops here)
+```
+
+While AI is actively processing, **State** stays `AI Agent` and **Current AI Agent** shows the active worker.
+When no AI worker is active (handoff/idle), **Current AI Agent** is blank.
+
+5. You should see a **PR created** in your repository and a **comment on the work item** summarizing what each agent did.
+
+---
+
+## 11. CI/CD: Automated Deployments
+
+The repo includes GitHub Actions workflows for continuous deployment:
+
+### Functions (`.github/workflows/deploy-functions.yml`)
+
+Triggers on push to `main` when `src/**` changes.
+
+**Required GitHub Secrets:**
+
+| Secret | Value | How to get it |
+|--------|-------|--------------|
+| `AZURE_FUNCTIONAPP_NAME` | Your function app name | `terraform output -raw function_app_name` |
+| `AZURE_FUNCTIONAPP_PUBLISH_PROFILE` | XML publish profile | Azure Portal → Function App → **Get publish profile** (download button) |
+
+### Dashboard (`.github/workflows/deploy-dashboard.yml`)
+
+Triggers on push to `main` when `dashboard/**` changes.
+
+**Required GitHub Secrets:**
+
+| Secret | Value | How to get it |
+|--------|-------|--------------|
+| `AZURE_STATIC_WEB_APPS_API_TOKEN` | Deployment token | `terraform output -raw dashboard_api_key` |
+
+---
+
+## 12. Optional: Terraform via Azure DevOps Pipeline
+
+If you prefer managing infrastructure through Azure DevOps pipelines rather than running Terraform locally:
+
+### 12a. Store Terraform State Remotely
+
+Add a backend block to `infrastructure/main.tf`:
+
+```hcl
+terraform {
+  backend "azurerm" {
+    resource_group_name  = "terraform-state-rg"
+    storage_account_name = "yourtfstateaccount"
+    container_name       = "tfstate"
+    key                  = "ai-agents.terraform.tfstate"
+  }
+}
+```
+
+Create the state storage (one-time):
+
+```bash
+az group create --name terraform-state-rg --location eastus
+az storage account create --name yourtfstateaccount --resource-group terraform-state-rg --sku Standard_LRS
+az storage container create --name tfstate --account-name yourtfstateaccount
+```
+
+### 12b. Create an Azure Service Connection
+
+1. ADO → **Project Settings → Service connections**
+2. **+ New service connection → Azure Resource Manager**
+3. Choose **Service principal (automatic)**
+4. Select your subscription → name it `Azure-AI-Agents`
+5. Grant `Contributor` role on the subscription (or target resource group)
+
+### 12c. Create the Pipeline YAML
+
+Create `.ado/pipelines/terraform.yml` in your repo:
+
+```yaml
+trigger:
+  branches:
+    include: [main]
+  paths:
+    include: [infrastructure/*]
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+variables:
+  - group: 'AI-Agents-Terraform'  # Variable group with tfvars values
+  - name: serviceConnection
+    value: 'Azure-AI-Agents'
+
+stages:
+  - stage: Plan
+    displayName: 'Terraform Plan'
+    jobs:
+      - job: Plan
+        steps:
+          - task: TerraformInstaller@1
+            inputs:
+              terraformVersion: 'latest'
+
+          - task: TerraformTaskV4@4
+            displayName: 'Terraform Init'
+            inputs:
+              provider: 'azurerm'
+              command: 'init'
+              workingDirectory: '$(System.DefaultWorkingDirectory)/infrastructure'
+              backendServiceArm: '$(serviceConnection)'
+              backendAzureRmResourceGroupName: 'terraform-state-rg'
+              backendAzureRmStorageAccountName: 'yourtfstateaccount'
+              backendAzureRmContainerName: 'tfstate'
+              backendAzureRmKey: 'ai-agents.terraform.tfstate'
+
+          - task: TerraformTaskV4@4
+            displayName: 'Terraform Plan'
+            inputs:
+              provider: 'azurerm'
+              command: 'plan'
+              workingDirectory: '$(System.DefaultWorkingDirectory)/infrastructure'
+              environmentServiceNameAzureRM: '$(serviceConnection)'
+              commandOptions: '-out=tfplan'
+
+          - publish: '$(System.DefaultWorkingDirectory)/infrastructure/tfplan'
+            artifact: 'tfplan'
+
+  - stage: Apply
+    displayName: 'Terraform Apply'
+    dependsOn: Plan
+    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
+    jobs:
+      - deployment: Apply
+        environment: 'production'  # Requires approval gate
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - checkout: self
+
+                - task: TerraformInstaller@1
+                  inputs:
+                    terraformVersion: 'latest'
+
+                - download: current
+                  artifact: 'tfplan'
+
+                - task: TerraformTaskV4@4
+                  displayName: 'Terraform Init'
+                  inputs:
+                    provider: 'azurerm'
+                    command: 'init'
+                    workingDirectory: '$(System.DefaultWorkingDirectory)/infrastructure'
+                    backendServiceArm: '$(serviceConnection)'
+                    backendAzureRmResourceGroupName: 'terraform-state-rg'
+                    backendAzureRmStorageAccountName: 'yourtfstateaccount'
+                    backendAzureRmContainerName: 'tfstate'
+                    backendAzureRmKey: 'ai-agents.terraform.tfstate'
+
+                - task: TerraformTaskV4@4
+                  displayName: 'Terraform Apply'
+                  inputs:
+                    provider: 'azurerm'
+                    command: 'apply'
+                    workingDirectory: '$(System.DefaultWorkingDirectory)/infrastructure'
+                    environmentServiceNameAzureRM: '$(serviceConnection)'
+                    commandOptions: '$(Pipeline.Workspace)/tfplan/tfplan'
+```
+
+### 12d. Create a Variable Group
+
+1. ADO → **Pipelines → Library → + Variable group**
+2. Name: `AI-Agents-Terraform`
+3. Add variables matching `terraform.tfvars`:
+
+| Variable | Value |
+|----------|-------|
+| `TF_VAR_function_app_name` | `ai-agents-func-YOURNAME` |
+| `TF_VAR_storage_account_name` | `aiagentsstoryourname` |
+| `TF_VAR_static_web_app_name` | `ai-agent-dashboard-YOURNAME` |
+| `TF_VAR_resource_group_name` | `ai-agents-rg` |
+| `TF_VAR_location` | `eastus` |
+
+### 12e. Create the Pipeline
+
+1. ADO → **Pipelines → + New pipeline**
+2. Connect to your repo
+3. Select **Existing Azure Pipelines YAML file**
+4. Path: `.ado/pipelines/terraform.yml`
+5. **Run** — first run will plan only; merge to `main` triggers Plan + Apply
+
+### 12f. Add an Approval Gate (Recommended)
+
+1. ADO → **Pipelines → Environments → production**
+2. Click ⋯ → **Approvals and checks**
+3. **+ Add check → Approvals** → add yourself (or a team)
+4. Now Terraform Apply requires manual approval before executing
+
+---
+
+## 13. Local Development
+
+```bash
+# Install Azurite for local Storage emulation
+npm install -g azurite
+
+# Start Azurite (separate terminal)
+azurite --silent --location .azurite --blobPort 10000 --queuePort 10001 --tablePort 10002
+
+# Configure local settings
+cd src/AIAgents.Functions
+# Edit local.settings.json with your dev values (this file is in .gitignore)
+
+# Run Functions locally
+func start
+```
+
+To test the webhook locally, you can use a tool like [ngrok](https://ngrok.com/) to expose your local Function App:
+
+```bash
+ngrok http 7071
+# Use the ngrok URL as your ADO Service Hook URL temporarily
+```
+
+---
+
+## 14. Troubleshooting
+
+### Service hook not firing
+- Verify the webhook URL: `https://<func-app>.azurewebsites.net/api/webhook?code=<FUNCTION_KEY>`
+- Verify header includes: `x-ado-agent-secret: <WEBHOOK_SHARED_SECRET>`
+- ADO → **Project Settings → Service hooks** → check for ❌ errors
+- Test manually: `curl -X POST "https://<func-app>.azurewebsites.net/api/webhook?code=<FUNCTION_KEY>" -H "Content-Type: application/json" -H "x-ado-agent-secret: <WEBHOOK_SHARED_SECRET>" -d '{}'`
+
+### Functions not processing queue messages
+- Azure Portal → Storage Account → **Queues** → check `agent-tasks` for waiting messages
+- Check `agent-tasks-poison` queue for failed messages (retried 5× then poisoned)
+- Check Application Insights: **Transaction search** → filter by "AgentTaskDispatcher"
+
+### AI API errors (429, 401, timeout)
+- Verify `AI__ApiKey` is correct
+- Check rate limits on your AI provider dashboard
+- Increase timeout: `AI__Timeout=600` (seconds)
+- Stream logs: `az functionapp log stream --name <name> --resource-group ai-agents-rg`
+
+### Work item state not changing
+- Confirm you added the exact state names from Step 3c (case-sensitive)
+- Check that your PAT has `Work Items: Read & Write` scope
+- Look at Function logs for errors in `OrchestratorWebhook`
+
+### Dashboard not updating
+- Verify the API URL in `dashboard/index.html` points to your Function App
+- Check CORS: Azure Portal → Function App → **API → CORS** → add your dashboard URL
+- Test the API directly: `curl https://<func-app>.azurewebsites.net/api/status`
+
+### Git push failures
+- Verify `Git__Token` has write permissions to the repository
+- **GitHub:** PAT needs `repo` scope. URL format: `https://github.com/<owner>/<repo>.git`
+- **Azure DevOps:** PAT needs `Code: Read & Write`. URL format: `https://dev.azure.com/<org>/<project>/_git/<repo>`
+- Ensure the branch isn’t protected (or the PAT has bypass permissions)
+
+### PR creation failures
+- **GitHub:** Verify `GitHub__Owner`, `GitHub__Repo`, and `GitHub__Token` are set correctly
+- **Azure DevOps:** Verify `Git__Provider=AzureDevOps` and `AzureDevOps__Pat` has `Code` + `Pull Request Threads` scopes
+- Check Function logs for HTTP status codes (401 = bad token, 404 = wrong repo name, 422 = branch doesn’t exist)
+
+### Terraform errors
+- `az account show` — verify you're logged into the correct subscription
+- Storage account name conflicts: must be globally unique, lowercase, 3-24 chars
+- Function app name conflicts: must be globally unique
+- Locked resources: `terraform plan` will show what it wants to change before applying
+- **"Dynamic VMs quota = 0"** — VS Enterprise subscription limitation. See [Step 5d](#5d-visual-studio-enterprise--msdn-subscription-notes) for the CLI workaround
+- **`workspace_id` cannot be removed** — App Insights was auto-created with a managed workspace. The Terraform config pins `workspace_id` to match; don't remove it
+- **`skip_provider_registration = true`** — required for azurerm provider v3.x to avoid timeout errors registering unused providers. Already set in `main.tf`
+
+---
+
+## 15. Production Hardening
+
+Default setup prioritizes speed. For production, apply this baseline:
+
+1. Move all sensitive values (`AI__ApiKey`, PATs, tokens, webhook secrets) to Key Vault.
+2. Use Function App managed identity + Key Vault references.
+3. Restrict PAT scopes and rotate secrets regularly.
+4. Restrict dashboard access with SWA auth / Entra ID.
+5. Add alerts for `reset`, `emergency-stop`, `provision-ado`, and poison queue depth.
+
+Full checklist and commands: `SECURITY_HARDENING.md`.

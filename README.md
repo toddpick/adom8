@@ -4,6 +4,13 @@ ADOm8 is AI-powered development workflow automation for Azure DevOps. When a wor
 
 Interactive onboarding guide: **https://adom8.dev/get-started**
 
+## Getting Started
+
+The preferred way to set up ADOm8 is using the automated Azure Pipeline. This pipeline provisions all necessary Azure infrastructure, configures your Azure DevOps project, and sets up the required GitHub integrations in a single run.
+
+1. **[Pipeline Setup Guide (Recommended)](SETUP.md)** - Fast, automated setup using an Azure DevOps pipeline.
+2. **[Manual Setup Guide](SETUP-MANUAL.md)** - Alternative setup using local PowerShell scripts or manual Terraform deployment.
+
 ## Architecture
 
 ```
@@ -103,7 +110,7 @@ flowchart TD
 
 ## Quick Start
 
-Estimated setup time: **20-35 minutes typical** (up to 60 minutes if manual ADO process/state steps are required).
+Estimated setup time: **10-15 minutes typical** using the automated Azure Pipeline.
 
 ### Prerequisites
 
@@ -111,60 +118,22 @@ Estimated setup time: **20-35 minutes typical** (up to 60 minutes if manual ADO 
 - Azure DevOps organization with a project
 - Claude or OpenAI API key
 - GitHub Copilot (recommended for higher code quality and large codebase scans)
-- [Terraform](https://www.terraform.io/downloads) ≥ 1.0
-- [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0)
-- [Azure Functions Core Tools](https://learn.microsoft.com/en-us/azure/azure-functions/functions-run-local) v4
 
-### Fast Path (recommended)
+### Pipeline Setup (Recommended)
 
-Use the one-command bootstrap for fastest onboarding:
+The preferred way to onboard ADOm8 is using the automated Azure Pipeline. This single pipeline provisions all Azure infrastructure, configures your ADO process, sets up GitHub webhooks, and securely stores all secrets in Azure Key Vault.
 
-```powershell
-# Create editable config template
-.\scripts\bootstrap.ps1 -InitConfig
+1. Create an **Onboarding PAT** in Azure DevOps (scopes: Process, Project and Team, Work Items, Code, Build, Release, Service Connections).
+2. Create a **GitHub Token** scoped to your target repository.
+3. Import `adom8-onboarding-pipeline.yml` into your Azure DevOps project.
+4. Configure the required pipeline variables (see [SETUP.md](SETUP.md) for the full list).
+5. Run the pipeline.
 
-# Fill scripts\bootstrap.config.json with your values, then run:
-.\scripts\bootstrap.ps1 -ConfigPath .\scripts\bootstrap.config.json
-```
+For detailed step-by-step instructions, see the [Pipeline Setup Guide](SETUP.md).
 
-After deploy, open the dashboard, set your function key (`🔓`), then run `🧩 PROVISION ADO`.
+### Manual Setup (Alternative)
 
-### Deploy
-
-```bash
-# 1. Infrastructure
-cd infrastructure
-cp terraform.tfvars.example terraform.tfvars  # Edit with your values
-terraform init
-terraform apply
-
-# 2. Configure secrets (from terraform output)
-az functionapp config appsettings set \
-  --name <function-app-name> \
-  --resource-group <rg-name> \
-  --settings \
-    "AI__ApiKey=YOUR_KEY" \
-    "AzureDevOps__OrganizationUrl=https://dev.azure.com/yourorg" \
-    "AzureDevOps__Pat=YOUR_PAT" \
-    "AzureDevOps__Project=YourProject" \
-    "Git__RepositoryUrl=YOUR_REPO_URL" \
-    "Git__Token=YOUR_GIT_PAT"
-
-# 3. Deploy Functions
-cd src/AIAgents.Functions
-func azure functionapp publish <function-app-name>
-
-# 4. Deploy Dashboard (via GitHub Actions or manual)
-# See .github/workflows/deploy-dashboard.yml
-
-# 5. Configure Azure DevOps Service Hook
-# Project Settings → Service Hooks → Web Hooks
-# Trigger: Work item updated (state field changes)
-# URL: https://<function-app>.azurewebsites.net/api/webhook?code=<FUNCTION_KEY>
-# Header: x-ado-agent-secret: <WEBHOOK_SHARED_SECRET>
-```
-
-See [SETUP.md](SETUP.md) for detailed instructions, [SECURITY_HARDENING.md](SECURITY_HARDENING.md) for production hardening, and [DEMO_GUIDE.md](DEMO_GUIDE.md) for the live demo script.
+If you prefer to run scripts locally or deploy manually using Terraform, see the [Manual Setup Guide](SETUP-MANUAL.md).
 
 ## Configuration
 
