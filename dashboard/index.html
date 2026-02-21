@@ -1222,6 +1222,23 @@
         .sidebar-stat-value.time { color: #ccc; }
 
         /* Main Layout */
+        .section-title-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 14px;
+        }
+
+        .section-title-row .section-title {
+            margin-bottom: 0;
+        }
+
+        .pipeline-header-actions {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
         .section-title {
             font-size: 1.1rem;
             font-weight: 700;
@@ -3586,13 +3603,6 @@
 
         <div class="top-nav-actions" id="top-nav-actions">
 
-        <button class="reset-btn" id="clear-stories-btn" onclick="handleClearStories()" title="Clear all stories and queue data" aria-label="Clear stories">
-            🧹 <span id="clear-stories-btn-text">CLEAR STORIES</span>
-        </button>
-        <button class="abort-btn" id="abort-btn" onclick="handleAbort()" title="Emergency stop — clears all pending agent tasks" aria-label="Emergency stop pipeline">
-            🛑 <span id="abort-btn-text">ABORT</span>
-            <span class="queue-badge" id="abort-queue-badge" style="display:none;">0</span>
-        </button>
         <div class="notification-bell-wrapper">
             <button class="notification-bell" id="notification-bell" onclick="toggleNotificationDropdown()" title="Notifications" aria-label="Open notifications">
                 🔔
@@ -3732,7 +3742,18 @@
         <main>
             <div class="container">
                 <!-- Agent Pipeline -->
-                <div class="section-title">⚡ Agent Pipeline</div>
+                <div class="section-title-row">
+                    <div class="section-title">⚡ Agent Pipeline</div>
+                    <div class="pipeline-header-actions">
+                        <button class="reset-btn" id="clear-stories-btn" onclick="handleClearStories()" title="Clear all stories and queue data" aria-label="Clear stories">
+                            🧹 <span id="clear-stories-btn-text">CLEAR STORIES</span>
+                        </button>
+                        <button class="abort-btn" id="abort-btn" onclick="handleAbort()" title="Emergency stop — clears all pending agent tasks" aria-label="Emergency stop pipeline">
+                            🛑 <span id="abort-btn-text">ABORT</span>
+                            <span class="queue-badge" id="abort-queue-badge" style="display:none;">0</span>
+                        </button>
+                    </div>
+                </div>
                 
                 <!-- Search and Filter Controls -->
                 <div class="search-filter-controls">
