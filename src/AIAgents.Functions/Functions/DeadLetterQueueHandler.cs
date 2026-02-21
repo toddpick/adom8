@@ -142,7 +142,7 @@ public sealed class DeadLetterQueueHandler
             try
             {
                 await _adoClient.AddWorkItemCommentAsync(task.WorkItemId, comment, ct);
-                await _adoClient.UpdateWorkItemFieldAsync(task.WorkItemId, CustomFieldNames.Paths.CurrentAIAgent, string.Empty, ct);
+                await _adoClient.UpdateWorkItemFieldAsync(task.WorkItemId, CustomFieldNames.Paths.CurrentAIAgent, ToCurrentAgentValue(task.AgentType), ct);
                 await _adoClient.UpdateWorkItemStateAsync(task.WorkItemId, "Agent Failed", ct);
             }
             catch (Exception ex)
@@ -173,4 +173,15 @@ public sealed class DeadLetterQueueHandler
             **To retry:** Update work item state back to the appropriate trigger state to re-process
             """;
     }
+
+    private static string ToCurrentAgentValue(AgentType agentType) => agentType switch
+    {
+        AgentType.Planning => AIPipelineNames.CurrentAgentValues.Planning,
+        AgentType.Coding => AIPipelineNames.CurrentAgentValues.Coding,
+        AgentType.Testing => AIPipelineNames.CurrentAgentValues.Testing,
+        AgentType.Review => AIPipelineNames.CurrentAgentValues.Review,
+        AgentType.Documentation => AIPipelineNames.CurrentAgentValues.Documentation,
+        AgentType.Deployment => AIPipelineNames.CurrentAgentValues.Deployment,
+        _ => string.Empty
+    };
 }

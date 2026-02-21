@@ -35,6 +35,16 @@ public sealed class OrchestratorWebhook
         [AIPipelineNames.ProcessingState] = AgentType.Planning
     };
 
+    private static readonly Dictionary<string, AgentType> s_currentAgentToAgentType = new(StringComparer.OrdinalIgnoreCase)
+    {
+        [AIPipelineNames.CurrentAgentValues.Planning] = AgentType.Planning,
+        [AIPipelineNames.CurrentAgentValues.Coding] = AgentType.Coding,
+        [AIPipelineNames.CurrentAgentValues.Testing] = AgentType.Testing,
+        [AIPipelineNames.CurrentAgentValues.Review] = AgentType.Review,
+        [AIPipelineNames.CurrentAgentValues.Documentation] = AgentType.Documentation,
+        [AIPipelineNames.CurrentAgentValues.Deployment] = AgentType.Deployment
+    };
+
     public OrchestratorWebhook(
         ILogger<OrchestratorWebhook> logger,
         IActivityLogger activityLogger,
@@ -109,9 +119,11 @@ public sealed class OrchestratorWebhook
         }
 
         // Validate work item content before queuing
+        string? currentAIAgentValue = null;
         try
         {
             var workItem = await _adoClient.GetWorkItemAsync(workItemId, cancellationToken);
+            currentAIAgentValue = workItem.CurrentAIAgent;
             var validation = _inputValidator.ValidateWorkItem(workItem);
 
             if (!validation.IsValid)
@@ -159,6 +171,18 @@ public sealed class OrchestratorWebhook
             _logger.LogWarning(ex,
                 "Could not validate WI-{WorkItemId} content — proceeding without validation",
                 workItemId);
+        }
+
+        if (agentType == AgentType.Planning &&
+            !string.IsNullOrWhiteSpace(currentAIAgentValue) &&
+            s_currentAgentToAgentType.TryGetValue(currentAIAgentValue.Trim(), out var requestedAgentType))
+        {
+            agentType = requestedAgentType;
+            _logger.LogInformation(
+                "AI Agent trigger for WI-{WorkItemId} is resuming at {AgentType} from Current AI Agent='{CurrentAIAgent}'",
+                workItemId,
+                agentType,
+                currentAIAgentValue);
         }
 
         // Enqueue the agent task

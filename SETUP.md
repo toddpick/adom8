@@ -75,6 +75,7 @@ The agents need a Personal Access Token to read/write work items, push code, cre
 | **Work Items** | Read & Write |
 | **Code** | Read & Write |
 | **Pull Request Threads** | Read & Write |
+| **Service Hooks** | Read, query, & manage |
 | **Build** | Read & Execute *(Level 5 autonomy only)* |
 | **Pipeline Resources** | Use and manage *(Level 5 autonomy only)* |
 
@@ -193,7 +194,29 @@ Azure Boards cannot dynamically map swimlanes to custom fields, but you can stil
   - `Deployment Agent`
 4. Save filters or queries by `Current AI Agent` for focused views
 
-### 3f. Add Custom Fields
+> **Color behavior in ADO forms:** You can set a color for the `AI Agent` **state** in workflow settings, but Azure DevOps does **not** support per-option colors inside the `Current AI Agent` dropdown on the work item form.
+>
+> **Best visual match:** Use Board card style rules on `Current AI Agent` so each active agent value gets a matching card color/border/icon while state remains `AI Agent`.
+
+### 3f. (Optional) Auto-Provision ADO with PAT
+
+If you've already deployed the Function App and set `AzureDevOps__OrganizationUrl`, `AzureDevOps__Project`, and `AzureDevOps__Pat`, you can automate most ADO setup:
+
+```bash
+curl -X POST "https://<YOUR_FUNCTION_APP>.azurewebsites.net/api/provision-ado?code=<FUNCTION_KEY>"
+```
+
+What this endpoint does:
+- Validates required User Story states (including `AI Agent`)
+- Creates missing `Custom.AI*` fields (including `Custom.CurrentAIAgent`) when permissions allow
+- Creates/validates the state-change Service Hook subscription
+
+What still may require manual follow-up:
+- Add any missing workflow states in Process → User Story → States
+- Ensure `Current AI Agent` is a picklist with: Planning, Coding, Testing, Review, Documentation, Deployment
+- Add Board card styles for `Current AI Agent` visualization/color coordination
+
+### 3g. Add Custom Fields
 
 Still in **Organization Settings → Process → User Story**:
 
@@ -809,6 +832,14 @@ const API_URL = 'https://<YOUR_FUNCTION_APP>.azurewebsites.net/api';
 ```
 
 Re-deploy the dashboard after this change.
+
+### Provision most ADO setup from the dashboard
+
+After the dashboard is live and your Function App has Azure DevOps settings configured (`AzureDevOps__OrganizationUrl`, `AzureDevOps__Project`, `AzureDevOps__Pat`), open the dashboard and use:
+
+- **Codebase Intelligence → `PROVISION ADO`**
+
+This runs the same `/api/provision-ado` automation and handles most board/process setup (states, fields, and service hook) with follow-up guidance for anything still manual.
 
 ---
 

@@ -83,7 +83,10 @@ public sealed class AIClient : IAIClient
             _logger.LogError(
                 "AI API request failed ({StatusCode}): URL={Url}, Provider={Provider}, Model={Model}, Body={Body}",
                 response.StatusCode, url, _options.Provider, _options.Model, errorBody);
-            response.EnsureSuccessStatusCode(); // throws HttpRequestException with status code
+            throw new HttpRequestException(
+                $"AI API request failed ({(int)response.StatusCode} {response.StatusCode}) at URL '{url}' for provider '{_options.Provider}' model '{_options.Model}'. Response: {errorBody}",
+                null,
+                response.StatusCode);
         }
 
         var responseJson = await response.Content.ReadAsStringAsync(cancellationToken);

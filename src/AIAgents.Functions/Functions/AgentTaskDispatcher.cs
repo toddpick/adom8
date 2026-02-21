@@ -248,7 +248,7 @@ public sealed class AgentTaskDispatcher
                         await _adoClient.UpdateWorkItemFieldAsync(
                             agentTask.WorkItemId,
                             CustomFieldNames.Paths.CurrentAIAgent,
-                            string.Empty,
+                            ToCurrentAgentValue(agentTask.AgentType),
                             cancellationToken);
                         await _adoClient.UpdateWorkItemStateAsync(
                             agentTask.WorkItemId, "Agent Failed", cancellationToken);
@@ -361,5 +361,16 @@ public sealed class AgentTaskDispatcher
         AgentType.Documentation => 1,
         AgentType.Deployment => 1,
         _ => -1 // CodebaseDocumentation — no requirement
+    };
+
+    private static string ToCurrentAgentValue(AgentType agentType) => agentType switch
+    {
+        AgentType.Planning => AIPipelineNames.CurrentAgentValues.Planning,
+        AgentType.Coding => AIPipelineNames.CurrentAgentValues.Coding,
+        AgentType.Testing => AIPipelineNames.CurrentAgentValues.Testing,
+        AgentType.Review => AIPipelineNames.CurrentAgentValues.Review,
+        AgentType.Documentation => AIPipelineNames.CurrentAgentValues.Documentation,
+        AgentType.Deployment => AIPipelineNames.CurrentAgentValues.Deployment,
+        _ => string.Empty
     };
 }

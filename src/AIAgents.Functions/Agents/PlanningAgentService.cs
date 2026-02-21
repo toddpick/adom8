@@ -78,7 +78,6 @@ public sealed class PlanningAgentService : IAgentService
         state.Agents["Planning"] = AgentStatus.InProgress();
         await context.SaveStateAsync(state, cancellationToken);
 
-        await _adoClient.UpdateWorkItemStateAsync(workItem.Id, AIPipelineNames.ProcessingState, cancellationToken);
         try { await _adoClient.UpdateWorkItemFieldAsync(workItem.Id, CustomFieldNames.Paths.CurrentAIAgent, AIPipelineNames.CurrentAgentValues.Planning, cancellationToken); }
         catch { /* field may not exist yet */ }
 
@@ -300,7 +299,7 @@ Analyze this story and create a comprehensive implementation plan.";
         try { await _adoClient.UpdateWorkItemFieldAsync(workItem.Id, CustomFieldNames.Paths.LastAgent, "Planning", cancellationToken); }
         catch { /* field may not exist yet */ }
 
-        try { await _adoClient.UpdateWorkItemFieldAsync(workItem.Id, CustomFieldNames.Paths.CurrentAIAgent, string.Empty, cancellationToken); }
+        try { await _adoClient.UpdateWorkItemFieldAsync(workItem.Id, CustomFieldNames.Paths.CurrentAIAgent, AIPipelineNames.CurrentAgentValues.Coding, cancellationToken); }
         catch { /* field may not exist yet */ }
 
         var nextTask = new AgentTask

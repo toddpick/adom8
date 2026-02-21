@@ -11,9 +11,10 @@ using Microsoft.Extensions.Logging;
 namespace AIAgents.Functions.Functions;
 
 /// <summary>
-/// HTTP trigger that resumes the agent pipeline after human coding.
-/// POST /api/resume — accepts { workItemId } and enqueues the Testing agent.
-/// Called after a developer has completed coding on the feature branch.
+/// HTTP trigger that resumes the agent pipeline.
+/// POST /api/resume — accepts { workItemId, stage? }.
+/// - stage omitted/default: resumes at Testing (legacy behavior)
+/// - stage supported values: Testing, Review, Documentation, Deployment
 /// </summary>
 public sealed class ResumePipeline
 {
@@ -65,9 +66,21 @@ public sealed class ResumePipeline
         }
 
         var workItemId = request.WorkItemId;
+        var resumeTarget = ResolveResumeTarget(request.Stage);
+        if (resumeTarget is null)
+        {
+            return new BadRequestObjectResult(new
+            {
+                error = "Invalid stage. Supported values: Testing, Review, Documentation, Deployment."
+            });
+        }
+
         var branchName = $"feature/US-{workItemId}";
 
-        _logger.LogInformation("Resume pipeline requested for WI-{WorkItemId}", workItemId);
+        _logger.LogInformation(
+            "Resume pipeline requested for WI-{WorkItemId} at stage {Stage}",
+            workItemId,
+            resumeTarget.Stage);
 
         // Verify the branch exists by attempting to ensure it
         try
@@ -80,45 +93,65 @@ public sealed class ResumePipeline
             return new NotFoundObjectResult(new { error = $"Branch '{branchName}' not found. Push code before resuming." });
         }
 
-        // Update ADO state + current AI agent
+        // Update current AI agent only (state transitions are user-controlled in ADO)
         try
         {
-            await _adoClient.UpdateWorkItemStateAsync(workItemId, AIPipelineNames.ProcessingState, cancellationToken);
-            await _adoClient.UpdateWorkItemFieldAsync(workItemId, CustomFieldNames.Paths.CurrentAIAgent, AIPipelineNames.CurrentAgentValues.Testing, cancellationToken);
+            await _adoClient.UpdateWorkItemFieldAsync(
+                workItemId,
+                CustomFieldNames.Paths.CurrentAIAgent,
+                resumeTarget.CurrentAgentValue,
+                cancellationToken);
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Could not update ADO state for WI-{WorkItemId}", workItemId);
+            _logger.LogWarning(ex, "Could not update Current AI Agent field for WI-{WorkItemId}", workItemId);
             // Continue anyway — the pipeline will update state
         }
 
         // Log activity
-        await _activityLogger.LogAsync("Coding", workItemId,
-            "Human coding complete — resuming pipeline at Testing agent",
+        await _activityLogger.LogAsync(
+            resumeTarget.ActivityAgent,
+            workItemId,
+            $"Pipeline resumed at {resumeTarget.Stage} agent",
             cancellationToken: cancellationToken);
 
-        // Enqueue Testing agent
+        // Enqueue selected agent stage
         var task = new AgentTask
         {
             WorkItemId = workItemId,
-            AgentType = AgentType.Testing,
+            AgentType = resumeTarget.AgentType,
             CorrelationId = Guid.NewGuid().ToString("N")
         };
         await _taskQueue.EnqueueAsync(task, cancellationToken);
 
-        _logger.LogInformation("Pipeline resumed for WI-{WorkItemId}, enqueued Testing agent", workItemId);
+        _logger.LogInformation(
+            "Pipeline resumed for WI-{WorkItemId}, enqueued {AgentType} agent",
+            workItemId,
+            resumeTarget.AgentType);
 
         return new OkObjectResult(new
         {
             status = "resumed",
             workItemId,
-            nextAgent = "Testing",
-            message = $"Pipeline resumed for US-{workItemId}. Testing agent enqueued."
+            nextAgent = resumeTarget.Stage,
+            message = $"Pipeline resumed for US-{workItemId}. {resumeTarget.Stage} agent enqueued."
         });
     }
+
+    private static ResumeTarget? ResolveResumeTarget(string? stage) => stage?.Trim().ToLowerInvariant() switch
+    {
+        null or "" or "testing" => new ResumeTarget("Testing", AgentType.Testing, AIPipelineNames.CurrentAgentValues.Testing, "Testing"),
+        "review" => new ResumeTarget("Review", AgentType.Review, AIPipelineNames.CurrentAgentValues.Review, "Review"),
+        "documentation" or "docs" => new ResumeTarget("Documentation", AgentType.Documentation, AIPipelineNames.CurrentAgentValues.Documentation, "Documentation"),
+        "deployment" or "deploy" => new ResumeTarget("Deployment", AgentType.Deployment, AIPipelineNames.CurrentAgentValues.Deployment, "Deployment"),
+        _ => null
+    };
 
     private sealed class ResumeRequest
     {
         public int WorkItemId { get; set; }
+        public string? Stage { get; set; }
     }
+
+    private sealed record ResumeTarget(string Stage, AgentType AgentType, string CurrentAgentValue, string ActivityAgent);
 }

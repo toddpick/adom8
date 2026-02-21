@@ -443,7 +443,8 @@
         }
 
         body.dark-mode .status-badge.pending { background: #3a3a50; color: #888; }
-        body.dark-mode .status-badge.active { background: #1e2a4a; }
+        body.dark-mode .status-badge.active,
+        body.dark-mode .status-badge.in_progress { background: #1e2a4a; color: #9ecbff; }
 
         /* Header */
         .header {
@@ -816,6 +817,19 @@
             padding: 0 16px 14px;
         }
 
+        .codebase-actions {
+            margin-top: 10px;
+            display: flex;
+            justify-content: flex-start;
+        }
+
+        .codebase-actions .provision-btn {
+            width: 100%;
+            justify-content: center;
+            padding: 6px 12px;
+            font-size: 0.72rem;
+        }
+
         .codebase-panel .codebase-badge {
             width: 100%;
             justify-content: space-between;
@@ -1123,6 +1137,19 @@
             color: #555;
         }
 
+        .footer-version {
+            margin-top: 8px;
+            font-size: 0.68rem;
+            color: #8b93a6;
+            letter-spacing: 0.15px;
+            font-weight: 600;
+        }
+
+        .footer-version strong {
+            color: #b7c3de;
+            font-weight: 700;
+        }
+
         /* Dark Mode Overrides for new components */
         body.dark-mode .ai-provider-card {
             background: #252540;
@@ -1268,9 +1295,18 @@
             border-left-color: #bbb;
         }
 
-        .agent-card.active {
+        .agent-card.active,
+        .agent-card.in_progress {
             border-left-color: #0078d4;
             animation: agentPulse 2s ease-in-out infinite;
+            transform: translateY(-2px);
+            box-shadow: 0 12px 34px rgba(0, 120, 212, 0.28), 0 4px 12px rgba(0,0,0,0.16);
+        }
+
+        .agent-card.in_progress .agent-name,
+        .agent-card.active .agent-name {
+            font-weight: 800;
+            letter-spacing: 0.2px;
         }
 
         .agent-card.completed {
@@ -1434,10 +1470,13 @@
             color: #999;
         }
 
-        .status-badge.active {
+        .status-badge.active,
+        .status-badge.in_progress {
             background: #deecf9;
             color: #0078d4;
             animation: badgePulse 1.5s ease-in-out infinite;
+            font-weight: 800;
+            box-shadow: inset 0 0 0 1px rgba(0, 120, 212, 0.32), 0 3px 10px rgba(0, 120, 212, 0.24);
         }
 
         .status-badge.completed {
@@ -1664,6 +1703,9 @@
             body.dark-mode::before {
                 background: linear-gradient(135deg, rgba(26,10,46,0.82) 0%, rgba(45,27,62,0.82) 30%, rgba(30,18,40,0.82) 55%, rgba(13,26,46,0.82) 75%, rgba(26,18,6,0.82) 100%);
                 background-size: 100% 100%;
+        @media (max-width: 767px) {
+            .top-nav-stats {
+                display: none;
             }
         }
 
@@ -2816,17 +2858,22 @@
             animation: stepPulse 2s ease-in-out infinite;
         }
 
+        .agent-step.active-now {
+            z-index: 2;
+        }
+
         .agent-step.active-now .agent-step-icon {
-            transform: scale(1.12);
-            box-shadow: 0 0 0 4px rgba(0, 120, 212, 0.2), 0 8px 18px rgba(0, 0, 0, 0.2);
+            transform: translateY(-2px) scale(1.18);
+            border-width: 4px;
+            box-shadow: 0 0 0 5px rgba(0, 120, 212, 0.24), 0 14px 30px rgba(0, 0, 0, 0.28);
         }
 
         .agent-step.copilot_delegated.active-now .agent-step-icon {
-            box-shadow: 0 0 0 4px rgba(156, 39, 176, 0.2), 0 8px 18px rgba(0, 0, 0, 0.2);
+            box-shadow: 0 0 0 5px rgba(156, 39, 176, 0.24), 0 14px 30px rgba(0, 0, 0, 0.28);
         }
 
         .agent-step.awaiting_code.active-now .agent-step-icon {
-            box-shadow: 0 0 0 4px rgba(255, 152, 0, 0.2), 0 8px 18px rgba(0, 0, 0, 0.2);
+            box-shadow: 0 0 0 5px rgba(255, 152, 0, 0.24), 0 14px 30px rgba(0, 0, 0, 0.28);
         }
 
         .agent-step.copilot_delegated .agent-step-icon {
@@ -2893,6 +2940,11 @@
             color: #0078d4;
         }
 
+        .agent-step.active-now .agent-step-label {
+            font-weight: 800;
+            text-shadow: 0 1px 0 rgba(255, 255, 255, 0.6);
+        }
+
         /* Agent Details List */
         .agent-details-list {
             display: flex;
@@ -2906,6 +2958,9 @@
             border-radius: 8px;
             padding: 14px 16px;
             border-left: 4px solid #e0e0e0;
+            border: 1px solid #c9d1dc;
+            position: relative;
+            overflow: hidden;
             transition: all 0.2s ease;
         }
 
@@ -2929,17 +2984,75 @@
         }
 
         .agent-detail-item.active-now {
-            border-left-width: 6px;
-            transform: translateY(-1px);
-            box-shadow: 0 6px 18px rgba(0, 120, 212, 0.18);
+            border-left-width: 8px;
+            transform: translateY(-2px) scale(1.01);
+            border-color: #1f2937;
+            box-shadow: 0 12px 26px rgba(0, 120, 212, 0.24), 0 3px 8px rgba(0, 0, 0, 0.14);
+        }
+
+        .agent-detail-item.active-now::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            border-radius: 8px;
+            padding: 2px;
+            background: repeating-conic-gradient(
+                from 0deg,
+                rgba(17, 24, 39, 0.95) 0deg 14deg,
+                transparent 14deg 36deg,
+                rgba(0, 120, 212, 0.85) 36deg 52deg,
+                transparent 52deg 72deg
+            );
+            -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+            -webkit-mask-composite: xor;
+            mask-composite: exclude;
+            animation: activeBorderSpin 2.6s linear infinite;
+            pointer-events: none;
         }
 
         .agent-detail-item.copilot_delegated.active-now {
-            box-shadow: 0 6px 18px rgba(156, 39, 176, 0.18);
+            box-shadow: 0 12px 26px rgba(156, 39, 176, 0.24), 0 3px 8px rgba(0, 0, 0, 0.14);
         }
 
         .agent-detail-item.awaiting_code.active-now {
-            box-shadow: 0 6px 18px rgba(255, 152, 0, 0.18);
+            box-shadow: 0 12px 26px rgba(255, 152, 0, 0.24), 0 3px 8px rgba(0, 0, 0, 0.14);
+        }
+
+        .agent-detail-item.active-now .agent-detail-name {
+            font-weight: 800;
+            color: #005a9e;
+        }
+
+        @keyframes activeBorderSpin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+
+        .token-summary-card {
+            margin-top: 6px;
+            background: linear-gradient(135deg, #fff8e8 0%, #fff4db 100%);
+            border-radius: 10px;
+            border: 2px dashed #b26a00;
+            border-left: 6px solid #e67e22;
+            padding: 14px 16px;
+            box-shadow: inset 0 0 0 1px rgba(178, 106, 0, 0.15);
+        }
+
+        .token-summary-card .agent-detail-name {
+            color: #8a4d00;
+            font-weight: 800;
+            letter-spacing: 0.2px;
+        }
+
+        .token-summary-card .agent-detail-badge {
+            background: #ffe5bf;
+            color: #8a4d00;
+            border: 1px solid #e0b16a;
+        }
+
+        .token-summary-card .agent-detail-description,
+        .token-summary-card .agent-detail-metrics {
+            color: #7a5a2f;
         }
 
         .agent-detail-item.failed {
@@ -3014,6 +3127,25 @@
             color: #666;
         }
 
+        .agent-detail-content-row {
+            display: grid;
+            grid-template-columns: minmax(240px, 1fr) minmax(360px, 1.6fr);
+            gap: 14px;
+            align-items: stretch;
+            margin-top: 6px;
+        }
+
+        .agent-detail-description-panel {
+            background: linear-gradient(135deg, rgba(0, 120, 212, 0.08) 0%, rgba(0, 120, 212, 0.02) 100%);
+            border: 1px solid rgba(0, 120, 212, 0.22);
+            border-left: 4px solid rgba(0, 120, 212, 0.45);
+            border-radius: 8px;
+            padding: 10px 12px;
+            min-height: 56px;
+            display: flex;
+            align-items: center;
+        }
+
         .agent-detail-metrics span {
             display: flex;
             align-items: center;
@@ -3021,10 +3153,21 @@
         }
 
         .agent-detail-description {
-            margin-top: 8px;
-            font-size: 0.78rem;
-            color: #666;
+            margin-top: 0;
+            font-size: 0.86rem;
+            color: #4a5568;
+            font-weight: 500;
             line-height: 1.35;
+        }
+
+        @media (max-width: 1023px) {
+            .agent-detail-content-row {
+                grid-template-columns: 1fr;
+            }
+
+            .agent-detail-description-panel {
+                min-height: 0;
+            }
         }
 
         /* Dark Mode Overrides */
@@ -3144,15 +3287,15 @@
         }
 
         body.dark-mode .agent-step.active-now .agent-step-icon {
-            box-shadow: 0 0 0 4px rgba(100, 181, 246, 0.24), 0 8px 18px rgba(0, 0, 0, 0.42);
+            box-shadow: 0 0 0 5px rgba(100, 181, 246, 0.28), 0 14px 30px rgba(0, 0, 0, 0.5);
         }
 
         body.dark-mode .agent-step.copilot_delegated.active-now .agent-step-icon {
-            box-shadow: 0 0 0 4px rgba(206, 147, 216, 0.24), 0 8px 18px rgba(0, 0, 0, 0.42);
+            box-shadow: 0 0 0 5px rgba(206, 147, 216, 0.28), 0 14px 30px rgba(0, 0, 0, 0.5);
         }
 
         body.dark-mode .agent-step.awaiting_code.active-now .agent-step-icon {
-            box-shadow: 0 0 0 4px rgba(255, 183, 77, 0.24), 0 8px 18px rgba(0, 0, 0, 0.42);
+            box-shadow: 0 0 0 5px rgba(255, 183, 77, 0.28), 0 14px 30px rgba(0, 0, 0, 0.5);
         }
 
         body.dark-mode .agent-step.needs_revision .agent-step-icon {
@@ -3200,9 +3343,16 @@
             color: #64b5f6;
         }
 
+        body.dark-mode .agent-step.active-now .agent-step-label {
+            color: #9ecbff;
+            font-weight: 800;
+            text-shadow: 0 1px 8px rgba(100, 181, 246, 0.25);
+        }
+
         body.dark-mode .agent-detail-item {
             background: #252525;
             border-left-color: #444;
+            border-color: #5f6b7a;
         }
 
         body.dark-mode .agent-detail-item:hover {
@@ -3222,15 +3372,30 @@
         }
 
         body.dark-mode .agent-detail-item.active-now {
-            box-shadow: 0 6px 18px rgba(100, 181, 246, 0.22);
+            box-shadow: 0 12px 26px rgba(100, 181, 246, 0.28), 0 3px 8px rgba(0, 0, 0, 0.35);
+            border-color: #d8eaff;
+        }
+
+        body.dark-mode .agent-detail-item.active-now::before {
+            background: repeating-conic-gradient(
+                from 0deg,
+                rgba(216, 234, 255, 0.95) 0deg 14deg,
+                transparent 14deg 36deg,
+                rgba(100, 181, 246, 0.9) 36deg 52deg,
+                transparent 52deg 72deg
+            );
         }
 
         body.dark-mode .agent-detail-item.copilot_delegated.active-now {
-            box-shadow: 0 6px 18px rgba(206, 147, 216, 0.22);
+            box-shadow: 0 12px 26px rgba(206, 147, 216, 0.28), 0 3px 8px rgba(0, 0, 0, 0.35);
         }
 
         body.dark-mode .agent-detail-item.awaiting_code.active-now {
-            box-shadow: 0 6px 18px rgba(255, 183, 77, 0.22);
+            box-shadow: 0 12px 26px rgba(255, 183, 77, 0.28), 0 3px 8px rgba(0, 0, 0, 0.35);
+        }
+
+        body.dark-mode .agent-detail-item.active-now .agent-detail-name {
+            color: #9ecbff;
         }
 
         body.dark-mode .agent-detail-item.failed {
@@ -3272,8 +3437,36 @@
             color: #aaa;
         }
 
+        body.dark-mode .agent-detail-description-panel {
+            background: linear-gradient(135deg, rgba(100, 181, 246, 0.12) 0%, rgba(100, 181, 246, 0.04) 100%);
+            border-color: rgba(158, 203, 255, 0.35);
+            border-left-color: rgba(158, 203, 255, 0.65);
+        }
+
         body.dark-mode .agent-detail-description {
-            color: #b0b0b0;
+            color: #d0deee;
+        }
+
+        body.dark-mode .token-summary-card {
+            background: linear-gradient(135deg, rgba(134, 83, 20, 0.22) 0%, rgba(98, 60, 16, 0.22) 100%);
+            border: 2px dashed #d5a253;
+            border-left: 6px solid #f0a94a;
+            box-shadow: inset 0 0 0 1px rgba(240, 169, 74, 0.22);
+        }
+
+        body.dark-mode .token-summary-card .agent-detail-name {
+            color: #ffd79f;
+        }
+
+        body.dark-mode .token-summary-card .agent-detail-badge {
+            background: rgba(240, 169, 74, 0.2);
+            color: #ffd79f;
+            border-color: rgba(255, 215, 159, 0.35);
+        }
+
+        body.dark-mode .token-summary-card .agent-detail-description,
+        body.dark-mode .token-summary-card .agent-detail-metrics {
+            color: #e6c48f;
         }
 
         .function-key-gate {
@@ -3441,6 +3634,7 @@
         <div class="top-nav-stats" id="top-nav-stats">
             <span class="top-stat-pill">Stories <span class="value" id="stat-stories">0</span></span>
             <span class="top-stat-pill">Avg Time <span class="value" id="stat-time">N/A</span></span>
+            <span class="top-stat-pill">Avg Cost/Story <span class="value" id="stat-avg-cost">$0.00</span></span>
             <span class="top-stat-pill">Success <span class="value" id="stat-success">0%</span></span>
             <span class="top-stat-pill">Tokens <span class="value" id="stat-tokens">0</span></span>
             <span class="top-stat-pill">AI Cost <span class="value" id="stat-cost">$0.00</span></span>
@@ -3577,6 +3771,11 @@
                         <button class="codebase-scan-btn" id="btn-scan-codebase" onclick="openScanModal(); event.stopPropagation();" title="Initialize codebase documentation" aria-label="Initialize or re-analyze codebase">🔄</button>
                     </span>
                     <div class="codebase-meta" id="codebase-last-scan">Last Codebase Scan: Never</div>
+                    <div class="codebase-actions">
+                        <button class="provision-btn" id="provision-btn" onclick="handleProvisionAdo()" title="Provision Azure DevOps states, fields, and service hook" aria-label="Provision Azure DevOps">
+                            ⚙️ <span id="provision-btn-text">PROVISION ADO</span>
+                        </button>
+                    </div>
                 </div>
             </div>
 
@@ -3720,6 +3919,34 @@
                     <button class="btn-scan" id="btn-scan-confirm" onclick="confirmCodebaseScan()">
                         Proceed
                     </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Provision ADO Modal -->
+    <div class="modal-overlay" id="provision-modal" onclick="closeProvisionModal(event)">
+        <div class="modal" style="max-width: 560px;" onclick="event.stopPropagation()">
+            <div class="modal-header">
+                <div class="modal-title">⚙️ Provision Azure DevOps</div>
+                <button class="modal-close" onclick="closeProvisionModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="scan-modal-body">
+                    <p>This action runs automated Azure DevOps setup for your configured project.</p>
+                    <h3>What it does</h3>
+                    <ul>
+                        <li>Validates required workflow states and creates missing supported states (including AI Agent)</li>
+                        <li>Creates any missing ADO custom fields used by the pipeline (including Current AI Agent)</li>
+                        <li>Creates or validates the state-change Service Hook to this Function App</li>
+                    </ul>
+                    <p style="font-size: 0.8rem; color: #888; margin-top: 8px;">
+                        Safe to run multiple times. Any remaining manual follow-ups will be shown in the result toast.
+                    </p>
+                </div>
+                <div class="scan-modal-actions">
+                    <button class="btn-modal-cancel" onclick="closeProvisionModal()">Cancel</button>
+                    <button class="btn-scan" id="btn-provision-confirm" onclick="confirmProvisionAdo()">Proceed</button>
                 </div>
             </div>
         </div>
@@ -4535,6 +4762,8 @@
         const INITIALIZE_CODEBASE_URL = API_URL.replace('/status', '/initialize-codebase');
         const CODEBASE_INTEL_URL = API_URL.replace('/status', '/codebase-intelligence');
         const PROVISION_ADO_URL = API_URL.replace('/status', '/provision-ado');
+        const DASHBOARD_UI_VERSION = '2026.02.21.2';
+        const DASHBOARD_DEPLOYED_AT_UTC = '2026-02-21T00:06:00Z';
         const POLL_INTERVAL = 2000;
         const FUNCTION_KEY_STORAGE_KEY = 'adom8-function-key';
 
@@ -4691,6 +4920,12 @@
             btn.setAttribute('aria-label', 'Logout');
         }
 
+        function setFooterVersion() {
+            const el = document.getElementById('footer-version');
+            if (!el) return;
+            el.innerHTML = `UI <strong>${DASHBOARD_UI_VERSION}</strong> · deployed <strong>${DASHBOARD_DEPLOYED_AT_UTC}</strong>`;
+        }
+
         function openFunctionKeyPrompt() {
             const hasKey = !!getFunctionKey();
             if (!hasKey) {
@@ -4766,6 +5001,60 @@
             if (mins < 60) return mins + 'm ' + secs + 's';
             const hrs = Math.floor(mins / 60);
             return hrs + 'h ' + (mins % 60) + 'm';
+        }
+
+        function parseElapsedTimeToSeconds(text) {
+            const raw = safeText(text, '').trim().toLowerCase();
+            if (!raw || raw === 'n/a' || raw === '—') return null;
+
+            const hourMatch = raw.match(/(\d+)\s*h/);
+            const minuteMatch = raw.match(/(\d+)\s*m/);
+            const secondMatch = raw.match(/(\d+)\s*s/);
+
+            const hours = hourMatch ? parseInt(hourMatch[1], 10) : 0;
+            const minutes = minuteMatch ? parseInt(minuteMatch[1], 10) : 0;
+            const seconds = secondMatch ? parseInt(secondMatch[1], 10) : 0;
+
+            const total = (hours * 3600) + (minutes * 60) + seconds;
+            return total > 0 ? total : null;
+        }
+
+        function calculateAvgTimeFallback(data) {
+            const stories = Array.isArray(data?.stories) ? data.stories : [];
+            const storyDurations = [];
+
+            stories.forEach(story => {
+                const timings = story?.agentTimings || {};
+                let totalSeconds = 0;
+
+                Object.entries(timings).forEach(([agentName, timing]) => {
+                    if (timing?.durationSeconds != null && timing.durationSeconds > 0) {
+                        totalSeconds += timing.durationSeconds;
+                        return;
+                    }
+
+                    const status = normalizeAgentStatus(story?.agents?.[agentName]);
+                    if (status === 'in_progress' && timing?.startedAt) {
+                        const startedMs = new Date(timing.startedAt).getTime();
+                        if (!Number.isNaN(startedMs)) {
+                            const elapsed = (Date.now() - startedMs) / 1000;
+                            if (elapsed > 0) totalSeconds += elapsed;
+                        }
+                    }
+                });
+
+                if (totalSeconds > 0) {
+                    storyDurations.push(totalSeconds);
+                }
+            });
+
+            if (storyDurations.length > 0) {
+                const avgSeconds = storyDurations.reduce((sum, value) => sum + value, 0) / storyDurations.length;
+                return formatDuration(avgSeconds);
+            }
+
+            const currentElapsed = parseElapsedTimeToSeconds(data?.currentWorkItem?.elapsedTime);
+            return currentElapsed != null ? formatDuration(currentElapsed) : 'N/A';
         }
 
         async function resumePipeline(workItemId, btnEl) {
@@ -4885,13 +5174,22 @@
 
             // Stats
             if (data.stats) {
-                document.getElementById('stat-stories').textContent = data.stats.storiesProcessed ?? 0;
-                document.getElementById('stat-time').textContent = data.stats.avgProcessingTime ?? '0s';
+                const visibleStoryCount = Array.isArray(data.stories) ? data.stories.length : 0;
+                const avgFromApi = safeText(data.stats.avgProcessingTime, '');
+                const avgDisplay = (!avgFromApi || avgFromApi.toLowerCase() === 'n/a')
+                    ? calculateAvgTimeFallback(data)
+                    : avgFromApi;
+                const totalCost = Number(data.stats.totalCost ?? 0);
+                const avgCostPerStory = visibleStoryCount > 0 ? (totalCost / visibleStoryCount) : 0;
+
+                document.getElementById('stat-stories').textContent = visibleStoryCount;
+                document.getElementById('stat-time').textContent = avgDisplay;
+                document.getElementById('stat-avg-cost').textContent = '$' + avgCostPerStory.toFixed(2);
                 document.getElementById('stat-success').textContent = (data.stats.successRate ?? 0) + '%';
                 document.getElementById('stat-tokens').textContent =
                     (data.stats.totalTokens ?? 0).toLocaleString();
                 document.getElementById('stat-cost').textContent =
-                    '$' + (data.stats.totalCost ?? 0).toFixed(2);
+                    '$' + totalCost.toFixed(2);
             }
 
             // Stories (agent pipeline progress per work item)
@@ -5037,6 +5335,10 @@
                 return 'needs-revision';
             }
 
+            if (workflowState === 'agent failed') {
+                return 'failed';
+            }
+
             if (currentAiAgent) {
                 return 'in-progress';
             }
@@ -5101,7 +5403,11 @@
             const storyHeaderTitle = resolvedTitle
                 ? `US-${safeWorkItemId}: ${safeTitle}`
                 : `US-${safeWorkItemId}`;
-            const safeCurrentAgent = escapeHtml(safeText(story.currentAgent, 'Ready'));
+            const workflowState = safeText(story.state || story.currentState || story.workItemState || '', '').toLowerCase();
+            const displayCurrentAgent = workflowState === 'agent failed'
+                ? 'Agent Failed'
+                : safeText(story.currentAgent, 'Ready');
+            const safeCurrentAgent = escapeHtml(displayCurrentAgent);
             const safeProgress = Math.max(0, Math.min(100, safeInteger(progress, 0)));
             
             // Story header with summary
@@ -5172,6 +5478,13 @@
             const detailsList = document.createElement('div');
             detailsList.className = 'agent-details-list';
             
+            const testingSkipMeta = safeText(
+                story.agentDetails?.Testing?.additionalData?.reason ||
+                story.agentDetails?.Testing?.additionalData?.skipReason,
+                ''
+            ).toLowerCase();
+            const storyUsedCopilot = hasCopilotUsage(story);
+
             agentNames.forEach(name => {
                 const status = normalizeAgentStatus(story.agents[name]);
                 const emoji = getAgentEmoji(name);
@@ -5179,8 +5492,21 @@
                 const timing = story.agentTimings?.[name];
                 const agentData = story.agentDetails?.[name];
                 const effectiveStatus = getEffectiveAgentStatus(name, status, agentData);
-                const isCopilotDelegated = agentData?.additionalData?.mode === 'copilot-delegated';
-                const isCopilotCompleted = agentData?.additionalData?.mode === 'copilot';
+                const mode = safeText(agentData?.additionalData?.mode, '').toLowerCase();
+                const isCopilotDelegated = mode === 'copilot-delegated';
+                const isCopilotCompleted = mode === 'copilot';
+                const hasDelegationMetadata =
+                    !!agentData?.additionalData?.delegatedAt ||
+                    safeInteger(agentData?.additionalData?.issueNumber, 0) > 0;
+                const isCopilotCompletedInferred =
+                    name === 'Coding' &&
+                    effectiveStatus === 'completed' &&
+                    (
+                        isCopilotCompleted ||
+                        hasDelegationMetadata ||
+                        testingSkipMeta.includes('copilot') ||
+                        (storyUsedCopilot && (!tokInfo || tokInfo.estimatedCost === 0))
+                    );
                 const cardStatus = isCopilotDelegated ? 'copilot_delegated' : safeStatus(effectiveStatus);
                 const isActive = cardStatus === 'in_progress' || cardStatus === 'awaiting_code' || cardStatus === 'copilot_delegated';
                 const rawSkipReason = safeText(agentData?.additionalData?.reason, '');
@@ -5205,7 +5531,7 @@
                 
                 // Copilot-specific metrics
                 let metricsHtml = '';
-                if (isCopilotCompleted && agentData?.additionalData) {
+                if (isCopilotCompletedInferred && agentData?.additionalData) {
                     const ad = agentData.additionalData;
                     const safeFilesChanged = escapeHtml(safeText(ad.filesChanged, '—'));
                     const safeLinesAdded = safeInteger(ad.linesAdded, 0);
@@ -5221,13 +5547,19 @@
                 } else {
                     const tokenModel = safeText(tokInfo?.model, '').toLowerCase();
                     const isGitHubCodingAgent = name === 'Coding' && (
-                        isCopilotCompleted ||
+                        isCopilotCompletedInferred ||
                         isCopilotDelegated ||
                         tokenModel.includes('copilot')
                     );
-                    const costDisplay = isGitHubCodingAgent
+                    const showPremiumCredit = name === 'Coding' && isCopilotCompletedInferred;
+                    const isCopilotStillRunning = name === 'Coding' && isCopilotDelegated;
+                    const costDisplay = showPremiumCredit
                         ? '1 Premium Credit'
-                        : (tokInfo ? '$' + tokInfo.estimatedCost.toFixed(2) : '—');
+                        : isCopilotStillRunning
+                            ? '$0.00'
+                            : (isGitHubCodingAgent && !tokInfo)
+                                ? '$0.00'
+                                : (tokInfo ? '$' + tokInfo.estimatedCost.toFixed(2) : '—');
                     metricsHtml = `
                         <span>🎯 Tokens: ${tokInfo ? tokInfo.totalTokens.toLocaleString() : '—'}</span>
                         <span>💰 Cost: ${costDisplay}</span>
@@ -5257,14 +5589,18 @@
                 detailItem.className = `agent-detail-item ${cardStatus} ${isActive ? 'active-now' : ''}`;
                 detailItem.innerHTML = `
                     <div class="agent-detail-header">
-                        <span style="font-size: 1.2rem;">${isCopilotDelegated || isCopilotCompleted ? '🤖' : emoji}</span>
-                        <span class="agent-detail-name">${name} Agent${isCopilotDelegated ? ` (${agentDisplayName})` : isCopilotCompleted ? ` (${agentDisplayName} ✓)` : ''}</span>
+                        <span style="font-size: 1.2rem;">${isCopilotDelegated || isCopilotCompletedInferred ? '🤖' : emoji}</span>
+                        <span class="agent-detail-name">${name} Agent${isCopilotDelegated ? ` (${agentDisplayName})` : isCopilotCompletedInferred ? ` (${agentDisplayName} ✓)` : ''}</span>
                         <span class="agent-detail-badge ${cardStatus}">${badgeText}</span>
                     </div>
-                    <div class="agent-detail-metrics">
-                        ${metricsHtml}
+                    <div class="agent-detail-content-row">
+                        <div class="agent-detail-metrics">
+                            ${metricsHtml}
+                        </div>
+                        <div class="agent-detail-description-panel">
+                            <div class="agent-detail-description">${safeDescriptionText}</div>
+                        </div>
                     </div>
-                    <div class="agent-detail-description">${safeDescriptionText}</div>
                     ${isCopilotDelegated ? `
                         <div class="github-working" style="margin-top: 10px;">
                             <svg class="github-spinner" viewBox="0 0 16 16" fill="currentColor">
@@ -5289,8 +5625,7 @@
             // Token summary
             if (story.tokenUsage && story.tokenUsage.totalTokens > 0) {
                 const summary = document.createElement('div');
-                summary.className = 'agent-detail-item completed';
-                summary.style.borderLeftColor = '#e67e22';
+                summary.className = 'token-summary-card';
                 
                 // Check if Copilot was used for cost display
                 const usedCopilot = hasCopilotUsage(story);
@@ -5303,7 +5638,7 @@
                     <div class="agent-detail-header">
                         <span style="font-size: 1.2rem;">📊</span>
                         <span class="agent-detail-name">Token Summary</span>
-                        <span class="agent-detail-badge completed">${safeComplexity}</span>
+                        <span class="agent-detail-badge">${safeComplexity}</span>
                     </div>
                     <div class="agent-detail-metrics">
                         <span>🎯 Total: ${story.tokenUsage.totalTokens.toLocaleString()} tokens</span>
@@ -5792,30 +6127,36 @@
         }
 
         async function handleProvisionAdo() {
+            if (!ensureFunctionKey('provision Azure DevOps')) return;
+            openProvisionModal();
+        }
+
+        function openProvisionModal() {
+            const modal = document.getElementById('provision-modal');
+            if (modal) {
+                modal.classList.add('show');
+            }
+        }
+
+        function closeProvisionModal(event) {
+            const modal = document.getElementById('provision-modal');
+            if (!modal) return;
+            if (!event || event.target === modal) {
+                modal.classList.remove('show');
+            }
+        }
+
+        async function confirmProvisionAdo() {
             const btn = document.getElementById('provision-btn');
             const btnText = document.getElementById('provision-btn-text');
-            if (!btn || !btnText) return;
-            if (!ensureFunctionKey('provision Azure DevOps')) return;
-
-            if (btn.dataset.confirming !== '1') {
-                btn.dataset.confirming = '1';
-                btnText.textContent = 'CONFIRM?';
-                if (typeof showToast === 'function') {
-                    showToast('Click PROVISION ADO again to confirm.', 'info');
-                }
-                setTimeout(() => {
-                    if (btn.dataset.confirming === '1') {
-                        btn.dataset.confirming = '';
-                        btnText.textContent = 'PROVISION ADO';
-                    }
-                }, 3000);
-                return;
-            }
-
-            btn.dataset.confirming = '';
+            const confirmBtn = document.getElementById('btn-provision-confirm');
+            if (!btn || !btnText || !confirmBtn) return;
 
             const originalLabel = btnText.textContent;
+            const originalConfirmLabel = confirmBtn.textContent;
             btn.disabled = true;
+            confirmBtn.disabled = true;
+            confirmBtn.textContent = 'Provisioning...';
             btnText.textContent = 'PROVISIONING...';
 
             try {
@@ -5839,12 +6180,16 @@
                 } else {
                     showToast(`Provisioned with follow-ups: ${missingStates} missing states, ${warningCount} warnings.`, 'info');
                 }
+
+                closeProvisionModal();
             } catch (err) {
                 console.error('ADO provisioning failed:', err);
                 showToast('ADO provisioning failed: ' + err.message, 'error');
             } finally {
                 btn.disabled = false;
                 btnText.textContent = originalLabel;
+                confirmBtn.disabled = false;
+                confirmBtn.textContent = originalConfirmLabel;
             }
         }
 
@@ -6137,6 +6482,7 @@
         }
 
         async function init() {
+            setFooterVersion();
             updateFunctionKeyButton();
 
             if (!getFunctionKey()) {
@@ -6181,6 +6527,7 @@
             <a href="https://github.com/features/copilot" target="_blank" rel="noopener">GitHub Copilot</a>
         </div>
         <div class="footer-copyright">© 2026 ADOm8</div>
+        <div class="footer-version" id="footer-version">UI version loading...</div>
     </footer>
 </body>
 </html>

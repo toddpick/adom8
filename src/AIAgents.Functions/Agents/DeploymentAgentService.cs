@@ -64,7 +64,6 @@ public sealed class DeploymentAgentService : IAgentService
         state.Agents["Deployment"] = AgentStatus.InProgress();
         await context.SaveStateAsync(state, cancellationToken);
 
-        await _adoClient.UpdateWorkItemStateAsync(workItem.Id, AIPipelineNames.ProcessingState, cancellationToken);
         try { await _adoClient.UpdateWorkItemFieldAsync(workItem.Id, CustomFieldNames.Paths.CurrentAIAgent, AIPipelineNames.CurrentAgentValues.Deployment, cancellationToken); }
         catch { /* field may not exist yet */ }
 

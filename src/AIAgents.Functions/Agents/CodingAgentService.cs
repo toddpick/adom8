@@ -90,7 +90,6 @@ public sealed class CodingAgentService : IAgentService
             state.Agents["Coding"] = AgentStatus.InProgress();
             await context.SaveStateAsync(state, cancellationToken);
 
-            await _adoClient.UpdateWorkItemStateAsync(workItem.Id, AIPipelineNames.ProcessingState, cancellationToken);
             try { await _adoClient.UpdateWorkItemFieldAsync(workItem.Id, CustomFieldNames.Paths.CurrentAIAgent, AIPipelineNames.CurrentAgentValues.Coding, cancellationToken); }
             catch { /* field may not exist yet */ }
 
@@ -225,7 +224,7 @@ public sealed class CodingAgentService : IAgentService
 
             try { await _adoClient.UpdateWorkItemFieldAsync(workItem.Id, CustomFieldNames.Paths.LastAgent, "Coding", cancellationToken); }
             catch { /* field may not exist yet */ }
-            try { await _adoClient.UpdateWorkItemFieldAsync(workItem.Id, CustomFieldNames.Paths.CurrentAIAgent, string.Empty, cancellationToken); }
+            try { await _adoClient.UpdateWorkItemFieldAsync(workItem.Id, CustomFieldNames.Paths.CurrentAIAgent, AIPipelineNames.CurrentAgentValues.Testing, cancellationToken); }
             catch { /* field may not exist yet */ }
 
             var nextTask = new AgentTask

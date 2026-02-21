@@ -2,6 +2,7 @@ using AIAgents.Core.Configuration;
 using AIAgents.Core.Interfaces;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using System.Net;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
@@ -90,7 +91,10 @@ public sealed class GitHubRepositoryProvider : IRepositoryProvider
             _logger.LogError(
                 "GitHub PR creation failed ({StatusCode}): {Body}",
                 response.StatusCode, responseBody);
-            response.EnsureSuccessStatusCode(); // throws
+            throw new HttpRequestException(
+                $"GitHub PR creation failed ({(int)response.StatusCode} {response.StatusCode}): {responseBody}",
+                null,
+                response.StatusCode);
         }
 
         using var doc = JsonDocument.Parse(responseBody);
