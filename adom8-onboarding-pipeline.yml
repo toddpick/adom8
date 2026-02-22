@@ -24,6 +24,7 @@ variables:
   # - LOCATION
   # - GITHUB_TOKEN (secret)
   # - AZURE_SERVICE_CONNECTION
+  # - AdoDashboardKey (secret)
 
   # Resource names are derived at runtime from RESOURCE_GROUP_NAME so they are
   # stable across re-runs — same group name always produces the same suffix.
@@ -77,6 +78,10 @@ stages:
           echo "Creating Static Web App: $SWA_NAME"
           az staticwebapp show --name $SWA_NAME --resource-group $(RESOURCE_GROUP_NAME) 2>/dev/null || \
             az staticwebapp create --name $SWA_NAME --resource-group $(RESOURCE_GROUP_NAME) --location $(LOCATION) --sku Free
+
+          echo "Retrieving Static Web App hostname and adding CORS to Function App"
+          SWA_HOSTNAME=$(az staticwebapp show --name $SWA_NAME --resource-group $(RESOURCE_GROUP_NAME) --query "defaultHostname" -o tsv)
+          az functionapp cors add --name $FUNCTION_APP_NAME --resource-group $(RESOURCE_GROUP_NAME) --allowed-origins "https://$SWA_HOSTNAME"
 
           echo "Retrieving Static Web App deployment token"
           SWA_TOKEN=$(az staticwebapp secrets list --name $SWA_NAME --resource-group $(RESOURCE_GROUP_NAME) --query "properties.apiKey" -o tsv)
@@ -144,6 +149,9 @@ stages:
           FUNCTION_APP_NAME="adom8-func-${SUFFIX}"
           KEY_VAULT_NAME="adom8-kv-${SUFFIX}"
           echo "Using FuncApp=$FUNCTION_APP_NAME | KV=$KEY_VAULT_NAME"
+
+          echo "Creating Function App Key for Dashboard"
+          az functionapp keys set --name $FUNCTION_APP_NAME --resource-group $(RESOURCE_GROUP_NAME) --key-type functionKeys --key-name AdoDashboardKey --key-value "$(AdoDashboardKey)"
 
           # Get Function App Key
           FUNCTION_KEY=$(az rest --method post --uri "https://management.azure.com/subscriptions/$(AZURE_SUBSCRIPTION_ID)/resourceGroups/$(RESOURCE_GROUP_NAME)/providers/Microsoft.Web/sites/${FUNCTION_APP_NAME}/host/default/listKeys?api-version=2022-03-01" --query "functionKeys.default" -o tsv)

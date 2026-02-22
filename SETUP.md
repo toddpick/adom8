@@ -66,6 +66,7 @@ Create a Fine-grained Personal Access Token in GitHub scoped to your target repo
    - `ONBOARDING_PAT`
    - `CLAUDE_API_KEY`
    - `GITHUB_TOKEN`
+   - `AdoDashboardKey`
 
 3. **Run the Pipeline**:
    - Click **Run**.
@@ -85,4 +86,5 @@ Once the pipeline completes successfully:
 1. **Review the Summary**: Check the pipeline logs for the final summary, which includes the names of the created resources and the Key Vault URL.
 2. **Revoke Onboarding PAT**: You can now safely revoke the `ONBOARDING_PAT` you created in the prerequisites. The pipeline has automatically generated and securely stored a dedicated runtime PAT for the agent.
 3. **Configure GitHub Copilot Permissions**: If you are using GitHub Copilot, ensure the agent has the necessary permissions on the repository (this cannot be automated via API).
-4. **Start Using ADOm8**: Visit [adom8.dev/get-started](https://adom8.dev/get-started) for instructions on creating your first story and triggering the AI agent.
+4. **Access the Dashboard**: Your dashboard is available at the Static Web App URL (found in the pipeline summary). Use the `AdoDashboardKey` you provided to log in. You can configure a custom domain for this URL in the Azure Portal under the Static Web App settings.
+5. **Start Using ADOm8**: Visit [adom8.dev/get-started](https://adom8.dev/get-started) for instructions on creating your first story and triggering the AI agent.
