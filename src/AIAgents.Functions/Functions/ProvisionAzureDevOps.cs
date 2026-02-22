@@ -51,13 +51,13 @@ public sealed class ProvisionAzureDevOps
     private static readonly Dictionary<string, (string Category, string Color)> RequiredStateMetadata =
         new(StringComparer.OrdinalIgnoreCase)
         {
-            [AIPipelineNames.ProcessingState] = ("InProgress", "0078D4"),
-            ["Code Review"] = ("InProgress", "107C10"),
-            ["Needs Revision"] = ("InProgress", "D13438"),
-            ["Agent Failed"] = ("InProgress", "A80000"),
-            ["Ready for QA"] = ("Resolved", "107C10"),
-            ["Ready for Deployment"] = ("Resolved", "0B6A0B"),
-            ["Deployed"] = ("Completed", "0B6A0B")
+            [AIPipelineNames.ProcessingState] = ("InProgress", "FF0078D4"),
+            ["Code Review"] = ("InProgress", "FF107C10"),
+            ["Needs Revision"] = ("InProgress", "FFD13438"),
+            ["Agent Failed"] = ("InProgress", "FFA80000"),
+            ["Ready for QA"] = ("Resolved", "FF107C10"),
+            ["Ready for Deployment"] = ("Resolved", "FF0B6A0B"),
+            ["Deployed"] = ("Completed", "FF0B6A0B")
         };
 
     private static readonly FieldDefinition[] RequiredFields =
