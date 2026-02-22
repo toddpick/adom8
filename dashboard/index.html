@@ -187,35 +187,6 @@
             cursor: default;
         }
 
-        .provision-btn {
-            background: #2e7d32;
-            color: #fff;
-            border: 1px solid #1b5e20;
-            border-radius: 6px;
-            padding: 4px 12px;
-            font-size: 0.78rem;
-            font-weight: 700;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            gap: 6px;
-            transition: all 0.2s ease;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            line-height: 1;
-        }
-
-        .provision-btn:hover {
-            background: #1b5e20;
-            box-shadow: 0 2px 12px rgba(46, 125, 50, 0.5);
-        }
-
-        .provision-btn:disabled {
-            opacity: 0.7;
-            cursor: not-allowed;
-            box-shadow: none;
-        }
-
         /* Top Nav Bar (ADO-style) */
         .top-nav {
             background: #fff;
@@ -782,19 +753,6 @@
 
         .codebase-panel-body {
             padding: 0 16px 14px;
-        }
-
-        .codebase-actions {
-            margin-top: 10px;
-            display: flex;
-            justify-content: flex-start;
-        }
-
-        .codebase-actions .provision-btn {
-            width: 100%;
-            justify-content: center;
-            padding: 6px 12px;
-            font-size: 0.72rem;
         }
 
         .codebase-panel .codebase-badge {
@@ -3727,11 +3685,6 @@
                         <button class="codebase-scan-btn" id="btn-scan-codebase" onclick="openScanModal(); event.stopPropagation();" title="Initialize codebase documentation" aria-label="Initialize or re-analyze codebase">🔄</button>
                     </span>
                     <div class="codebase-meta" id="codebase-last-scan">Last Codebase Scan: Never</div>
-                    <div class="codebase-actions">
-                        <button class="provision-btn" id="provision-btn" onclick="handleProvisionAdo()" title="Provision Azure DevOps states, fields, and service hook" aria-label="Provision Azure DevOps">
-                            ⚙️ <span id="provision-btn-text">PROVISION ADO</span>
-                        </button>
-                    </div>
                 </div>
             </div>
 
@@ -3886,34 +3839,6 @@
                     <button class="btn-scan" id="btn-scan-confirm" onclick="confirmCodebaseScan()">
                         Proceed
                     </button>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Provision ADO Modal -->
-    <div class="modal-overlay" id="provision-modal" onclick="closeProvisionModal(event)">
-        <div class="modal" style="max-width: 560px;" onclick="event.stopPropagation()">
-            <div class="modal-header">
-                <div class="modal-title">⚙️ Provision Azure DevOps</div>
-                <button class="modal-close" onclick="closeProvisionModal()">&times;</button>
-            </div>
-            <div class="modal-body">
-                <div class="scan-modal-body">
-                    <p>This action runs automated Azure DevOps setup for your configured project.</p>
-                    <h3>What it does</h3>
-                    <ul>
-                        <li>Validates required workflow states and creates missing supported states (including AI Agent)</li>
-                        <li>Creates any missing ADO custom fields used by the pipeline (including Current AI Agent)</li>
-                        <li>Creates or validates the state-change Service Hook to this Function App</li>
-                    </ul>
-                    <p style="font-size: 0.8rem; color: #888; margin-top: 8px;">
-                        Safe to run multiple times. Any remaining manual follow-ups will be shown in the result toast.
-                    </p>
-                </div>
-                <div class="scan-modal-actions">
-                    <button class="btn-modal-cancel" onclick="closeProvisionModal()">Cancel</button>
-                    <button class="btn-scan" id="btn-provision-confirm" onclick="confirmProvisionAdo()">Proceed</button>
                 </div>
             </div>
         </div>
@@ -4728,7 +4653,6 @@
         const CLEAR_STORIES_URL = API_URL.replace('/status', '/clear-stories');
         const INITIALIZE_CODEBASE_URL = API_URL.replace('/status', '/initialize-codebase');
         const CODEBASE_INTEL_URL = API_URL.replace('/status', '/codebase-intelligence');
-        const PROVISION_ADO_URL = API_URL.replace('/status', '/provision-ado');
         const DASHBOARD_UI_VERSION = '2026.02.21.2';
         const DASHBOARD_DEPLOYED_AT_UTC = '2026-02-21T00:06:00Z';
         const POLL_INTERVAL = 2000;
@@ -6098,73 +6022,6 @@
             } finally {
                 confirmBtn.disabled = false;
                 confirmBtn.textContent = 'Proceed';
-            }
-        }
-
-        async function handleProvisionAdo() {
-            if (!ensureFunctionKey('provision Azure DevOps')) return;
-            openProvisionModal();
-        }
-
-        function openProvisionModal() {
-            const modal = document.getElementById('provision-modal');
-            if (modal) {
-                modal.classList.add('show');
-            }
-        }
-
-        function closeProvisionModal(event) {
-            const modal = document.getElementById('provision-modal');
-            if (!modal) return;
-            if (!event || event.target === modal) {
-                modal.classList.remove('show');
-            }
-        }
-
-        async function confirmProvisionAdo() {
-            const btn = document.getElementById('provision-btn');
-            const btnText = document.getElementById('provision-btn-text');
-            const confirmBtn = document.getElementById('btn-provision-confirm');
-            if (!btn || !btnText || !confirmBtn) return;
-
-            const originalLabel = btnText.textContent;
-            const originalConfirmLabel = confirmBtn.textContent;
-            btn.disabled = true;
-            confirmBtn.disabled = true;
-            confirmBtn.textContent = 'Provisioning...';
-            btnText.textContent = 'PROVISIONING...';
-
-            try {
-                const response = await fetch(withFunctionKey(PROVISION_ADO_URL), {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' }
-                });
-
-                const data = await response.json();
-
-                if (!response.ok) {
-                    throw new Error(data?.summary || `HTTP ${response.status}`);
-                }
-
-                const createdFields = data?.fields?.created?.length || 0;
-                const missingStates = data?.states?.missing?.length || 0;
-                const warningCount = data?.warnings?.length || 0;
-
-                if (data?.ready) {
-                    showToast(`ADO provisioning complete. Created ${createdFields} custom fields.`, 'success');
-                } else {
-                    showToast(`Provisioned with follow-ups: ${missingStates} missing states, ${warningCount} warnings.`, 'info');
-                }
-
-                closeProvisionModal();
-            } catch (err) {
-                console.error('ADO provisioning failed:', err);
-                showToast('ADO provisioning failed: ' + err.message, 'error');
-            } finally {
-                btn.disabled = false;
-                btnText.textContent = originalLabel;
-                confirmBtn.disabled = false;
-                confirmBtn.textContent = originalConfirmLabel;
             }
         }
 

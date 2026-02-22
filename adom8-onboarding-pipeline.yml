@@ -52,10 +52,12 @@ stages:
           FUNCTION_APP_NAME="adom8-func-${SUFFIX}"
           STORAGE_ACCOUNT_NAME="adom8st${SUFFIX}"
           KEY_VAULT_NAME="adom8-kv-${SUFFIX}"
+          SWA_NAME="adom8-swa-${SUFFIX}"
           echo "##vso[task.setvariable variable=FUNCTION_APP_NAME]$FUNCTION_APP_NAME"
           echo "##vso[task.setvariable variable=STORAGE_ACCOUNT_NAME]$STORAGE_ACCOUNT_NAME"
           echo "##vso[task.setvariable variable=KEY_VAULT_NAME]$KEY_VAULT_NAME"
-          echo "Resource names: FuncApp=$FUNCTION_APP_NAME | Storage=$STORAGE_ACCOUNT_NAME | KV=$KEY_VAULT_NAME"
+          echo "##vso[task.setvariable variable=SWA_NAME]$SWA_NAME"
+          echo "Resource names: FuncApp=$FUNCTION_APP_NAME | Storage=$STORAGE_ACCOUNT_NAME | KV=$KEY_VAULT_NAME | SWA=$SWA_NAME"
 
           echo "Creating Resource Group: $(RESOURCE_GROUP_NAME) in $(LOCATION)"
           az group create --name $(RESOURCE_GROUP_NAME) --location $(LOCATION)
@@ -71,6 +73,14 @@ stages:
           echo "Creating Function App: $FUNCTION_APP_NAME"
           az functionapp show --name $FUNCTION_APP_NAME --resource-group $(RESOURCE_GROUP_NAME) 2>/dev/null || \
             az functionapp create --name $FUNCTION_APP_NAME --resource-group $(RESOURCE_GROUP_NAME) --storage-account $STORAGE_ACCOUNT_NAME --consumption-plan-location $(LOCATION) --functions-version 4 --os-type Linux --runtime dotnet-isolated --runtime-version 8.0
+
+          echo "Creating Static Web App: $SWA_NAME"
+          az staticwebapp show --name $SWA_NAME --resource-group $(RESOURCE_GROUP_NAME) 2>/dev/null || \
+            az staticwebapp create --name $SWA_NAME --resource-group $(RESOURCE_GROUP_NAME) --location $(LOCATION) --sku Free
+
+          echo "Retrieving Static Web App deployment token"
+          SWA_TOKEN=$(az staticwebapp secrets list --name $SWA_NAME --resource-group $(RESOURCE_GROUP_NAME) --query "properties.apiKey" -o tsv)
+          echo "##vso[task.setvariable variable=SWA_TOKEN;issecret=true]$SWA_TOKEN"
 
           echo "Enabling Managed Identity for Function App"
           PRINCIPAL_ID=$(az functionapp identity assign --name $FUNCTION_APP_NAME --resource-group $(RESOURCE_GROUP_NAME) --query principalId -o tsv)
@@ -96,6 +106,14 @@ stages:
         appType: 'functionAppLinux'
         appName: '$(FUNCTION_APP_NAME)'
         package: '$(System.DefaultWorkingDirectory)/publish_output/**/*.zip'
+
+    - task: AzureStaticWebApp@0
+      displayName: 'Deploy Dashboard to Static Web App'
+      inputs:
+        app_location: 'dashboard'
+        skip_app_build: true
+        skip_api_build: true
+        azure_static_web_apps_api_token: '$(SWA_TOKEN)'
 
 - stage: Configuration
   displayName: 'Stages 2-7: Configuration and Validation'
