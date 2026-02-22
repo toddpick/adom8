@@ -165,13 +165,58 @@ def main():
     print(f"Calling ADO Provisioning endpoint: {function_url}")
     
     try:
-        # Wait a moment for the function app to restart after settings change
-        time.sleep(30)
-        prov_response = requests.post(function_url)
-        if prov_response.status_code == 200:
-            print("ADO Process Customization completed successfully via Function App.")
+        # Poll until the function app is warm and responsive (cold-start on consumption plan
+        # can take 2-3 minutes after a fresh deploy + settings change).
+        health_url = f"https://{args.function_app}.azurewebsites.net/api/health"
+        max_wait_seconds = 180
+        poll_interval = 15
+        elapsed = 0
+        print(f"Waiting for Function App to be ready (up to {max_wait_seconds}s)...")
+        while elapsed < max_wait_seconds:
+            try:
+                ping = requests.get(health_url, timeout=10)
+                if ping.status_code < 500:
+                    print(f"Function App is responding (status {ping.status_code}) after {elapsed}s.")
+                    break
+            except Exception:
+                pass
+            print(f"  Not ready yet, retrying in {poll_interval}s... ({elapsed}s elapsed)")
+            time.sleep(poll_interval)
+            elapsed += poll_interval
         else:
-            print(f"Warning: ADO Provisioning returned {prov_response.status_code}: {prov_response.text}")
+            print(f"Warning: Function App did not respond within {max_wait_seconds}s — attempting provision anyway.")
+
+        # Retry provision-ado up to 3 times in case of transient cold-start errors
+        max_retries = 3
+        for attempt in range(1, max_retries + 1):
+            try:
+                prov_response = requests.post(function_url, timeout=120)
+                if prov_response.status_code == 200:
+                    print("ADO Process Customization completed successfully via Function App.")
+                    try:
+                        result = prov_response.json()
+                        if result.get("warnings"):
+                            for w in result["warnings"]:
+                                print(f"  Warning: {w}")
+                        if result.get("manualSteps"):
+                            print("  Manual follow-up steps returned:")
+                            for s in result["manualSteps"]:
+                                print(f"    - {s}")
+                    except Exception:
+                        pass
+                    break
+                elif prov_response.status_code in (502, 503, 504) and attempt < max_retries:
+                    print(f"  Attempt {attempt} got {prov_response.status_code}, retrying in 20s...")
+                    time.sleep(20)
+                else:
+                    print(f"Warning: ADO Provisioning returned {prov_response.status_code}: {prov_response.text}")
+                    break
+            except Exception as e:
+                if attempt < max_retries:
+                    print(f"  Attempt {attempt} failed ({e}), retrying in 20s...")
+                    time.sleep(20)
+                else:
+                    print(f"Warning: Exception calling ADO Provisioning after {max_retries} attempts: {e}")
     except Exception as e:
         print(f"Warning: Exception calling ADO Provisioning: {e}")
 
