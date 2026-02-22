@@ -1,3 +1,10 @@
+# ----------------------------------------------------------------------------
+# ADO-M8 Pipeline Setup Script
+# Copyright 2026 ADO-M8 Contributors — https://adom8.dev
+# Licensed under the Apache License, Version 2.0
+# https://www.apache.org/licenses/LICENSE-2.0
+# ----------------------------------------------------------------------------
+
 import argparse
 import os
 import sys

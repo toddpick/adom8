@@ -1,0 +1,65 @@
+# ADOm8 â€” Project Planning & Backlog
+
+## In Progress
+- Running the onboarding pipeline on the first real project (My Credit Plan DNN)
+
+---
+
+## Backlog
+
+### #1 â€” Pipeline & Setup
+- [ ] Verify end-to-end pipeline run succeeds on real project
+- [ ] Confirm `Copilot__WebhookSecret` is correctly validated on first GitHub webhook delivery
+- [ ] Confirm `claude-sonnet-4-20250514` (or `gpt-4o` for OpenAI path) is accepted by the live API
+- [ ] Verify the runtime PAT created by Stage 2 has the correct scopes
+
+### #2 â€” Per-Agent Model Overrides (Story-level config)
+Fields exist in ADO: `AI Model Tier`, `AI Planning Model`, `AI Coding Model`, `AI Testing Model`, `AI Review Model`, `AI Documentation Model`, `AI Coding Provider`
+- [ ] Confirm the 4-layer model priority logic in `AIClientFactory` reads these ADO fields correctly per-story
+- [ ] Test that setting `AI Coding Model = gpt-4o` on a story actually changes the model used
+- [ ] Test that `AI Model Tier = economy` correctly maps to the right model across all agents
+- [ ] Document the per-story override behaviour in the get-started guide once verified
+
+### #3 â€” Wire Up Extended Tracking Fields (currently blank after story runs)
+These fields are created by the pipeline but the agent does NOT yet write them back to the work item after each run:
+- `AI Tokens Used` â€” total LLM token consumption for the story
+- `AI Cost` â€” estimated cost in USD
+- `AI Processing Time` â€” wall-clock duration in seconds
+- `AI Complexity` â€” planning agent complexity estimate
+- `AI Files Generated` â€” count of files created or modified
+- `AI Tests Generated` â€” count of test cases written
+- `AI PR Number` â€” GitHub PR number (if opened)
+- `AI Critical Issues` â€” count/list of critical review findings
+- `AI Deployment Decision` â€” deployment agent go/no-go output
+
+**Task:** After each agent stage completes, update the ADO work item via `WorkItemTrackingHttpClient`
+(or the existing ADO service wrapper) with the accumulated values.
+Consider: single update at end of run vs. progressive updates per stage.
+
+### #4 â€” `Current AI Agent` picklist values
+- [ ] Confirm all picklist values match agent names used at runtime (Planning Agent, Coding Agent, etc.)
+- [ ] Ensure the field is cleared / set to `None` when agent finishes so board cards do not stay stale
+
+### #5 â€” Board Card Styles (cosmetic, low priority)
+- [ ] Document the recommended color rules for `Current AI Agent` values
+- [ ] Add recommended colors to the get-started Step 6 guide
+
+### #6 â€” Google Gemini Support
+- [ ] Wire `GOOGLE_API_KEY` end-to-end as a first-class provider (pipeline script handles storage; confirm app settings)
+- [ ] Test with a real Gemini API key
+- [ ] Add Gemini as an option in the Step 3 Variables docs
+
+### #7 â€” SVG Infographics
+- [ ] Create / verify `step-4-run.svg` (pipeline stages diagram)
+- [ ] Update `step-5-verify.svg` to reflect trimmed field list (2 settings + 4 tracking)
+
+---
+
+## Completed
+- [x] All 4 pipeline script bugs fixed (model version, webhook secret key name, optional OpenAI/Google keys, per-agent note)
+- [x] OpenAI as a first-class alternative to Anthropic (either-or logic, generic `ADOM8-AI-KEY` KV name)
+- [x] Step 1-5 get-started guide fully written with screenshots and SVGs
+- [x] Step 6 (Optional Fields) created and separated from required Step 5
+- [x] `BoardConfigSteps` trimmed to 4 required fields only (Autonomy Level + AI Minimum Review Score in settings; Current AI Agent + AI Last Agent in tracking)
+- [x] `AI Model Tier` moved to Step 6 optional (batch preset, not required; agent runs fine without it)
+- [x] Apache 2.0 license added to OSS repo

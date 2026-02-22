@@ -23,6 +23,7 @@ var host = new HostBuilder()
         services.Configure<CodebaseDocumentationOptions>(configuration.GetSection(CodebaseDocumentationOptions.SectionName));
         services.Configure<InputValidationOptions>(configuration.GetSection(InputValidationOptions.SectionName));
         services.Configure<CopilotOptions>(configuration.GetSection(CopilotOptions.SectionName));
+        services.Configure<SaasOptions>(configuration.GetSection(SaasOptions.SectionName));
 
         // Application Insights — register BEFORE HTTP resilience handlers
         services.AddApplicationInsightsTelemetryWorkerService();
@@ -78,6 +79,14 @@ var host = new HostBuilder()
 
         // Copilot delegation tracking (Azure Table Storage)
         services.AddSingleton<ICopilotDelegationService, TableStorageCopilotDelegationService>();
+
+        // SaaS Mode — optional real-time callback reporting to adom8.dev dashboard
+        // No-op when SaaS:Enabled is false (default for fully standalone deployments)
+        services.AddSingleton<ISaasCallbackService, SaasCallbackService>();
+        services.AddHttpClient("SaasCallback", client =>
+        {
+            client.Timeout = TimeSpan.FromSeconds(10);
+        });
 
         // Agent services — keyed DI for dispatcher routing
         services.AddKeyedScoped<IAgentService, PlanningAgentService>("Planning");

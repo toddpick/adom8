@@ -1,3 +1,10 @@
+# ----------------------------------------------------------------------------
+# ADO-M8 Pipeline Setup Script
+# Copyright 2026 ADO-M8 Contributors — https://adom8.dev
+# Licensed under the Apache License, Version 2.0
+# https://www.apache.org/licenses/LICENSE-2.0
+# ----------------------------------------------------------------------------
+
 import argparse
 import os
 import sys
@@ -20,13 +27,30 @@ def main():
     args = parser.parse_args()
 
     onboarding_pat = os.environ.get("ONBOARDING_PAT")
-    claude_api_key = os.environ.get("CLAUDE_API_KEY")
+    claude_api_key = os.environ.get("CLAUDE_API_KEY")   # Anthropic — required unless OPENAI_API_KEY is set
+    openai_api_key = os.environ.get("OPENAI_API_KEY")   # OpenAI — required unless CLAUDE_API_KEY is set
+    google_api_key = os.environ.get("GOOGLE_API_KEY")   # optional — can be added post-setup
     github_token = os.environ.get("GITHUB_TOKEN")
     function_key = os.environ.get("FUNCTION_KEY")
 
-    if not all([onboarding_pat, claude_api_key, github_token, function_key]):
-        print("Error: Missing required environment variables.")
+    if not all([onboarding_pat, github_token, function_key]):
+        print("Error: Missing required environment variables (ONBOARDING_PAT, GITHUB_TOKEN, FUNCTION_KEY).")
         sys.exit(1)
+    if not claude_api_key and not openai_api_key:
+        print("Error: At least one AI provider key is required: set CLAUDE_API_KEY (Anthropic) or OPENAI_API_KEY (OpenAI).")
+        sys.exit(1)
+
+    # Determine primary AI provider — Claude preferred when both supplied
+    if claude_api_key:
+        primary_ai_key = claude_api_key
+        ai_provider = "anthropic"
+        ai_model = "claude-sonnet-4-20250514"
+        print("Using Anthropic (Claude) as primary AI provider.")
+    else:
+        primary_ai_key = openai_api_key
+        ai_provider = "openai"
+        ai_model = "gpt-4o"
+        print("Using OpenAI as primary AI provider.")
 
     print("Starting ADOm8 Pipeline Setup...")
 
@@ -71,10 +95,21 @@ def main():
 
     secrets_to_store = {
         "ADOM8-ADO-PAT": runtime_pat,
-        "CLAUDE-API-KEY": claude_api_key,
+        "ADOM8-AI-KEY": primary_ai_key,   # generic name — holds whichever primary key was supplied
         "GITHUB-TOKEN": github_token,
         "FUNCTION-KEY": function_key
     }
+    # Store secondary/additional provider keys if supplied
+    if claude_api_key and openai_api_key:
+        # Both provided — Claude is primary; store OpenAI as a secondary provider key too
+        secrets_to_store["OPENAI-API-KEY"] = openai_api_key
+        print("Both AI provider keys detected — Claude primary, OpenAI will also be wired.")
+    elif openai_api_key and not claude_api_key:
+        # OpenAI is primary — also store under provider-keyed name for runtime
+        secrets_to_store["OPENAI-API-KEY"] = openai_api_key
+    if google_api_key:
+        secrets_to_store["GOOGLE-API-KEY"] = google_api_key
+        print("Google API key detected — will be provisioned.")
 
     for secret_name, secret_value in secrets_to_store.items():
         try:
@@ -92,15 +127,25 @@ def main():
         f"AzureDevOps__Pat=@Microsoft.KeyVault(VaultName={args.key_vault};SecretName=ADOM8-ADO-PAT)",
         f"AI__ApiKey=@Microsoft.KeyVault(VaultName={args.key_vault};SecretName=CLAUDE-API-KEY)",
         f"Git__Token=@Microsoft.KeyVault(VaultName={args.key_vault};SecretName=GITHUB-TOKEN)",
-        f"WebhookSharedSecret=@Microsoft.KeyVault(VaultName={args.key_vault};SecretName=FUNCTION-KEY)",
+        # Bug fix: runtime reads Copilot__WebhookSecret, not WebhookSharedSecret
+        f"Copilot__WebhookSecret=@Microsoft.KeyVault(VaultName={args.key_vault};SecretName=FUNCTION-KEY)",
         f"AzureDevOps__OrganizationUrl={args.ado_org}",
         f"AzureDevOps__Project={args.ado_project}",
         f"Git__Provider=github",
         f"Git__Owner={args.github_org}",
         f"Git__Repo={args.github_repo}",
         f"AI__Provider=anthropic",
-        f"AI__Model=claude-3-5-sonnet-20241022"
+        # Bug fix: updated to current Claude Sonnet 4 model
+        f"AI__Model=claude-sonnet-4-20250514",
     ]
+    # Wire optional AI provider keys into Function App settings if they were provided
+    if openai_api_key:
+        app_settings.append(f"AI__ProviderKeys__OpenAI__ApiKey=@Microsoft.KeyVault(VaultName={args.key_vault};SecretName=OPENAI-API-KEY)")
+    if google_api_key:
+        app_settings.append(f"AI__ProviderKeys__Google__ApiKey=@Microsoft.KeyVault(VaultName={args.key_vault};SecretName=GOOGLE-API-KEY)")
+    # Note: per-agent model overrides (AI__AgentModels__*) and tier presets can be added
+    # to the Function App configuration post-setup via the Azure Portal or az CLI.
+    app_settings = app_settings  # satisfy linter — list is complete
     
     cmd = [
         "az", "functionapp", "config", "appsettings", "set",

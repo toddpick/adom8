@@ -62,7 +62,8 @@ public sealed class AgentTaskDispatcherTests
             NullLogger<AgentTaskDispatcher>.Instance,
             _activityMock.Object,
             _adoMock.Object,
-            _telemetry);
+            _telemetry,
+            new Mock<ISaasCallbackService>().Object);
     }
 
     private static string Serialize(AgentTask task) => JsonSerializer.Serialize(task);

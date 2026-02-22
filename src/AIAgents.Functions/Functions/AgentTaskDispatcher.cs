@@ -24,19 +24,22 @@ public sealed class AgentTaskDispatcher
     private readonly IActivityLogger _activityLogger;
     private readonly IAzureDevOpsClient _adoClient;
     private readonly TelemetryClient _telemetry;
+    private readonly ISaasCallbackService _saasCallback;
 
     public AgentTaskDispatcher(
         IServiceProvider serviceProvider,
         ILogger<AgentTaskDispatcher> logger,
         IActivityLogger activityLogger,
         IAzureDevOpsClient adoClient,
-        TelemetryClient telemetry)
+        TelemetryClient telemetry,
+        ISaasCallbackService saasCallback)
     {
         _serviceProvider = serviceProvider;
         _logger = logger;
         _activityLogger = activityLogger;
         _adoClient = adoClient;
         _telemetry = telemetry;
+        _saasCallback = saasCallback;
     }
 
     [Function("AgentTaskDispatcher")]
@@ -137,6 +140,9 @@ public sealed class AgentTaskDispatcher
             [TelemetryProperties.CorrelationId] = agentTask.CorrelationId
         });
 
+        // Fire-and-forget SaaS status update (no-op when SaaS mode is disabled)
+        await _saasCallback.ReportAgentStartedAsync(agentTask.CorrelationId, agentKey, cancellationToken);
+
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
         AgentResult result;
 
@@ -208,6 +214,15 @@ public sealed class AgentTaskDispatcher
             _logger.LogInformation(
                 "{AgentType} agent completed for WI-{WorkItemId} in {Duration}ms",
                 agentTask.AgentType, agentTask.WorkItemId, stopwatch.ElapsedMilliseconds);
+
+            // SaaS callback — report success (no-op when SaaS mode is disabled)
+            await _saasCallback.ReportAgentCompletedAsync(
+                agentTask.CorrelationId,
+                agentKey,
+                inputTokens: 0,
+                outputTokens: result.TokensUsed,
+                durationMs: (int)stopwatch.ElapsedMilliseconds,
+                cancellationToken: cancellationToken);
         }
         else
         {
@@ -230,6 +245,13 @@ public sealed class AgentTaskDispatcher
                 agentTask.WorkItemId,
                 $"{agentKey} agent failed ({result.Category}): {result.ErrorMessage}",
                 "error",
+                cancellationToken);
+
+            // SaaS callback — report failure (no-op when SaaS mode is disabled)
+            await _saasCallback.ReportAgentFailedAsync(
+                agentTask.CorrelationId,
+                agentKey,
+                result.ErrorMessage ?? "Unknown error",
                 cancellationToken);
 
             // Decide retry vs. permanent failure based on error category
