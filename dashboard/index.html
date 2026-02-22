@@ -3737,11 +3737,6 @@
                 <div class="agents-list" id="agents-container">
                     <!-- Agent cards rendered by JS -->
                 </div>
-
-                <!-- Dashboard Customization Note -->
-                <div class="dashboard-customization-note" style="margin-top: 2rem; padding: 1rem; border-radius: 8px; background: rgba(59, 130, 246, 0.1); border: 1px solid rgba(59, 130, 246, 0.3); color: #93c5fd; font-size: 0.85rem; text-align: center; line-height: 1.5;">
-                    <strong>💡 Make it yours!</strong> This dashboard is yours to modify however you like. However, if you make modifications directly to your forked repository, you may lose the ability to easily sync your fork and republish the static web app to get all the latest updates and bug fixes.
-                </div>
             </div>
         </main>
 
@@ -6364,7 +6359,40 @@
             <a href="https://github.com/features/copilot" target="_blank" rel="noopener">GitHub Copilot</a>
         </div>
         <div class="footer-copyright">© 2026 ADOm8</div>
-        <div class="footer-version" id="footer-version">UI version loading...</div>
+        <div class="footer-version">
+            <span id="footer-version">UI version loading...</span>
+            <span class="footer-separator">·</span>
+            <a href="#" onclick="openCustomizationModal(event)" class="footer-cta-link" style="color: #93c5fd;">💡 Make it yours</a>
+        </div>
     </footer>
+
+    <!-- Customization Modal -->
+    <div class="modal-overlay" id="customization-modal">
+        <div class="modal-content" style="max-width: 500px;">
+            <div class="modal-header">
+                <h2>💡 Make it yours!</h2>
+                <button class="modal-close" onclick="closeCustomizationModal()">×</button>
+            </div>
+            <div class="modal-body" style="line-height: 1.6; color: var(--text-secondary);">
+                <p>This dashboard is yours to modify however you like! The UI version relates to your forked <strong>adom8</strong> repository.</p>
+                <p style="margin-top: 1rem; padding: 1rem; border-radius: 8px; background: rgba(59, 130, 246, 0.1); border: 1px solid rgba(59, 130, 246, 0.3); color: #93c5fd; font-size: 0.9rem;">
+                    <strong>⚠️ Note on Updates:</strong> If you make modifications directly to your forked repository, you may experience merge conflicts and lose the ability to easily sync your fork to get the latest upstream updates and bug fixes.
+                </p>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-primary" onclick="closeCustomizationModal()">Got it</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function openCustomizationModal(e) {
+            if (e) e.preventDefault();
+            document.getElementById('customization-modal').classList.add('active');
+        }
+        function closeCustomizationModal() {
+            document.getElementById('customization-modal').classList.remove('active');
+        }
+    </script>
 </body>
 </html>
