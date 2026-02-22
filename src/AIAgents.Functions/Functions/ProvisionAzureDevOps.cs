@@ -106,274 +106,288 @@ public sealed class ProvisionAzureDevOps
         [HttpTrigger(AuthorizationLevel.Function, "post", Route = "provision-ado")] HttpRequest req,
         CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(_options.OrganizationUrl) ||
-            string.IsNullOrWhiteSpace(_options.Project) ||
-            string.IsNullOrWhiteSpace(_options.Pat))
+        try
         {
-            return new BadRequestObjectResult(new
+            if (string.IsNullOrWhiteSpace(_options.OrganizationUrl) ||
+                string.IsNullOrWhiteSpace(_options.Project) ||
+                string.IsNullOrWhiteSpace(_options.Pat))
             {
-                success = false,
-                summary = "Azure DevOps configuration is incomplete.",
-                errors = new[]
+                return new BadRequestObjectResult(new
                 {
-                    "Set AzureDevOps:OrganizationUrl, AzureDevOps:Project, and AzureDevOps:Pat in Function App settings."
-                }
-            });
-        }
-
-        var steps = new List<string>();
-        var warnings = new List<string>();
-        var errors = new List<string>();
-        var additionalManualSteps = new List<string>();
-        var currentAgentPicklistEnforced = false;
-        var createdFields = new List<string>();
-        var existingFields = new List<string>();
-        var createdStates = new List<string>();
-        var missingStates = new List<string>();
-
-        using var adoClient = CreateAdoClient();
-
-        ProjectInfo? projectInfo;
-        try
-        {
-            projectInfo = await GetProjectInfoAsync(adoClient, cancellationToken);
-            steps.Add($"Connected to project '{projectInfo.Name}' ({projectInfo.Id}).");
-            if (!string.IsNullOrWhiteSpace(projectInfo.ProcessTemplateName))
-            {
-                steps.Add($"Project process: {projectInfo.ProcessTemplateName}");
+                    success = false,
+                    summary = "Azure DevOps configuration is incomplete.",
+                    errors = new[]
+                    {
+                        "Set AzureDevOps:OrganizationUrl, AzureDevOps:Project, and AzureDevOps:Pat in Function App settings."
+                    }
+                });
             }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to load Azure DevOps project details");
-            return new ObjectResult(new
-            {
-                success = false,
-                summary = "Failed to connect to Azure DevOps project.",
-                errors = new[] { ex.Message }
-            })
-            { StatusCode = StatusCodes.Status500InternalServerError };
-        }
 
-        try
-        {
-            var webhookUrl = $"{req.Scheme}://{req.Host}/api/OrchestratorWebhook";
-            var serviceHookCreated = await EnsureServiceHookAsync(
-                adoClient,
-                projectInfo,
-                webhookUrl,
-                cancellationToken);
+            var steps = new List<string>();
+            var warnings = new List<string>();
+            var errors = new List<string>();
+            var additionalManualSteps = new List<string>();
+            var currentAgentPicklistEnforced = false;
+            var createdFields = new List<string>();
+            var existingFields = new List<string>();
+            var createdStates = new List<string>();
+            var missingStates = new List<string>();
 
-            steps.Add(serviceHookCreated
-                ? "Created Azure DevOps Service Hook for state-change events."
-                : "Service Hook already configured.");
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Could not provision service hook");
-            warnings.Add($"Service Hook setup failed: {ex.Message}");
-        }
+            using var adoClient = CreateAdoClient();
 
-        foreach (var field in RequiredFields)
-        {
+            ProjectInfo? projectInfo;
             try
             {
-                var fieldStatus = await GetFieldStatusAsync(adoClient, field.ReferenceName, cancellationToken);
-                if (fieldStatus.Exists)
+                projectInfo = await GetProjectInfoAsync(adoClient, cancellationToken);
+                steps.Add($"Connected to project '{projectInfo.Name}' ({projectInfo.Id}).");
+                if (!string.IsNullOrWhiteSpace(projectInfo.ProcessTemplateName))
                 {
-                    existingFields.Add(field.ReferenceName);
-
-                    continue;
-                }
-
-                var created = await TryCreateFieldAsync(adoClient, field, cancellationToken);
-                if (created)
-                {
-                    createdFields.Add(field.ReferenceName);
-                }
-                else
-                {
-                    warnings.Add($"Could not create field {field.ReferenceName}. Check process permissions.");
+                    steps.Add($"Project process: {projectInfo.ProcessTemplateName}");
                 }
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex, "Failed ensuring field {Field}", field.ReferenceName);
-                warnings.Add($"Field {field.ReferenceName}: {ex.Message}");
-            }
-        }
-
-        try
-        {
-            var currentAgentFieldStatus = await GetCurrentAgentProcessFieldStatusAsync(
-                adoClient,
-                projectInfo.ProcessTemplateName,
-                cancellationToken,
-                knownProcessId: projectInfo.ProcessTemplateId);
-
-            if (!currentAgentFieldStatus.Exists)
-            {
-                if (!string.IsNullOrWhiteSpace(projectInfo.ProcessTemplateName))
+                _logger.LogError(ex, "Failed to load Azure DevOps project details");
+                return new ObjectResult(new
                 {
-                    var createdCurrentAgentPicklist = await TryCreateCurrentAgentPicklistFieldAsync(
-                        adoClient,
-                        projectInfo.ProcessTemplateName,
-                        warnings,
-                        cancellationToken,
-                        knownProcessId: projectInfo.ProcessTemplateId);
+                    success = false,
+                    summary = "Failed to connect to Azure DevOps project.",
+                    errors = new[] { ex.Message }
+                })
+                { StatusCode = StatusCodes.Status500InternalServerError };
+            }
 
-                    if (createdCurrentAgentPicklist)
+            try
+            {
+                var webhookUrl = $"{req.Scheme}://{req.Host}/api/OrchestratorWebhook";
+                var serviceHookCreated = await EnsureServiceHookAsync(
+                    adoClient,
+                    projectInfo,
+                    webhookUrl,
+                    cancellationToken);
+
+                steps.Add(serviceHookCreated
+                    ? "Created Azure DevOps Service Hook for state-change events."
+                    : "Service Hook already configured.");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Could not provision service hook");
+                warnings.Add($"Service Hook setup failed: {ex.Message}");
+            }
+
+            foreach (var field in RequiredFields)
+            {
+                try
+                {
+                    var fieldStatus = await GetFieldStatusAsync(adoClient, field.ReferenceName, cancellationToken);
+                    if (fieldStatus.Exists)
                     {
-                        currentAgentPicklistEnforced = true;
-                        createdFields.Add(CustomFieldNames.CurrentAIAgent);
-                        steps.Add("Created Current AI Agent picklist field.");
-                        currentAgentFieldStatus = new FieldStatus(true, true, "picklistString");
+                        existingFields.Add(field.ReferenceName);
+
+                        continue;
+                    }
+
+                    var created = await TryCreateFieldAsync(adoClient, field, cancellationToken);
+                    if (created)
+                    {
+                        createdFields.Add(field.ReferenceName);
+                    }
+                    else
+                    {
+                        warnings.Add($"Could not create field {field.ReferenceName}. Check process permissions.");
                     }
                 }
-
-                if (!currentAgentFieldStatus.Exists)
+                catch (Exception ex)
                 {
-                    warnings.Add("Current AI Agent field is missing. Create it as Picklist (string), not a textbox.");
-                    additionalManualSteps.Add("Create 'Current AI Agent' as Picklist (string) with values: Planning Agent, Coding Agent, Testing Agent, Review Agent, Documentation Agent, Deployment Agent. Leave default blank.");
+                    _logger.LogWarning(ex, "Failed ensuring field {Field}", field.ReferenceName);
+                    warnings.Add($"Field {field.ReferenceName}: {ex.Message}");
                 }
             }
 
-            if (currentAgentFieldStatus.Exists && !currentAgentFieldStatus.IsPicklist)
+            try
             {
-                if (!string.IsNullOrWhiteSpace(projectInfo.ProcessTemplateName))
-                {
-                    var convertedCurrentAgentPicklist = await TryCreateCurrentAgentPicklistFieldAsync(
-                        adoClient,
-                        projectInfo.ProcessTemplateName,
-                        warnings,
-                        cancellationToken,
-                        knownProcessId: projectInfo.ProcessTemplateId);
-
-                    if (convertedCurrentAgentPicklist)
-                    {
-                        currentAgentPicklistEnforced = true;
-                        steps.Add("Converted Current AI Agent field to picklist.");
-                        currentAgentFieldStatus = await GetCurrentAgentProcessFieldStatusAsync(
-                            adoClient,
-                            projectInfo.ProcessTemplateName,
-                            cancellationToken,
-                            knownProcessId: projectInfo.ProcessTemplateId);
-                    }
-                }
-
-                if (!currentAgentFieldStatus.IsPicklist && !currentAgentPicklistEnforced)
-                {
-                    warnings.Add("Current AI Agent exists as a plain text field (textbox). Configure it as a picklist on User Story so the form renders a dropdown.");
-                    additionalManualSteps.Add("In Organization Settings → Boards → Process → User Story → Fields → Current AI Agent, configure allowed values: Planning Agent, Coding Agent, Testing Agent, Review Agent, Documentation Agent, Deployment Agent (default blank). If your process does not allow converting this field to picklist, recreate it as Picklist (string) with reference name Custom.CurrentAIAgent.");
-                }
-            }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Failed to validate Current AI Agent field type");
-            warnings.Add($"Could not validate Current AI Agent field type: {ex.Message}");
-        }
-
-        try
-        {
-            var existingStateNames = await GetUserStoryStatesAsync(adoClient, projectInfo.Name, cancellationToken);
-            var initialMissingStates = RequiredStates
-                .Where(s => !existingStateNames.Contains(s, StringComparer.OrdinalIgnoreCase))
-                .ToList();
-
-            if (initialMissingStates.Count > 0 && !string.IsNullOrWhiteSpace(projectInfo.ProcessTemplateName))
-            {
-                var autoCreated = await TryCreateMissingStatesAsync(
+                var currentAgentFieldStatus = await GetCurrentAgentProcessFieldStatusAsync(
                     adoClient,
                     projectInfo.ProcessTemplateName,
-                    initialMissingStates,
-                    warnings,
                     cancellationToken,
                     knownProcessId: projectInfo.ProcessTemplateId);
 
-                if (autoCreated.Count > 0)
+                if (!currentAgentFieldStatus.Exists)
                 {
-                    createdStates.AddRange(autoCreated);
+                    if (!string.IsNullOrWhiteSpace(projectInfo.ProcessTemplateName))
+                    {
+                        var createdCurrentAgentPicklist = await TryCreateCurrentAgentPicklistFieldAsync(
+                            adoClient,
+                            projectInfo.ProcessTemplateName,
+                            warnings,
+                            cancellationToken,
+                            knownProcessId: projectInfo.ProcessTemplateId);
+
+                        if (createdCurrentAgentPicklist)
+                        {
+                            currentAgentPicklistEnforced = true;
+                            createdFields.Add(CustomFieldNames.CurrentAIAgent);
+                            steps.Add("Created Current AI Agent picklist field.");
+                            currentAgentFieldStatus = new FieldStatus(true, true, "picklistString");
+                        }
+                    }
+
+                    if (!currentAgentFieldStatus.Exists)
+                    {
+                        warnings.Add("Current AI Agent field is missing. Create it as Picklist (string), not a textbox.");
+                        additionalManualSteps.Add("Create 'Current AI Agent' as Picklist (string) with values: Planning Agent, Coding Agent, Testing Agent, Review Agent, Documentation Agent, Deployment Agent. Leave default blank.");
+                    }
                 }
 
-                existingStateNames = await GetUserStoryStatesAsync(adoClient, projectInfo.Name, cancellationToken);
+                if (currentAgentFieldStatus.Exists && !currentAgentFieldStatus.IsPicklist)
+                {
+                    if (!string.IsNullOrWhiteSpace(projectInfo.ProcessTemplateName))
+                    {
+                        var convertedCurrentAgentPicklist = await TryCreateCurrentAgentPicklistFieldAsync(
+                            adoClient,
+                            projectInfo.ProcessTemplateName,
+                            warnings,
+                            cancellationToken,
+                            knownProcessId: projectInfo.ProcessTemplateId);
+
+                        if (convertedCurrentAgentPicklist)
+                        {
+                            currentAgentPicklistEnforced = true;
+                            steps.Add("Converted Current AI Agent field to picklist.");
+                            currentAgentFieldStatus = await GetCurrentAgentProcessFieldStatusAsync(
+                                adoClient,
+                                projectInfo.ProcessTemplateName,
+                                cancellationToken,
+                                knownProcessId: projectInfo.ProcessTemplateId);
+                        }
+                    }
+
+                    if (!currentAgentFieldStatus.IsPicklist && !currentAgentPicklistEnforced)
+                    {
+                        warnings.Add("Current AI Agent exists as a plain text field (textbox). Configure it as a picklist on User Story so the form renders a dropdown.");
+                        additionalManualSteps.Add("In Organization Settings → Boards → Process → User Story → Fields → Current AI Agent, configure allowed values: Planning Agent, Coding Agent, Testing Agent, Review Agent, Documentation Agent, Deployment Agent (default blank). If your process does not allow converting this field to picklist, recreate it as Picklist (string) with reference name Custom.CurrentAIAgent.");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to validate Current AI Agent field type");
+                warnings.Add($"Could not validate Current AI Agent field type: {ex.Message}");
             }
 
-            missingStates.AddRange(RequiredStates.Where(s => !existingStateNames.Contains(s, StringComparer.OrdinalIgnoreCase)));
-
-            if (missingStates.Count == 0)
+            try
             {
-                steps.Add("All required User Story states are present.");
+                var existingStateNames = await GetUserStoryStatesAsync(adoClient, projectInfo.Name, cancellationToken);
+                var initialMissingStates = RequiredStates
+                    .Where(s => !existingStateNames.Contains(s, StringComparer.OrdinalIgnoreCase))
+                    .ToList();
+
+                if (initialMissingStates.Count > 0 && !string.IsNullOrWhiteSpace(projectInfo.ProcessTemplateName))
+                {
+                    var autoCreated = await TryCreateMissingStatesAsync(
+                        adoClient,
+                        projectInfo.ProcessTemplateName,
+                        initialMissingStates,
+                        warnings,
+                        cancellationToken,
+                        knownProcessId: projectInfo.ProcessTemplateId);
+
+                    if (autoCreated.Count > 0)
+                    {
+                        createdStates.AddRange(autoCreated);
+                    }
+
+                    existingStateNames = await GetUserStoryStatesAsync(adoClient, projectInfo.Name, cancellationToken);
+                }
+
+                missingStates.AddRange(RequiredStates.Where(s => !existingStateNames.Contains(s, StringComparer.OrdinalIgnoreCase)));
+
+                if (missingStates.Count == 0)
+                {
+                    steps.Add("All required User Story states are present.");
+                }
+                else
+                {
+                    warnings.Add($"{missingStates.Count} required states are missing on User Story.");
+                }
+
+                if (createdStates.Count > 0)
+                {
+                    steps.Add($"Created {createdStates.Count} missing User Story states.");
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Could not validate User Story states");
+                warnings.Add($"Could not verify User Story states: {ex.Message}");
+            }
+
+            if (createdFields.Count > 0)
+            {
+                steps.Add($"Created {createdFields.Count} missing custom fields.");
             }
             else
             {
-                warnings.Add($"{missingStates.Count} required states are missing on User Story.");
+                steps.Add("No custom field creation needed.");
             }
 
-            if (createdStates.Count > 0)
+            var manualSteps = new List<string>();
+            if (missingStates.Count > 0)
             {
-                steps.Add($"Created {createdStates.Count} missing User Story states.");
+                manualSteps.Add("Add the missing User Story states in Organization Settings → Boards → Process → User Story → States.");
             }
+
+            manualSteps.Add("If custom fields were created but not visible on forms, add them to User Story layout groups (AI Agent Settings / AI Model Settings / AI Tracking).");
+            manualSteps.Add("Configure 'Current AI Agent' as a picklist with values: Planning Agent, Coding Agent, Testing Agent, Review Agent, Documentation Agent, Deployment Agent. Leave default blank.");
+            manualSteps.Add("For Azure Boards visualization, add 'Current AI Agent' to card fields and create card style rules per agent value.");
+            manualSteps.AddRange(additionalManualSteps);
+
+            var ready = errors.Count == 0 && missingStates.Count == 0;
+            var summary = ready
+                ? "Azure DevOps provisioning complete."
+                : "Azure DevOps provisioning completed with manual follow-ups.";
+
+            return new OkObjectResult(new
+            {
+                success = errors.Count == 0,
+                ready,
+                summary,
+                project = new
+                {
+                    projectInfo.Name,
+                    projectInfo.Id,
+                    projectInfo.ProcessTemplateName
+                },
+                fields = new
+                {
+                    created = createdFields,
+                    existing = existingFields,
+                    required = RequiredFields.Select(f => f.ReferenceName)
+                },
+                states = new
+                {
+                    required = RequiredStates,
+                    created = createdStates,
+                    missing = missingStates
+                },
+                steps,
+                warnings,
+                errors,
+                manualSteps
+            });
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Could not validate User Story states");
-            warnings.Add($"Could not verify User Story states: {ex.Message}");
-        }
-
-        if (createdFields.Count > 0)
-        {
-            steps.Add($"Created {createdFields.Count} missing custom fields.");
-        }
-        else
-        {
-            steps.Add("No custom field creation needed.");
-        }
-
-        var manualSteps = new List<string>();
-        if (missingStates.Count > 0)
-        {
-            manualSteps.Add("Add the missing User Story states in Organization Settings → Boards → Process → User Story → States.");
-        }
-
-        manualSteps.Add("If custom fields were created but not visible on forms, add them to User Story layout groups (AI Agent Settings / AI Model Settings / AI Tracking).");
-        manualSteps.Add("Configure 'Current AI Agent' as a picklist with values: Planning Agent, Coding Agent, Testing Agent, Review Agent, Documentation Agent, Deployment Agent. Leave default blank.");
-        manualSteps.Add("For Azure Boards visualization, add 'Current AI Agent' to card fields and create card style rules per agent value.");
-        manualSteps.AddRange(additionalManualSteps);
-
-        var ready = errors.Count == 0 && missingStates.Count == 0;
-        var summary = ready
-            ? "Azure DevOps provisioning complete."
-            : "Azure DevOps provisioning completed with manual follow-ups.";
-
-        return new OkObjectResult(new
-        {
-            success = errors.Count == 0,
-            ready,
-            summary,
-            project = new
+            _logger.LogError(ex, "Unhandled exception in ProvisionAzureDevOps");
+            return new ObjectResult(new
             {
-                projectInfo.Name,
-                projectInfo.Id,
-                projectInfo.ProcessTemplateName
-            },
-            fields = new
-            {
-                created = createdFields,
-                existing = existingFields,
-                required = RequiredFields.Select(f => f.ReferenceName)
-            },
-            states = new
-            {
-                required = RequiredStates,
-                created = createdStates,
-                missing = missingStates
-            },
-            steps,
-            warnings,
-            errors,
-            manualSteps
-        });
+                success = false,
+                summary = "An unexpected error occurred during provisioning.",
+                errors = new[] { ex.Message, ex.StackTrace }
+            })
+            { StatusCode = StatusCodes.Status500InternalServerError };
+        }
     }
 
     private HttpClient CreateAdoClient()
