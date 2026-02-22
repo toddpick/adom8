@@ -9,7 +9,7 @@ If you prefer to run scripts locally or deploy manually, please see the [Manual 
 Before running the pipeline, you need to gather the following information and create two tokens:
 
 1. **Azure Subscription ID**: The ID of the Azure subscription where resources will be deployed.
-2. **Azure DevOps Organization URL**: e.g., `https://dev.azure.com/yourorg`
+2. **Azure DevOps Organization URL**: e.g., `https://dev.azure.com/yourorg` (Must be the full URL, not just the organization name)
 3. **Azure DevOps Project Name**: The name of your target project.
 4. **GitHub Organization**: The owner of the target repository.
 5. **GitHub Repository**: The name of the target repository.

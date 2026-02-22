@@ -14,7 +14,7 @@ variables:
   # The following variables must be provided by the user when running the pipeline:
   # - ONBOARDING_PAT (secret)
   # - AZURE_SUBSCRIPTION_ID
-  # - AZURE_DEVOPS_ORG
+  # - AZURE_DEVOPS_ORG (Must be the full URL, e.g., https://dev.azure.com/yourorg)
   # - AZURE_DEVOPS_PROJECT
   # - GITHUB_ORG
   # - GITHUB_REPO
