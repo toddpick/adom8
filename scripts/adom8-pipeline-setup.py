@@ -190,7 +190,11 @@ def main():
         max_retries = 3
         for attempt in range(1, max_retries + 1):
             try:
+                print(f"  Attempt {attempt}: POST {function_url}")
                 prov_response = requests.post(function_url, timeout=120)
+                print(f"  Response Status: {prov_response.status_code}")
+                print(f"  Response Body: {prov_response.text}")
+                
                 if prov_response.status_code == 200:
                     print("ADO Process Customization completed successfully via Function App.")
                     try:
