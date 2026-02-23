@@ -4667,7 +4667,14 @@
             const fromStorage = localStorage.getItem(FUNCTION_URL_STORAGE_KEY);
             const params = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
             const fromQuery = params ? params.get(FUNCTION_URL_QUERY_PARAM) : '';
-            const raw = String(fromWindow || fromQuery || fromStorage || FUNCTION_URL_PLACEHOLDER).trim();
+            const hasDeployedDefault = FUNCTION_URL_PLACEHOLDER && FUNCTION_URL_PLACEHOLDER !== '__FUNCTION_APP_URL__';
+            const raw = String(
+                fromWindow
+                || fromQuery
+                || (hasDeployedDefault ? FUNCTION_URL_PLACEHOLDER : '')
+                || fromStorage
+                || FUNCTION_URL_PLACEHOLDER
+            ).trim();
 
             if (raw && raw !== FUNCTION_URL_PLACEHOLDER) {
                 const normalized = raw.replace(/\/+$/, '');
