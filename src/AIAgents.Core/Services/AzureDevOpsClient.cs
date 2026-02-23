@@ -163,6 +163,18 @@ public sealed class AzureDevOpsClient : IAzureDevOpsClient, IDisposable
                 Operation = Operation.Add,
                 Path = "/fields/System.State",
                 Value = state
+            },
+            new JsonPatchOperation
+            {
+                Operation = Operation.Add,
+                Path = CustomFieldNames.Paths.AutonomyLevel,
+                Value = "3"
+            },
+            new JsonPatchOperation
+            {
+                Operation = Operation.Add,
+                Path = CustomFieldNames.Paths.MinimumReviewScore,
+                Value = 85
             }
         };
 

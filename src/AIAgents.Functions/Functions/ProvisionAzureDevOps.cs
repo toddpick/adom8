@@ -983,6 +983,25 @@ public sealed class ProvisionAzureDevOps
             }
         }
 
+        var autonomyProcessStatus = await GetProcessFieldStatusAsync(
+            client,
+            processId,
+            workItemTypeReferenceName,
+            CustomFieldNames.AutonomyLevel,
+            cancellationToken);
+
+        if (!autonomyProcessStatus.Exists)
+        {
+            warnings.Add("AI Autonomy Level process field is not attached to User Story after provisioning.");
+            return false;
+        }
+
+        if (!autonomyProcessStatus.IsPicklist)
+        {
+            warnings.Add($"AI Autonomy Level field attached but not picklist (type: '{autonomyProcessStatus.Type}'). Azure DevOps kept textbox semantics.");
+            return false;
+        }
+
         var autonomyAttached = await TryIsProcessFieldAttachedAsync(
             client,
             processId,
@@ -1407,6 +1426,44 @@ public sealed class ProvisionAzureDevOps
         var body = await response.Content.ReadAsStringAsync(cancellationToken);
         warnings.Add($"{fieldLabel} is not attached to User Story in process '{processId}' ({(int)response.StatusCode}): {body}");
         return false;
+    }
+
+    private async Task<FieldStatus> GetProcessFieldStatusAsync(
+        HttpClient client,
+        string processId,
+        string workItemTypeReferenceName,
+        string referenceName,
+        CancellationToken cancellationToken)
+    {
+        using var response = await client.GetAsync(
+            $"_apis/work/processes/{Uri.EscapeDataString(processId)}/workItemTypes/{Uri.EscapeDataString(workItemTypeReferenceName)}/fields?api-version=7.1-preview.2",
+            cancellationToken);
+
+        var json = await ReadJsonAsync(response, cancellationToken);
+        var values = json?["value"]?.AsArray() ?? new JsonArray();
+
+        foreach (var item in values)
+        {
+            var itemReferenceName = item?["referenceName"]?.GetValue<string>();
+            if (!string.Equals(itemReferenceName, referenceName, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            var fieldType = item?["type"]?.GetValue<string>() ?? string.Empty;
+            var normalizedType = fieldType.Trim();
+            var isPicklistByType = string.Equals(normalizedType, "picklistString", StringComparison.OrdinalIgnoreCase)
+                                 || string.Equals(normalizedType, "picklistInteger", StringComparison.OrdinalIgnoreCase)
+                                 || string.Equals(normalizedType, "picklist", StringComparison.OrdinalIgnoreCase);
+            var hasPickList = item?["pickList"] is JsonObject;
+            var allowedValues = item?["allowedValues"]?.AsArray();
+            var hasAllowedValues = allowedValues is { Count: > 0 };
+            var isPicklist = isPicklistByType && (hasPickList || hasAllowedValues);
+
+            return new FieldStatus(true, isPicklist, normalizedType);
+        }
+
+        return FieldStatus.Missing;
     }
 
     private static async Task<JsonObject?> ReadJsonAsync(HttpResponseMessage response, CancellationToken cancellationToken)
