@@ -112,6 +112,10 @@ stages:
         appName: '$(FUNCTION_APP_NAME)'
         package: '$(System.DefaultWorkingDirectory)/publish_output/**/*.zip'
 
+    - bash: |
+        sed -i 's|__FUNCTION_APP_URL__|https://$(FUNCTION_APP_NAME).azurewebsites.net|g' dashboard/index.html
+      displayName: 'Update Function App URL in Dashboard'
+
     - task: AzureStaticWebApp@0
       displayName: 'Deploy Dashboard to Static Web App'
       inputs:
