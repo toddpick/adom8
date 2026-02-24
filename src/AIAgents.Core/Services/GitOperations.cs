@@ -36,10 +36,12 @@ public sealed class GitOperations : IGitOperations
         var repoDir = Path.Combine(basePath, SanitizeDirectoryName(branchName));
 
         // Sweep stale clone dirs to prevent disk exhaustion on Consumption plans.
-        // Any directory not touched in the last 2 hours is considered completed/abandoned.
+        // Phase 1: remove anything older than 30 minutes (agent runs complete well within this window).
+        // Phase 2: if free disk space is critically low (< 300 MB), remove ALL sibling dirs regardless
+        //          of age so that the upcoming clone has room to proceed.
         if (Directory.Exists(basePath))
         {
-            var threshold = DateTime.UtcNow.AddHours(-2);
+            var threshold = DateTime.UtcNow.AddMinutes(-30);
             foreach (var staleDir in Directory.EnumerateDirectories(basePath))
             {
                 if (string.Equals(staleDir, repoDir, StringComparison.OrdinalIgnoreCase)) continue;
@@ -55,6 +57,30 @@ public sealed class GitOperations : IGitOperations
                 {
                     _logger.LogWarning(ex, "Could not sweep stale repo dir {Dir}", staleDir);
                 }
+            }
+
+            // Emergency sweep: if fewer than 300 MB free on the temp drive, nuke all sibling
+            // clone dirs (even recent ones) so the clone below has a fighting chance.
+            try
+            {
+                var drive = new DriveInfo(Path.GetPathRoot(basePath) ?? basePath);
+                const long freeMbThreshold = 300L * 1024 * 1024;
+                if (drive.AvailableFreeSpace < freeMbThreshold)
+                {
+                    _logger.LogWarning(
+                        "Low disk space ({FreeMb} MB free) — sweeping ALL repo dirs to reclaim space",
+                        drive.AvailableFreeSpace / (1024 * 1024));
+                    foreach (var dir in Directory.EnumerateDirectories(basePath))
+                    {
+                        if (string.Equals(dir, repoDir, StringComparison.OrdinalIgnoreCase)) continue;
+                        try { DeleteDirectory(dir); }
+                        catch (Exception ex) { _logger.LogWarning(ex, "Could not sweep repo dir {Dir}", dir); }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Could not check available disk space on {BasePath}", basePath);
             }
         }
 
@@ -281,8 +307,15 @@ public sealed class GitOperations : IGitOperations
             RedirectStandardError  = true,
             UseShellExecute        = false,
             CreateNoWindow         = true,
-            // Clear any inherited GIT_TERMINAL_PROMPT that might block on CI
-            Environment = { ["GIT_TERMINAL_PROMPT"] = "0" }
+            Environment =
+            {
+                // Prevent interactive prompts on CI/Functions hosts
+                ["GIT_TERMINAL_PROMPT"] = "0",
+                // Credentials are embedded in the URL; disable the credential store
+                // entirely to suppress 'wincredman' / 'Unable to persist credentials'
+                // warnings that appear on Windows-hosted Functions.
+                ["GCM_CREDENTIAL_STORE"] = "none",
+            }
         };
 
         using var process = Process.Start(psi)
