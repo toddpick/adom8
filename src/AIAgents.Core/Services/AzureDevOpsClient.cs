@@ -103,8 +103,13 @@ public sealed class AzureDevOpsClient : IAzureDevOpsClient, IDisposable
             using var httpClient = CreateAdoHttpClient();
             var payload = JsonSerializer.Serialize(new { text = comment });
 
+            // Build the absolute URL: {orgUrl}/{project}/_apis/wit/workItems/{id}/comments
+            var baseUrl = _options.OrganizationUrl.TrimEnd('/');
+            var project = Uri.EscapeDataString(_options.Project);
+            var requestUrl = $"{baseUrl}/{project}/_apis/wit/workItems/{workItemId}/comments?api-version=7.1-preview.4";
+
             using var response = await httpClient.PostAsync(
-                $"_apis/wit/workItems/{workItemId}/comments?api-version=7.1-preview.4",
+                requestUrl,
                 new StringContent(payload, Encoding.UTF8, "application/json"),
                 cancellationToken);
 
