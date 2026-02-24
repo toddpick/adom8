@@ -34,10 +34,18 @@ jobs:
       - name: Publish Functions
         run: dotnet publish ${{ env.AZURE_FUNCTIONAPP_PACKAGE_PATH }}/AIAgents.Functions.csproj --configuration Release --output ./publish
 
-      - name: Deploy to Azure Functions
+      - name: Deploy to Azure Functions (primary)
         if: ${{ env.AZURE_FUNCTIONAPP_NAME != '' }}
         uses: azure/functions-action@v1
         with:
           app-name: ${{ env.AZURE_FUNCTIONAPP_NAME }}
           publish-profile: ${{ secrets.AZURE_FUNCTIONAPP_PUBLISH_PROFILE }}
+          package: ./publish
+
+      - name: Deploy to Azure Functions (adom8)
+        if: ${{ secrets.AZURE_FUNCTIONAPP_NAME_ADOM8 != '' }}
+        uses: azure/functions-action@v1
+        with:
+          app-name: ${{ secrets.AZURE_FUNCTIONAPP_NAME_ADOM8 }}
+          publish-profile: ${{ secrets.AZURE_FUNCTIONAPP_PUBLISH_PROFILE_ADOM8 }}
           package: ./publish
