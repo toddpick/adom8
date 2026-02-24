@@ -103,6 +103,15 @@ stages:
           SWA_HOSTNAME=$(az staticwebapp show --name $SWA_NAME --resource-group $(RESOURCE_GROUP_NAME) --query "defaultHostname" -o tsv)
           az functionapp cors add --name $FUNCTION_APP_NAME --resource-group $(RESOURCE_GROUP_NAME) --allowed-origins "https://$SWA_HOSTNAME"
 
+          echo "Adding CORS for any additional Static Web Apps in resource group"
+          ALL_SWA_HOSTNAMES=$(az staticwebapp list --resource-group $(RESOURCE_GROUP_NAME) --query "[].defaultHostname" -o tsv)
+          for hostname in $ALL_SWA_HOSTNAMES; do
+            if [ -n "$hostname" ] && [ "$hostname" != "$SWA_HOSTNAME" ]; then
+              echo "Adding CORS for extra SWA: https://$hostname"
+              az functionapp cors add --name $FUNCTION_APP_NAME --resource-group $(RESOURCE_GROUP_NAME) --allowed-origins "https://$hostname"
+            fi
+          done
+
           echo "Retrieving Static Web App deployment token"
           SWA_TOKEN=$(az staticwebapp secrets list --name $SWA_NAME --resource-group $(RESOURCE_GROUP_NAME) --query "properties.apiKey" -o tsv)
           echo "##vso[task.setvariable variable=SWA_TOKEN;issecret=true]$SWA_TOKEN"
