@@ -1,7 +1,7 @@
 {
-  "generatedAtUtc": "2026-02-26T04:17:02.1364786Z",
-  "totalFiles": 290,
-  "totalBytes": 2123381,
+  "generatedAtUtc": "2026-02-26T05:38:14.3878941Z",
+  "totalFiles": 294,
+  "totalBytes": 2133311,
   "topDirectories": [
     ".ado",
     ".ado/pipelines",
@@ -68,12 +68,12 @@
       "totalBytes": 864268
     },
     ".md": {
-      "count": 106,
-      "totalBytes": 364824
+      "count": 107,
+      "totalBytes": 367318
     },
     ".json": {
-      "count": 24,
-      "totalBytes": 33623
+      "count": 27,
+      "totalBytes": 41059
     },
     ".tf": {
       "count": 7,
