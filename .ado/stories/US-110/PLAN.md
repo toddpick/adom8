@@ -124,53 +124,37 @@ No acceptance criteria
 ## Technical Analysis
 
 ### Problem Analysis
-This story aims to create comprehensive AI-optimized documentation in a .agent/ folder by scanning the entire repository. The task involves analyzing the codebase structure, extracting patterns and conventions, and generating multiple documentation files including architecture diagrams, coding standards, and feature documentation. The story is well-detailed in the description but fails the acceptance criteria requirement.
+This story aims to create comprehensive AI-optimized documentation in a .agent/ folder by scanning the entire repository structure, analyzing code patterns, and generating structured documentation files. The documentation will serve as context for AI agents to understand the codebase architecture, patterns, and conventions. The task involves file system analysis, pattern detection, and automated documentation generation.
 
 ### Recommended Approach
-The implementation would involve: 1) Creating a new agent service (CodebaseIntelligenceAgentService) that scans the repository structure, 2) Implementing file system traversal to map the codebase excluding build artifacts, 3) Analyzing project files to detect tech stack, 4) Sampling key source files to extract coding patterns, 5) Generating documentation files using Scriban templates, 6) Creating Mermaid diagrams based on actual component relationships, 7) Persisting all documentation to the .agent/ folder with proper Git operations.
+Implement a repository scanning service that: 1) Traverses the file system excluding build artifacts, 2) Detects technology stack from project files, 3) Samples key source files to extract patterns, 4) Identifies features through naming conventions and code analysis, 5) Generates structured markdown documentation with Mermaid diagrams, 6) Creates metadata files with analysis statistics. The implementation will use existing GitOperations service for file system access and create new services for code analysis and documentation generation.
 
 ### Affected Files
 
-- `src/AIAgents.Functions/Agents/CodebaseIntelligenceAgentService.cs`
+- `src/AIAgents.Core/Interfaces/ICodebaseAnalyzer.cs`
 
-- `src/AIAgents.Core/Templates/codebase-analysis.scriban`
+- `src/AIAgents.Core/Services/CodebaseAnalyzer.cs`
+
+- `src/AIAgents.Core/Services/DocumentationGenerator.cs`
 
 - `src/AIAgents.Core/Models/CodebaseAnalysisResult.cs`
 
+- `src/AIAgents.Core/Models/FeatureInfo.cs`
+
 - `src/AIAgents.Functions/Functions/CodebaseIntelligenceFunction.cs`
 
-- `src/AIAgents.Functions/Program.cs`
+- `src/AIAgents.Functions/Agents/CodebaseIntelligenceAgentService.cs`
 
-- `.agent/CONTEXT_INDEX.md`
+- `src/AIAgents.Core.Tests/Services/CodebaseAnalyzerTests.cs`
 
-- `.agent/TECH_STACK.md`
-
-- `.agent/ARCHITECTURE.md`
-
-- `.agent/CODING_STANDARDS.md`
-
-- `.agent/COMMON_PATTERNS.md`
-
-- `.agent/TESTING_STRATEGY.md`
-
-- `.agent/DEPLOYMENT.md`
-
-- `.agent/API_REFERENCE.md`
-
-- `.agent/DATABASE_SCHEMA.md`
-
-- `.agent/FEATURES/*.md`
-
-- `.agent/metadata.json`
-
-- `.agent/README.md`
+- `src/AIAgents.Functions.Tests/Agents/CodebaseIntelligenceAgentServiceTests.cs`
 
 
 ### Complexity Estimate
 **Story Points:** 13
 
 ### Architecture Considerations
-The solution would extend the existing agent architecture by adding a new CodebaseIntelligenceAgentService that follows the standard agent pattern. It would use the existing IGitOperations for file system access, IScribanTemplateEngine for documentation generation, and the standard agent pipeline for execution. The agent would be triggered via HTTP endpoint rather than ADO webhook since it's a one-time initialization task.
+Add new codebase analysis capability to the existing agent architecture. Create ICodebaseAnalyzer service in Core library for repository scanning and pattern detection. Add CodebaseIntelligenceAgentService that orchestrates the analysis and documentation generation. Integrate with existing GitOperations for file system access and use Scriban templates for consistent documentation formatting.
 
 ---
 
@@ -178,43 +162,43 @@ The solution would extend the existing agent architecture by adding a new Codeba
 
 ### Sub-Tasks
 
-1. Create CodebaseIntelligenceAgentService with repository scanning logic
+1. Create ICodebaseAnalyzer interface and implementation for repository scanning
 
-2. Implement file system traversal with proper exclusions
+2. Implement DocumentationGenerator service for creating structured markdown files
 
-3. Add tech stack detection from project files
+3. Create CodebaseAnalysisResult and related models for analysis data
 
-4. Create source code pattern analysis
+4. Add CodebaseIntelligenceAgentService for orchestrating the analysis workflow
 
-5. Implement feature detection logic
+5. Create HTTP function endpoint for triggering codebase analysis
 
-6. Design Scriban templates for all documentation files
+6. Implement feature detection logic based on folder structure and naming patterns
 
-7. Add Mermaid diagram generation
+7. Create Scriban templates for consistent documentation formatting
 
-8. Create HTTP trigger function for manual invocation
+8. Add file system traversal with exclusion patterns for build artifacts
 
-9. Implement metadata collection and JSON generation
+9. Implement technology stack detection from project files
 
-10. Add comprehensive error handling and logging
+10. Create metadata.json generation with analysis statistics
 
-11. Create unit tests for analysis logic
+11. Add comprehensive unit tests for all new services
 
-12. Update agent registration and routing
+12. Update existing documentation to reference new codebase intelligence capability
 
 
 ### Dependencies
 
 
-- Existing IGitOperations service for file operations
+- Existing GitOperations service for file system access
 
-- IScribanTemplateEngine for documentation generation
+- Scriban template engine for documentation formatting
 
-- File system access permissions in Azure Functions
+- System.IO for file system operations
 
-- Sufficient execution timeout for large codebases
+- System.Text.Json for metadata serialization
 
-- Git repository access and write permissions
+- Existing logging infrastructure
 
 
 
@@ -224,38 +208,38 @@ The solution would extend the existing agent architecture by adding a new Codeba
 
 ### Identified Risks
 
-- Large codebase analysis may exceed Azure Functions timeout limits
+- Large repositories may cause memory issues during analysis
 
-- Memory usage could be high when analyzing many files
+- File system permissions could prevent access to certain directories
 
-- File system permissions in Azure Functions environment
+- Pattern detection may not accurately identify all features
 
-- Potential conflicts with existing .agent/ folder content
+- Generated documentation quality depends on code structure consistency
 
-- Template complexity for generating accurate documentation
+- Analysis time may be significant for large codebases
 
 
 ---
 
 ## Assumptions Made
 
-- The .agent/ folder doesn't already exist or can be overwritten
+- Repository structure follows standard conventions for feature detection
 
-- Azure Functions has sufficient memory and timeout for codebase analysis
+- Project files contain accurate dependency information
 
-- Git operations have write access to create the .agent/ folder
+- Code patterns are consistent enough for automated extraction
 
-- The repository structure follows standard .NET project conventions
+- Mermaid diagram generation can be automated from code structure
 
-- Mermaid diagram syntax will be correctly generated from code analysis
+- File system access permissions allow reading all source files
 
 
 ---
 
 ## Testing Strategy
-Unit tests for file scanning logic, pattern extraction, and template rendering. Integration tests for end-to-end documentation generation. Mock file system for testing different project structures. Validate generated documentation accuracy against known codebase patterns. Test timeout handling for large repositories.
+Unit tests for CodebaseAnalyzer covering file traversal, pattern detection, and exclusion logic. Mock file system operations for consistent test execution. Test DocumentationGenerator with sample code structures. Integration tests for full analysis workflow. Validate generated documentation structure and content accuracy. Test error handling for inaccessible files and malformed project files.
 
 ---
 
 *Generated by Planning Agent*  
-*Timestamp: 2026-02-26T05:37:59.6345485Z*
+*Timestamp: 2026-02-26T05:44:19.7642187Z*
