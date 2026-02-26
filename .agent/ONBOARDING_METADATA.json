@@ -1,0 +1,13 @@
+{
+  "generatedOn": "2026-02-26T04:17:02.1365252Z",
+  "scanCount": 1,
+  "source": "github-rest-api",
+  "branch": "main",
+  "headSha": "7a22e92e41c854e76e8450fa0e8570a71cb7fc9d",
+  "filesScanned": 290,
+  "totalBytesScanned": 2123381,
+  "treeNodeCount": 342,
+  "treeTruncated": false,
+  "includeGitHistory": true,
+  "highValueFilesFetched": 8
+}
