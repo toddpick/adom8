@@ -756,13 +756,14 @@
         }
 
         .codebase-panel .codebase-badge {
+            display: block;
             width: 100%;
-            justify-content: space-between;
             max-width: 100%;
             border-radius: 10px;
             padding: 10px 12px;
-            font-size: 0.74rem;
+            font-size: 0.9rem;
             min-height: 36px;
+            box-sizing: border-box;
         }
 
         .codebase-meta {
@@ -790,31 +791,33 @@
         }
 
         .codebase-scan-btn {
-            background: rgba(255, 255, 255, 0.75);
-            color: inherit;
-            border: 1px solid currentColor;
-            border-radius: 999px;
-            width: 18px;
-            height: 18px;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
+            display: block;
+            width: 100%;
+            margin-top: 8px;
+            padding: 7px 12px;
+            background: rgba(255, 255, 255, 0.08);
+            color: #ccc;
+            border: 1px solid #555;
+            border-radius: 6px;
             cursor: pointer;
-            font-size: 0.65rem;
-            line-height: 1;
-            flex-shrink: 0;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-align: center;
             transition: all 0.2s ease;
+            box-sizing: border-box;
         }
 
         .codebase-scan-btn:hover {
-            background: #fff;
+            background: rgba(255, 255, 255, 0.15);
+            border-color: #888;
+            color: #fff;
             transform: translateY(-1px);
         }
 
         .codebase-scan-btn.urgent {
             border-color: #ff9800;
-            color: #b26a00;
-            background: rgba(255, 152, 0, 0.08);
+            color: #ff9800;
+            background: rgba(255, 152, 0, 0.1);
         }
 
         .function-key-btn {
@@ -847,10 +850,6 @@
             border-color: #f59e0b;
             color: #fbbf24;
             background: rgba(245, 158, 11, 0.12);
-        }
-
-        .codebase-badge.not-initialized .codebase-scan-btn:hover {
-            background: rgba(255, 152, 0, 0.2);
         }
 
         /* Onboarding Card */
@@ -1117,13 +1116,13 @@
         }
 
         body.dark-mode .codebase-scan-btn {
-            background: #252540;
-            color: #ccc;
+            background: rgba(255, 255, 255, 0.06);
+            color: #aaa;
             border-color: #444;
         }
 
         body.dark-mode .codebase-scan-btn:hover {
-            background: #2f2f4f;
+            background: rgba(100, 181, 246, 0.12);
             border-color: #64b5f6;
             color: #64b5f6;
         }
@@ -3684,10 +3683,10 @@
             <div class="codebase-panel">
                 <div class="sidebar-header">🧠 Codebase Intelligence</div>
                 <div class="codebase-panel-body">
-                    <span class="codebase-badge not-initialized" id="codebase-badge" title="Codebase documentation status">
+                    <div class="codebase-badge not-initialized" id="codebase-badge" title="Codebase documentation status">
                         <span id="codebase-badge-label">⚠ Codebase Not Initialized</span>
-                        <button class="codebase-scan-btn" id="btn-scan-codebase" onclick="openScanModal(); event.stopPropagation();" title="Initialize codebase documentation" aria-label="Initialize or re-analyze codebase">🔄</button>
-                    </span>
+                    </div>
+                    <button class="codebase-scan-btn" id="btn-scan-codebase" onclick="openScanModal(); event.stopPropagation();" title="Initialize codebase documentation" aria-label="Initialize or re-analyze codebase">Initialize Codebase</button>
                     <div class="codebase-meta" id="codebase-last-scan">Last Codebase Scan: Never</div>
                 </div>
             </div>
@@ -5908,7 +5907,7 @@
                             }
 
                     if (scanBtn) {
-                        scanBtn.textContent = '🔄';
+                        scanBtn.textContent = 'Re-Analyze Codebase';
                         scanBtn.title = data.recommendReanalysis
                             ? 'Re-analyze codebase (recommended)'
                             : 'Re-analyze codebase';
@@ -5925,7 +5924,7 @@
                         lastScanMeta.textContent = 'Last Codebase Scan: Never';
                     }
                     if (scanBtn) {
-                        scanBtn.textContent = '🔄';
+                        scanBtn.textContent = 'Initialize Codebase';
                         scanBtn.title = 'Initialize codebase documentation';
                         scanBtn.classList.add('urgent');
                     }
@@ -5948,7 +5947,7 @@
                     lastScanMeta.textContent = 'Last Codebase Scan: Unknown';
                 }
                 if (scanBtn) {
-                    scanBtn.textContent = '🔄';
+                    scanBtn.textContent = 'Initialize Codebase';
                     scanBtn.title = 'Try codebase status check again';
                 }
             }
