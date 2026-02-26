@@ -107,6 +107,9 @@ public sealed class GetCurrentStatus
 
         var status = new DashboardStatus
         {
+            AdoProjectName = string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("AZURE_DEVOPS_PROJECT"))
+                ? null
+                : Environment.GetEnvironmentVariable("AZURE_DEVOPS_PROJECT"),
             CurrentWorkItem = currentWorkItem,
             Stories = storyStatuses,
             Stats = new DashboardStats

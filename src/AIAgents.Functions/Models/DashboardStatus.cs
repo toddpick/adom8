@@ -7,6 +7,9 @@ namespace AIAgents.Functions.Models;
 /// </summary>
 public sealed class DashboardStatus
 {
+    [JsonPropertyName("adoProjectName")]
+    public string? AdoProjectName { get; init; }
+
     [JsonPropertyName("currentWorkItem")]
     public CurrentWorkItemInfo? CurrentWorkItem { get; init; }
 

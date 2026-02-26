@@ -3554,7 +3554,7 @@
             ADOm8
         </a>
         <span class="nav-separator">/</span>
-        <span class="nav-project">__ADO_PROJECT_NAME__</span>
+        <span class="nav-project" id="nav-project-name">__ADO_PROJECT_NAME__</span>
 
         <div class="top-nav-stats" id="top-nav-stats">
             <span class="top-stat-pill">Stories <span class="value" id="stat-stories">0</span></span>
@@ -5064,7 +5064,19 @@
             }
         }
 
+        function updateTopNavProjectName(data) {
+            const projectEl = document.getElementById('nav-project-name');
+            if (!projectEl) return;
+
+            const projectName = safeText(data?.adoProjectName, '').trim();
+            if (projectName) {
+                projectEl.textContent = projectName;
+            }
+        }
+
         function updateDashboard(data) {
+            updateTopNavProjectName(data);
+
             // Current Work Item
             updateWorkItem(data);
 
