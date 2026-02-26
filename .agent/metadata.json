@@ -1,24 +1,27 @@
 {
-  "lastAnalysis": "2026-02-26T05:51:20.777Z",
-  "filesAnalyzed": 305,
-  "linesOfCode": 22090,
-  "featuresDocumented": 5,
-  "languagesDetected": [
-    "C#",
-    "JavaScript",
-    "HCL",
-    "Python",
-    "PowerShell"
-  ],
-  "primaryFramework": ".NET 8 Azure Functions",
-  "documentationSizeKB": 152,
-  "featuresDocumentedList": [
-    "agent-pipeline",
-    "ado-integration",
-    "ai-client",
-    "git-operations",
-    "codebase-intelligence",
-    "dashboard",
-    "copilot-integration"
-  ]
+"lastAnalysis": "2026-02-26T05:51:20.777Z",
+"lastCommitHash": "6ea0ae4c327a31afb10b70a6b4ab45de0b52282e",
+"filesAnalyzed": 305,
+"linesOfCode": 22090,
+"userStoriesReviewed": 1,
+"commitsAnalyzed": 30,
+"featuresDocumented": 5,
+"languagesDetected": [
+"C#",
+"JavaScript",
+"HCL",
+"Python",
+"PowerShell"
+],
+"primaryFramework": ".NET 8 Azure Functions",
+"documentationSizeKB": 152,
+"featuresDocumentedList": [
+"agent-pipeline",
+"ado-integration",
+"ai-client",
+"git-operations",
+"codebase-intelligence",
+"dashboard",
+"copilot-integration"
+]
 }
