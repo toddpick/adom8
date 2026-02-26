@@ -18,7 +18,7 @@ Provide context for:
 | `TECH_STACK.md` | Languages, frameworks, tools, and versions |
 | `ARCHITECTURE.md` | System design, component diagrams, data flow |
 | `CODING_STANDARDS.md` | Conventions, patterns, examples (**critical for consistency**) |
-| `DATABASE_SCHEMA.md` | Tables, relationships, ORM patterns |
+| `DATABASE_SCHEMA.md` | Azure Table Storage tables, Git-based state schema |
 | `API_REFERENCE.md` | Endpoints, authentication, request/response formats |
 | `COMMON_PATTERNS.md` | How to add features, handle errors, write tests |
 | `FEATURES/` | Per-feature deep dives (one file per major feature) |
@@ -84,14 +84,11 @@ The `.agent/` folder should **NOT** be in `.gitignore` because:
 
 ## Last Updated
 
-This README is a template. When CodebaseDocumentationAgent runs, it populates this file with actual statistics:
-
-- **Generated:** *(timestamp populated by agent)*
-- **Source files analyzed:** *(count populated by agent)*
-- **Historical stories reviewed:** *(count populated by agent)*
-- **Git commits analyzed:** *(count populated by agent)*
-- **Major features documented:** *(count populated by agent)*
-- **Next refresh recommended:** *(date populated by agent — typically 3 months out)*
+- **Generated:** 2026-02-26T05:51:20.777Z
+- **Source files analyzed:** 305
+- **Lines of code:** 22,090 (C# source)
+- **Major features documented:** 7 (agent-pipeline, ado-integration, ai-client, git-operations, codebase-intelligence, dashboard, copilot-integration)
+- **Next refresh recommended:** 2026-05-26
 
 ---
 

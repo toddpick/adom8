@@ -1,8 +1,8 @@
 {
   "workItemId": 110,
-  "currentState": "AI Code",
+  "currentState": "AI Review",
   "createdAt": "2026-02-26T04:22:50.0311277Z",
-  "updatedAt": "2026-02-26T05:50:40.1517706Z",
+  "updatedAt": "2026-02-26T06:49:38.7586952Z",
   "agents": {
     "Planning": {
       "status": "in_progress",
@@ -11,19 +11,42 @@
       "additionalData": null
     },
     "Coding": {
-      "status": "in_progress",
-      "startedAt": "2026-02-26T05:50:40.1513826Z",
-      "completedAt": null,
+      "status": "completed",
+      "startedAt": null,
+      "completedAt": "2026-02-26T06:49:38.7580351Z",
       "additionalData": {
-        "mode": "copilot-delegated",
+        "mode": "copilot",
+        "copilotPrNumber": 92,
         "issueNumber": 91,
-        "delegatedAt": "2026-02-26T05:50:40.1513864Z",
-        "agent": "copilot"
+        "filesChanged": 10,
+        "linesAdded": 1197,
+        "linesDeleted": 21,
+        "durationMinutes": 58.92197416333333,
+        "commitCount": 2
+      }
+    },
+    "Testing": {
+      "status": "skipped",
+      "startedAt": null,
+      "completedAt": "2026-02-26T06:49:38.7581475Z",
+      "additionalData": {
+        "reason": "Copilot coding agent already runs tests"
       }
     }
   },
   "artifacts": {
-    "code": [],
+    "code": [
+      ".agent/DATABASE_SCHEMA.md",
+      ".agent/FEATURES/ado-integration.md",
+      ".agent/FEATURES/agent-pipeline.md",
+      ".agent/FEATURES/ai-client.md",
+      ".agent/FEATURES/codebase-intelligence.md",
+      ".agent/FEATURES/copilot-integration.md",
+      ".agent/FEATURES/dashboard.md",
+      ".agent/FEATURES/git-operations.md",
+      ".agent/README.md",
+      ".agent/metadata.json"
+    ],
     "tests": [],
     "docs": []
   },
@@ -35,6 +58,15 @@
     "totalTokens": 0,
     "totalCost": 0,
     "complexity": "XS",
-    "agents": {}
+    "agents": {
+      "Coding": {
+        "inputTokens": 0,
+        "outputTokens": 0,
+        "totalTokens": 0,
+        "estimatedCost": 0,
+        "model": "copilot-coding-agent",
+        "callCount": 1
+      }
+    }
   }
 }
