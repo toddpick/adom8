@@ -4,7 +4,7 @@
 
 **ID:** US-110  
 **Title:** Initialize Codebase Intelligence Documentation  
-**State:** AI Agent  
+**State:** Needs Revision  
 **Created:** 2026-02-26
 
 ### Description
@@ -124,59 +124,41 @@ No acceptance criteria
 ## Technical Analysis
 
 ### Problem Analysis
-This story requires creating comprehensive AI-optimized documentation by scanning the entire repository and generating structured markdown files in a .agent/ folder. The documentation will serve as context for future AI agents working on the codebase. The task involves file system traversal, code pattern analysis, tech stack detection, and structured documentation generation with Mermaid diagrams.
+This story requires creating a comprehensive codebase intelligence system that scans the entire repository and generates AI-optimized documentation in a .agent/ folder. The system needs to analyze file structure, detect technology stack, identify coding patterns, extract features, and generate multiple documentation files with real examples and Mermaid diagrams. The documentation will serve as context for future AI agents working on the codebase.
 
 ### Recommended Approach
-Implement a new agent service that performs repository analysis and documentation generation. The agent will: 1) Traverse the file system excluding build directories, 2) Detect tech stack from project files, 3) Sample key source files to understand patterns, 4) Extract coding conventions and architectural patterns, 5) Identify features through folder/class name analysis, 6) Generate structured markdown documentation with real examples and Mermaid diagrams, 7) Create metadata files with analysis statistics. All documentation will reference actual file paths and code patterns from the repository.
+Implement a new agent service (CodebaseIntelligenceAgentService) that performs repository analysis in phases: 1) File system mapping with exclusion filters, 2) Tech stack detection from project files, 3) Source code sampling and pattern analysis, 4) Feature detection via naming conventions and keywords, 5) Documentation generation using Scriban templates, 6) Metadata collection and JSON generation, 7) Git commit of all generated files. The service will use existing IGitOperations for file I/O and LibGit2Sharp for commits.
 
 ### Affected Files
 
 - `src/AIAgents.Functions/Agents/CodebaseIntelligenceAgentService.cs`
 
-- `src/AIAgents.Core/Models/CodebaseAnalysis.cs`
+- `src/AIAgents.Core/Services/CodebaseAnalyzer.cs`
 
-- `src/AIAgents.Core/Models/FeatureDetection.cs`
+- `src/AIAgents.Core/Services/TechStackDetector.cs`
 
-- `src/AIAgents.Core/Services/CodebaseScanner.cs`
+- `src/AIAgents.Core/Services/FeatureDetector.cs`
 
-- `src/AIAgents.Core/Services/DocumentationGenerator.cs`
+- `src/AIAgents.Core/Models/CodebaseAnalysisResult.cs`
 
-- `src/AIAgents.Core/Templates/codebase-context.scriban`
+- `src/AIAgents.Core/Models/TechStackInfo.cs`
 
-- `src/AIAgents.Core/Templates/architecture-diagram.scriban`
+- `src/AIAgents.Core/Models/FeatureInfo.cs`
+
+- `src/AIAgents.Core/Templates/codebase-intelligence/*.scriban`
+
+- `src/AIAgents.Functions/Functions/CodebaseIntelligenceFunction.cs`
+
+- `src/AIAgents.Functions/Program.cs`
 
 - `src/AIAgents.Functions.Tests/Agents/CodebaseIntelligenceAgentServiceTests.cs`
-
-- `.agent/CONTEXT_INDEX.md`
-
-- `.agent/TECH_STACK.md`
-
-- `.agent/ARCHITECTURE.md`
-
-- `.agent/CODING_STANDARDS.md`
-
-- `.agent/COMMON_PATTERNS.md`
-
-- `.agent/TESTING_STRATEGY.md`
-
-- `.agent/DEPLOYMENT.md`
-
-- `.agent/API_REFERENCE.md`
-
-- `.agent/DATABASE_SCHEMA.md`
-
-- `.agent/FEATURES/*.md`
-
-- `.agent/metadata.json`
-
-- `.agent/README.md`
 
 
 ### Complexity Estimate
 **Story Points:** 13
 
 ### Architecture Considerations
-The solution follows the existing agent pattern with a new CodebaseIntelligenceAgentService that orchestrates repository scanning and documentation generation. Core services (CodebaseScanner, DocumentationGenerator) handle the analysis logic, while Scriban templates format the output. The agent integrates with existing Git operations for file access and uses the standard agent result pattern for error handling.
+The solution follows the existing agent pattern with a new CodebaseIntelligenceAgentService that orchestrates multiple analysis services. CodebaseAnalyzer handles file system traversal and sampling, TechStackDetector identifies frameworks from project files, FeatureDetector uses heuristics to identify functional areas. All services use dependency injection and follow existing error handling patterns. Documentation generation uses Scriban templates for consistency with other agents.
 
 ---
 
@@ -184,39 +166,37 @@ The solution follows the existing agent pattern with a new CodebaseIntelligenceA
 
 ### Sub-Tasks
 
-1. Create CodebaseScanner service for file system traversal and tech stack detection
+1. Create CodebaseAnalyzer service for file system mapping and exclusion filtering
 
-2. Implement DocumentationGenerator service with Scriban templates
+2. Implement TechStackDetector to parse project files (csproj, package.json, etc.)
 
-3. Create CodebaseAnalysis and FeatureDetection models
+3. Build FeatureDetector with keyword and naming pattern recognition
 
-4. Develop CodebaseIntelligenceAgentService with AI-assisted analysis
+4. Create Scriban templates for all documentation files (9 core + conditional files)
 
-5. Create Scriban templates for each documentation file type
+5. Implement CodebaseIntelligenceAgentService with full analysis pipeline
 
-6. Implement feature detection logic based on folder/class name patterns
+6. Add HTTP function endpoint for triggering codebase analysis
 
-7. Add Mermaid diagram generation for architecture visualization
+7. Create comprehensive unit tests for all analysis components
 
-8. Create metadata.json generation with analysis statistics
-
-9. Implement comprehensive unit tests for all components
-
-10. Register new agent service in DI container
+8. Update Program.cs with new service registrations
 
 
 ### Dependencies
 
 
-- Existing Git operations service for repository access
+- Existing IGitOperations interface for file I/O operations
 
-- Scriban template engine for documentation formatting
+- LibGit2Sharp for Git operations and commits
 
-- AI client for intelligent code pattern analysis
+- Scriban template engine for documentation generation
 
-- File system access for repository traversal
+- System.IO for file system operations
 
-- JSON serialization for metadata generation
+- System.Text.Json for metadata.json generation
+
+- Existing logging and error handling infrastructure
 
 
 
@@ -226,38 +206,36 @@ The solution follows the existing agent pattern with a new CodebaseIntelligenceA
 
 ### Identified Risks
 
-- Large repository scanning could exceed function timeout limits
+- Large repositories may cause memory issues during analysis - need streaming/batching approach
 
-- Memory usage could be high when analyzing many files
+- File system permissions may prevent reading certain directories
 
-- AI token costs could be significant for large codebases
+- Analysis time may exceed Azure Functions timeout limits for very large codebases
 
-- File system permissions issues in Azure Functions environment
-
-- Potential conflicts if .agent/ folder already exists
+- Generated documentation size may be very large for complex repositories
 
 
 ---
 
 ## Assumptions Made
 
-- Repository is accessible via existing Git operations service
+- Repository structure follows standard conventions for tech stack detection
 
-- Standard project file patterns exist for tech stack detection
+- Feature detection heuristics will work reasonably well across different codebases
 
-- Function execution time limits allow for complete repository scanning
+- Generated documentation will fit within reasonable file size limits
 
-- AI provider can handle large context for code analysis
+- Mermaid diagram generation can be done programmatically from code analysis
 
-- File system write permissions exist for .agent/ folder creation
+- Repository has sufficient permissions for reading all source files
 
 
 ---
 
 ## Testing Strategy
-Unit tests for CodebaseScanner file traversal and filtering logic, DocumentationGenerator template rendering, feature detection algorithms, and agent service orchestration. Mock file system operations and AI responses. Integration tests for end-to-end documentation generation with sample repository structures. Validate generated documentation structure and content accuracy.
+Unit tests for each analysis service with mock file systems and sample project files. Integration tests with real repository structures. Test coverage for all supported project file types and feature detection patterns. Performance tests with large file sets. Error handling tests for permission issues and malformed project files.
 
 ---
 
 *Generated by Planning Agent*  
-*Timestamp: 2026-02-26T04:23:19.7463154Z*
+*Timestamp: 2026-02-26T04:45:40.6203055Z*
