@@ -72,49 +72,41 @@ public sealed class CopilotBridgeWebhookTests
     // ========== READINESS GATING TESTS ==========
 
     [Fact]
-    public void IsReadyToReconcile_ReadyForReview_AlwaysTrue()
-    {
-        var result = CopilotBridgeWebhook.IsReadyToReconcile(
-            action: "ready_for_review",
-            isDraft: true,
-            prTitle: "Draft PR",
-            hasReviewers: false);
-
-        Assert.True(result);
-    }
-
-    [Fact]
-    public void IsReadyToReconcile_Opened_NeedsTwoSignals()
+    public void IsReadyToReconcile_Opened_AlwaysFalse()
     {
         var result = CopilotBridgeWebhook.IsReadyToReconcile(
             action: "opened",
-            isDraft: true,
-            prTitle: "[WIP] Work in progress",
-            hasReviewers: true);
+            prTitle: "Feature implementation");
 
         Assert.False(result);
     }
 
     [Fact]
-    public void IsReadyToReconcile_Edited_TwoSignalsTrue()
+    public void IsReadyToReconcile_Edited_WipFalse_True()
     {
         var result = CopilotBridgeWebhook.IsReadyToReconcile(
             action: "edited",
-            isDraft: false,
-            prTitle: "Feature implementation",
-            hasReviewers: false);
+            prTitle: "Feature implementation");
 
         Assert.True(result);
     }
 
     [Fact]
-    public void IsReadyToReconcile_ReviewRequested_DraftWip_True()
+    public void IsReadyToReconcile_Synchronize_WipTrue_False()
     {
         var result = CopilotBridgeWebhook.IsReadyToReconcile(
-            action: "review_requested",
-            isDraft: true,
-            prTitle: "[WIP] Feature implementation",
-            hasReviewers: true);
+            action: "synchronize",
+            prTitle: "[WIP] Feature implementation");
+
+        Assert.False(result);
+    }
+
+    [Fact]
+    public void IsReadyToReconcile_ReadyForReview_WipFalse_True()
+    {
+        var result = CopilotBridgeWebhook.IsReadyToReconcile(
+            action: "ready_for_review",
+            prTitle: "Feature implementation");
 
         Assert.True(result);
     }

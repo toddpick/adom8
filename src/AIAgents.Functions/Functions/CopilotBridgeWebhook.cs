@@ -19,14 +19,13 @@ namespace AIAgents.Functions.Functions;
 /// <summary>
 /// HTTP-triggered Azure Function that handles GitHub webhook events for Copilot coding agent PRs.
 /// 
-/// Uses PR-readiness heuristics to detect when Copilot has finished coding:
+/// Uses PR-update heuristics to detect when Copilot has finished coding:
 /// 1. Validates the GitHub webhook signature (X-Hub-Signature-256)
-/// 2. Listens for pull_request events: ready_for_review, edited, review_requested, opened
-/// 3. Scores 3 readiness signals: draft==false, no [WIP] in title, reviewer requested
-/// 4. Requires at least 2 of 3 signals before treating the PR as complete
-/// 5. Matches the PR to a pending Copilot delegation by US-{id} in title/body or branch name
-/// 6. Reconciles files from Copilot's PR branch onto the pipeline branch
-/// 7. Closes Copilot's PR and resumes the pipeline by enqueuing the Review agent
+/// 2. Listens for pull_request update events (edited/review_requested/synchronize/ready_for_review)
+/// 3. Waits for non-[WIP] title and at least one changed file before treating PR as complete
+/// 4. Matches the PR to a pending Copilot delegation by US-{id} in title/body or branch name
+/// 5. Reconciles files from Copilot's PR branch onto the pipeline branch
+/// 6. Resumes the pipeline by enqueuing the Review agent
 /// 
 /// The CopilotTimeoutChecker timer serves as a safety-net fallback if the webhook
 /// is not triggered (e.g., Copilot leaves the PR as draft indefinitely).
@@ -106,24 +105,18 @@ public sealed class CopilotBridgeWebhook
     }
 
     /// <summary>
-    /// Handles pull_request webhook events using readiness heuristics.
+    /// Handles pull_request webhook events using update heuristics.
     /// 
-    /// Copilot creates draft PRs while working and marks them ready when done.
-    /// We score 3 signals to determine if Copilot has truly finished:
-    ///   1. draft == false (PR is not a draft)
-    ///   2. Title does not contain [WIP]
-    ///   3. A reviewer has been requested
-    /// 
-    /// At least 2 of 3 signals must be present before we reconcile and resume
-    /// the pipeline. This prevents premature triggering on intermediate states.
+    /// We intentionally do not proceed on PR creation (`opened`) to avoid premature
+    /// advancement before Copilot has produced meaningful updates.
     /// </summary>
     private async Task<HttpResponseData> HandlePullRequestEventAsync(
         HttpRequestData req, JsonElement root, CancellationToken cancellationToken)
     {
         var action = root.GetProperty("action").GetString() ?? "";
 
-        // Only react to actions that indicate Copilot may have finished
-        if (action is not ("opened" or "ready_for_review" or "edited" or "review_requested"))
+        // Only react to PR update actions, not initial creation.
+        if (action is not ("ready_for_review" or "edited" or "review_requested" or "synchronize"))
         {
             _logger.LogDebug("Ignoring pull_request action: {Action}", action);
             return req.CreateResponse(HttpStatusCode.OK);
@@ -133,38 +126,27 @@ public sealed class CopilotBridgeWebhook
         var prNumber = pr.GetProperty("number").GetInt32();
         var prTitle = pr.GetProperty("title").GetString() ?? "";
         var prBody = pr.TryGetProperty("body", out var bodyProp) ? bodyProp.GetString() ?? "" : "";
-        var isDraft = pr.TryGetProperty("draft", out var draftProp) && draftProp.GetBoolean();
-        var hasReviewers = pr.TryGetProperty("requested_reviewers", out var reviewersProp)
-                           && reviewersProp.ValueKind == JsonValueKind.Array
-                           && reviewersProp.GetArrayLength() > 0;
         var copilotBranch = pr.GetProperty("head").GetProperty("ref").GetString() ?? "";
         var baseBranch = pr.TryGetProperty("base", out var baseProp)
             ? baseProp.TryGetProperty("ref", out var baseRef) ? baseRef.GetString() ?? "" : ""
             : "";
 
-        // ── Readiness heuristic scoring ──
-        // Signal 1: PR is not a draft
-        var notDraft = !isDraft;
-        // Signal 2: Title does not contain [WIP]
+        // ── Update gating ──
         var notWip = !prTitle.Contains("[WIP]", StringComparison.OrdinalIgnoreCase);
-        // Signal 3: At least one reviewer has been requested
-        var reviewerRequested = hasReviewers;
-
-        var signals = (notDraft ? 1 : 0) + (notWip ? 1 : 0) + (reviewerRequested ? 1 : 0);
-        var isReady = IsReadyToReconcile(action, isDraft, prTitle, hasReviewers);
+        var isReady = IsReadyToReconcile(action, prTitle);
 
         _logger.LogInformation(
-            "PR #{PrNumber} action={Action}: draft={IsDraft}, wip={HasWip}, reviewers={HasReviewers} → {Signals}/3 readiness signals",
-            prNumber, action, isDraft, !notWip, hasReviewers, signals);
+            "PR #{PrNumber} action={Action}: wip={HasWip}, ready={IsReady}",
+            prNumber, action, !notWip, isReady);
 
         if (!isReady)
         {
             _logger.LogInformation(
-                "PR #{PrNumber} has only {Signals}/3 readiness signals — not ready yet, waiting for more signals",
-                prNumber, signals);
+                "PR #{PrNumber} is not ready — waiting for update action and non-[WIP] title",
+                prNumber);
             var waitResponse = req.CreateResponse(HttpStatusCode.OK);
             await waitResponse.WriteStringAsync(
-                $"PR #{prNumber} not ready ({signals}/3 signals). Waiting.", cancellationToken);
+                $"PR #{prNumber} not ready. Waiting.", cancellationToken);
             return waitResponse;
         }
 
@@ -205,16 +187,25 @@ public sealed class CopilotBridgeWebhook
         }
 
         _logger.LogInformation(
-            "Copilot PR #{PrNumber} ready for WI-{WorkItemId} ({Signals}/3 signals, action={Action}) — reconciling",
-            prNumber, delegation.WorkItemId, signals, action);
+            "Copilot PR #{PrNumber} ready for WI-{WorkItemId} (action={Action}, wip={HasWip}) — reconciling",
+            prNumber, delegation.WorkItemId, action, !notWip);
 
         try
         {
-            await _activityLogger.LogAsync("Coding", delegation.WorkItemId,
-                $"Copilot PR #{prNumber} ready ({signals}/3 signals: draft={isDraft}, wip={!notWip}, reviewers={hasReviewers}) — reconciling",
-                "info", cancellationToken);
+            try
+            {
+                await _activityLogger.LogAsync("Coding", delegation.WorkItemId,
+                    $"Copilot PR #{prNumber} ready (action={action}, wip={!notWip}) — reconciling",
+                    "info", cancellationToken);
+            }
+            catch (Exception logEx)
+            {
+                _logger.LogWarning(logEx,
+                    "Non-critical activity log failed before reconciliation for PR #{PrNumber} WI-{WorkItemId}",
+                    prNumber, delegation.WorkItemId);
+            }
 
-            await ReconcileAndResumeAsync(delegation, prNumber, copilotBranch, cancellationToken);
+            await ReconcileAndResumeAsync(delegation, prNumber, copilotBranch, CancellationToken.None);
 
             var response = req.CreateResponse(HttpStatusCode.OK);
             await response.WriteStringAsync(
@@ -223,10 +214,21 @@ public sealed class CopilotBridgeWebhook
         }
         catch (Exception ex)
         {
+            var errorDetails = FormatExceptionDetails(ex);
             _logger.LogError(ex,
-                "Failed to reconcile Copilot PR #{PrNumber} for WI-{WorkItemId}", prNumber, delegation.WorkItemId);
-            await _activityLogger.LogAsync("Coding", delegation.WorkItemId,
-                $"Error reconciling Copilot PR #{prNumber}: {ex.Message}", "error", cancellationToken);
+                "Failed to reconcile Copilot PR #{PrNumber} for WI-{WorkItemId}. Details: {ErrorDetails}",
+                prNumber, delegation.WorkItemId, errorDetails);
+            try
+            {
+                await _activityLogger.LogAsync("Coding", delegation.WorkItemId,
+                    $"Error reconciling Copilot PR #{prNumber}: {errorDetails}", "error", CancellationToken.None);
+            }
+            catch (Exception logEx)
+            {
+                _logger.LogWarning(logEx,
+                    "Non-critical activity log failed while reporting reconciliation error for PR #{PrNumber} WI-{WorkItemId}",
+                    prNumber, delegation.WorkItemId);
+            }
             return req.CreateResponse(HttpStatusCode.InternalServerError);
         }
     }
@@ -242,8 +244,17 @@ public sealed class CopilotBridgeWebhook
     {
         var workItemId = delegation.WorkItemId;
 
-        await _activityLogger.LogAsync("Coding", workItemId,
-            $"Copilot PR #{prNumber} received — reconciling changes", "info", cancellationToken);
+        try
+        {
+            await _activityLogger.LogAsync("Coding", workItemId,
+                $"Copilot PR #{prNumber} received — reconciling changes", "info", cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex,
+                "Non-critical activity log failed for PR #{PrNumber} WI-{WorkItemId}",
+                prNumber, workItemId);
+        }
 
         // Fetch PR file list and metrics from GitHub API
         var (changedFiles, metrics) = await FetchPrDetailsAsync(prNumber, delegation.DelegatedAt, cancellationToken);
@@ -255,8 +266,17 @@ public sealed class CopilotBridgeWebhook
             _logger.LogInformation(
                 "PR #{PrNumber} for WI-{WorkItemId} has no changed files yet — skipping reconciliation",
                 prNumber, workItemId);
-            await _activityLogger.LogAsync("Coding", workItemId,
-                $"Copilot PR #{prNumber} has no file changes yet — waiting for code", "info", cancellationToken);
+            try
+            {
+                await _activityLogger.LogAsync("Coding", workItemId,
+                    $"Copilot PR #{prNumber} has no file changes yet — waiting for code", "info", cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex,
+                    "Non-critical activity log failed for empty-change PR #{PrNumber} WI-{WorkItemId}",
+                    prNumber, workItemId);
+            }
             return;
         }
 
@@ -276,12 +296,6 @@ public sealed class CopilotBridgeWebhook
             catch (Exception ex) { _logger.LogWarning(ex, "Failed to close issue #{IssueNumber} — may already be closed", delegation.IssueNumber); }
         }
 
-        // Update delegation record
-        delegation.Status = "Completed";
-        delegation.CopilotPrNumber = prNumber;
-        delegation.CompletedAt = DateTime.UtcNow;
-        await _delegationService.UpdateAsync(delegation, cancellationToken);
-
         // Update ADO work item
         try { await _adoClient.UpdateWorkItemFieldAsync(workItemId, CustomFieldNames.Paths.LastAgent, "Coding", cancellationToken); }
         catch { /* field may not exist yet */ }
@@ -290,17 +304,35 @@ public sealed class CopilotBridgeWebhook
         try { await _adoClient.UpdateWorkItemFieldAsync(workItemId, CustomFieldNames.Paths.CurrentAIAgent, AIPipelineNames.CurrentAgentValues.Review, cancellationToken); }
         catch { /* field may not exist yet */ }
 
-        await _activityLogger.LogAsync("Testing", workItemId,
-            "Testing skipped — GitHub Copilot coding session already validated changes",
-            "info", cancellationToken);
+        try
+        {
+            await _activityLogger.LogAsync("Testing", workItemId,
+                "Testing skipped — GitHub Copilot coding session already validated changes",
+                "info", cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex,
+                "Non-critical activity log failed for Testing skip note on WI-{WorkItemId}",
+                workItemId);
+        }
 
-        await _adoClient.AddWorkItemCommentAsync(workItemId,
-            $"<b>🤖 AI Coding Agent Complete (GitHub Copilot)</b><br/>" +
-            $"Strategy: Copilot coding agent<br/>" +
-            $"PR: #{prNumber} | Files: {metrics.FilesChanged} | +{metrics.LinesAdded}/-{metrics.LinesDeleted} lines<br/>" +
-            $"Duration: {metrics.DurationMinutes:F1} minutes | Commits: {metrics.CommitCount}<br/>" +
-            $"Testing skipped (validated by Copilot session) → handing off to Review agent",
-            cancellationToken);
+        try
+        {
+            await _adoClient.AddWorkItemCommentAsync(workItemId,
+                $"<b>🤖 AI Coding Agent Complete (GitHub Copilot)</b><br/>" +
+                $"Strategy: Copilot coding agent<br/>" +
+                $"PR: #{prNumber} | Files: {metrics.FilesChanged} | +{metrics.LinesAdded}/-{metrics.LinesDeleted} lines<br/>" +
+                $"Duration: {metrics.DurationMinutes:F1} minutes | Commits: {metrics.CommitCount}<br/>" +
+                $"Testing skipped (validated by Copilot session) → handing off to Review agent",
+                cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex,
+                "Non-critical ADO comment failed for WI-{WorkItemId} PR #{PrNumber}",
+                workItemId, prNumber);
+        }
 
         // Enqueue Review agent
         var nextTask = new AgentTask
@@ -311,13 +343,27 @@ public sealed class CopilotBridgeWebhook
         };
         await _taskQueue.EnqueueAsync(nextTask, cancellationToken);
 
+        delegation.Status = "Completed";
+        delegation.CopilotPrNumber = prNumber;
+        delegation.CompletedAt = DateTime.UtcNow;
+        await _delegationService.UpdateAsync(delegation, cancellationToken);
+
         // Log 1 token as a marker for "1 premium credit" — Copilot agent sessions
         // cost 1 GitHub premium request regardless of output size.
         var tokensForLog = 1;
         var costForLog = 0m; // No direct API cost — included in GitHub subscription
-        await _activityLogger.LogAsync("Coding", workItemId,
-            $"Copilot coding agent completed successfully — {metrics.FilesChanged} files, +{metrics.LinesAdded}/-{metrics.LinesDeleted} lines, {metrics.DurationMinutes:F1}m, {metrics.CommitCount} commits. Testing skipped → Review. (1 premium credit)",
-            tokensForLog, costForLog, "info", cancellationToken);
+        try
+        {
+            await _activityLogger.LogAsync("Coding", workItemId,
+                $"Copilot coding agent completed successfully — {metrics.FilesChanged} files, +{metrics.LinesAdded}/-{metrics.LinesDeleted} lines, {metrics.DurationMinutes:F1}m, {metrics.CommitCount} commits. Testing skipped → Review. (1 premium credit)",
+                tokensForLog, costForLog, "info", cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex,
+                "Non-critical activity log failed for reconciliation success summary on WI-{WorkItemId}",
+                workItemId);
+        }
 
         _logger.LogInformation(
             "Copilot bridge reconciled PR #{PrNumber} for WI-{WorkItemId} — {Files} files, pipeline resumed (Testing skipped → Review)",
@@ -334,26 +380,37 @@ public sealed class CopilotBridgeWebhook
         return match.Success && int.TryParse(match.Groups[1].Value, out var id) ? id : null;
     }
 
-    internal static bool IsReadyToReconcile(string action, bool isDraft, string prTitle, bool hasReviewers)
+    internal static bool IsReadyToReconcile(string action, string prTitle)
     {
-        if (string.Equals(action, "ready_for_review", StringComparison.OrdinalIgnoreCase))
+        if (string.IsNullOrWhiteSpace(action))
         {
-            return true;
+            return false;
         }
 
-        // Copilot often keeps PRs in draft and may leave [WIP] in the title,
-        // but explicitly requests reviewers once coding is done.
-        if (string.Equals(action, "review_requested", StringComparison.OrdinalIgnoreCase) && hasReviewers)
+        if (string.Equals(action, "opened", StringComparison.OrdinalIgnoreCase))
         {
-            return true;
+            return false;
         }
 
-        var notDraft = !isDraft;
-        var notWip = !prTitle.Contains("[WIP]", StringComparison.OrdinalIgnoreCase);
-        var reviewerRequested = hasReviewers;
-        var signals = (notDraft ? 1 : 0) + (notWip ? 1 : 0) + (reviewerRequested ? 1 : 0);
+        return !prTitle.Contains("[WIP]", StringComparison.OrdinalIgnoreCase);
+    }
 
-        return signals >= 2;
+    private static string FormatExceptionDetails(Exception ex)
+    {
+        var message = string.IsNullOrWhiteSpace(ex.Message)
+            ? "No exception message provided"
+            : ex.Message.Trim();
+
+        if (ex.InnerException is null)
+        {
+            return $"{ex.GetType().Name}: {message}";
+        }
+
+        var innerMessage = string.IsNullOrWhiteSpace(ex.InnerException.Message)
+            ? "No inner exception message provided"
+            : ex.InnerException.Message.Trim();
+
+        return $"{ex.GetType().Name}: {message} | Inner {ex.InnerException.GetType().Name}: {innerMessage}";
     }
 
     /// <summary>
