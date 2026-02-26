@@ -84,4 +84,22 @@ public sealed class CopilotOptions
     /// Can be overridden per-story via the <c>Custom.AICodingProvider</c> ADO field.
     /// </summary>
     public string Model { get; init; } = "copilot";
+
+    /// <summary>
+    /// Enables strict Azure DevOps checkpoint enforcement for Copilot completion handoff.
+    /// When enabled, the Copilot bridge verifies required work item updates before enqueueing Review.
+    /// </summary>
+    public bool CheckpointEnforcementEnabled { get; init; } = true;
+
+    /// <summary>
+    /// Controls behavior when checkpoint enforcement fails.
+    /// When true (default), handoff fails hard and Review is not enqueued.
+    /// </summary>
+    public bool CheckpointFailHard { get; init; } = true;
+
+    /// <summary>
+    /// Comma-separated required ADO checkpoints for Copilot completion handoff.
+    /// Supported values: LastAgent, CurrentAIAgent, CompletionComment.
+    /// </summary>
+    public string RequiredAdoCheckpoints { get; init; } = "LastAgent,CurrentAIAgent,CompletionComment";
 }

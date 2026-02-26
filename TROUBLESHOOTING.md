@@ -137,6 +137,24 @@ flowchart TD
 
 ## Common Issues
 
+### Optional Fine-Tuning: Copilot Checkpoint Enforcement
+
+Use this only if you want to override defaults for Copilot completion handoff enforcement.
+
+Default behavior (already set in `adom8-onboarding-pipeline.yml`):
+- `COPILOT_CHECKPOINT_ENFORCEMENT_ENABLED=true`
+- `COPILOT_CHECKPOINT_FAIL_HARD=true`
+- `COPILOT_REQUIRED_ADO_CHECKPOINTS=LastAgent,CurrentAIAgent,CompletionComment`
+
+What these controls do:
+- `COPILOT_CHECKPOINT_ENFORCEMENT_ENABLED`: verifies required Azure DevOps updates before Review is enqueued.
+- `COPILOT_CHECKPOINT_FAIL_HARD`: blocks pipeline progression when required updates are missing.
+- `COPILOT_REQUIRED_ADO_CHECKPOINTS`: supported values are `LastAgent`, `CurrentAIAgent`, `CompletionComment`.
+
+When to set in pipeline UI Variables:
+- Only when you need non-default behavior for a specific environment.
+- If you keep defaults, you do not need to add these variables manually.
+
 ### Issue 1: Work Items Not Being Picked Up
 
 **Symptoms:**

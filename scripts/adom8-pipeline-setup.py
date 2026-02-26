@@ -39,6 +39,9 @@ def main():
     copilot_complexity_threshold = os.environ.get("COPILOT_COMPLEXITY_THRESHOLD", "8").strip() or "8"
     copilot_create_issue = os.environ.get("COPILOT_CREATE_ISSUE", "true").strip().lower() in ["1", "true", "yes", "on"]
     copilot_model = os.environ.get("COPILOT_MODEL", "copilot").strip() or "copilot"
+    copilot_checkpoint_enforcement_enabled = os.environ.get("COPILOT_CHECKPOINT_ENFORCEMENT_ENABLED", "true").strip().lower() in ["1", "true", "yes", "on"]
+    copilot_checkpoint_fail_hard = os.environ.get("COPILOT_CHECKPOINT_FAIL_HARD", "true").strip().lower() in ["1", "true", "yes", "on"]
+    copilot_required_ado_checkpoints = os.environ.get("COPILOT_REQUIRED_ADO_CHECKPOINTS", "LastAgent,CurrentAIAgent,CompletionComment").strip() or "LastAgent,CurrentAIAgent,CompletionComment"
     copilot_webhook_secret = (os.environ.get("COPILOT_WEBHOOK_SECRET") or "").strip()
     repo_capacity_enabled = os.environ.get("REPO_CAPACITY_ENABLED", "true").strip().lower() in ["1", "true", "yes", "on"]
     repo_capacity_max_working_tree_mb = (os.environ.get("REPO_CAPACITY_MAX_WORKING_TREE_MB", "500").strip() or "500")
@@ -168,6 +171,9 @@ def main():
         f"Copilot__ComplexityThreshold={copilot_complexity_threshold}",
         f"Copilot__CreateIssue={'true' if copilot_create_issue else 'false'}",
         f"Copilot__Model={copilot_model}",
+        f"Copilot__CheckpointEnforcementEnabled={'true' if copilot_checkpoint_enforcement_enabled else 'false'}",
+        f"Copilot__CheckpointFailHard={'true' if copilot_checkpoint_fail_hard else 'false'}",
+        f"Copilot__RequiredAdoCheckpoints={copilot_required_ado_checkpoints}",
         f"AzureDevOps__OrganizationUrl=https://dev.azure.com/{org_name}",
         f"AzureDevOps__Project={args.ado_project}",
         f"Git__Provider=github",

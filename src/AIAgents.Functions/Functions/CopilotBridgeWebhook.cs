@@ -32,6 +32,10 @@ namespace AIAgents.Functions.Functions;
 /// </summary>
 public sealed class CopilotBridgeWebhook
 {
+    private const string CheckpointLastAgent = "LastAgent";
+    private const string CheckpointCurrentAiAgent = "CurrentAIAgent";
+    private const string CheckpointCompletionComment = "CompletionComment";
+
     private readonly CopilotOptions _copilotOptions;
     private readonly GitHubOptions _githubOptions;
     private readonly ICopilotDelegationService _delegationService;
@@ -297,12 +301,32 @@ public sealed class CopilotBridgeWebhook
         }
 
         // Update ADO work item
-        try { await _adoClient.UpdateWorkItemFieldAsync(workItemId, CustomFieldNames.Paths.LastAgent, "Coding", cancellationToken); }
-        catch { /* field may not exist yet */ }
+        var lastAgentUpdated = false;
+        try
+        {
+            await _adoClient.UpdateWorkItemFieldAsync(workItemId, CustomFieldNames.Paths.LastAgent, "Coding", cancellationToken);
+            lastAgentUpdated = true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex,
+                "Failed to update Last Agent for WI-{WorkItemId} during Copilot reconciliation",
+                workItemId);
+        }
 
         // Copilot path: skip Testing and move directly to Review.
-        try { await _adoClient.UpdateWorkItemFieldAsync(workItemId, CustomFieldNames.Paths.CurrentAIAgent, AIPipelineNames.CurrentAgentValues.Review, cancellationToken); }
-        catch { /* field may not exist yet */ }
+        var currentAgentUpdated = false;
+        try
+        {
+            await _adoClient.UpdateWorkItemFieldAsync(workItemId, CustomFieldNames.Paths.CurrentAIAgent, AIPipelineNames.CurrentAgentValues.Review, cancellationToken);
+            currentAgentUpdated = true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex,
+                "Failed to update Current AI Agent for WI-{WorkItemId} during Copilot reconciliation",
+                workItemId);
+        }
 
         try
         {
@@ -317,6 +341,7 @@ public sealed class CopilotBridgeWebhook
                 workItemId);
         }
 
+        var completionCommentAdded = false;
         try
         {
             await _adoClient.AddWorkItemCommentAsync(workItemId,
@@ -326,6 +351,7 @@ public sealed class CopilotBridgeWebhook
                 $"Duration: {metrics.DurationMinutes:F1} minutes | Commits: {metrics.CommitCount}<br/>" +
                 $"Testing skipped (validated by Copilot session) → handing off to Review agent",
                 cancellationToken);
+            completionCommentAdded = true;
         }
         catch (Exception ex)
         {
@@ -334,12 +360,66 @@ public sealed class CopilotBridgeWebhook
                 workItemId, prNumber);
         }
 
+        if (_copilotOptions.CheckpointEnforcementEnabled)
+        {
+            var required = ParseRequiredAdoCheckpoints(_copilotOptions.RequiredAdoCheckpoints);
+            var (passed, missing) = EvaluateRequiredCheckpointStatus(required, lastAgentUpdated, currentAgentUpdated, completionCommentAdded);
+            if (!passed)
+            {
+                var missingLabel = string.Join(", ", missing);
+                var failMessage = $"Checkpoint enforcement blocked Copilot handoff for US-{workItemId}. Missing required updates: {missingLabel}.";
+
+                delegation.Status = _copilotOptions.CheckpointFailHard ? "Failed" : "Pending";
+                delegation.CopilotPrNumber = prNumber;
+                delegation.CompletedAt = _copilotOptions.CheckpointFailHard ? DateTime.UtcNow : null;
+                await _delegationService.UpdateAsync(delegation, cancellationToken);
+
+                try
+                {
+                    await _adoClient.AddWorkItemCommentAsync(workItemId,
+                        $"⚠️ <b>Copilot completion checkpoint enforcement blocked handoff</b><br/>" +
+                        $"PR: #{prNumber}<br/>" +
+                        $"Missing required updates: {missingLabel}<br/>" +
+                        $"Pipeline did not enqueue Review.",
+                        cancellationToken);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex,
+                        "Failed to post checkpoint-enforcement comment for WI-{WorkItemId}",
+                        workItemId);
+                }
+
+                await _activityLogger.LogAsync(
+                    "Coding",
+                    workItemId,
+                    failMessage,
+                    "error",
+                    cancellationToken);
+
+                _logger.LogError(
+                    "Copilot checkpoint enforcement failed for WI-{WorkItemId}. Missing: {Missing}",
+                    workItemId,
+                    missingLabel);
+
+                if (_copilotOptions.CheckpointFailHard)
+                {
+                    throw new InvalidOperationException(failMessage);
+                }
+
+                return;
+            }
+        }
+
         // Enqueue Review agent
         var nextTask = new AgentTask
         {
             WorkItemId = workItemId,
             AgentType = AgentType.Review,
-            CorrelationId = delegation.CorrelationId
+            CorrelationId = delegation.CorrelationId,
+            TriggerSource = nameof(CopilotBridgeWebhook),
+            ResumeFromStage = "Review",
+            HandoffNote = $"Copilot reconciliation complete for PR #{prNumber}"
         };
         await _taskQueue.EnqueueAsync(nextTask, cancellationToken);
 
@@ -394,6 +474,67 @@ public sealed class CopilotBridgeWebhook
 
         return !prTitle.Contains("[WIP]", StringComparison.OrdinalIgnoreCase);
     }
+
+    internal static IReadOnlyList<string> ParseRequiredAdoCheckpoints(string? configured)
+    {
+        var defaults = new[]
+        {
+            CheckpointLastAgent,
+            CheckpointCurrentAiAgent,
+            CheckpointCompletionComment
+        };
+
+        if (string.IsNullOrWhiteSpace(configured))
+        {
+            return defaults;
+        }
+
+        var mapped = configured
+            .Split([',', ';', '|'], StringSplitOptions.RemoveEmptyEntries)
+            .Select(value => value.Trim())
+            .Select(MapCheckpointToken)
+            .Where(value => value is not null)
+            .Select(value => value!)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        return mapped.Count == 0 ? defaults : mapped;
+    }
+
+    internal static (bool Passed, List<string> Missing) EvaluateRequiredCheckpointStatus(
+        IReadOnlyCollection<string> required,
+        bool lastAgentUpdated,
+        bool currentAgentUpdated,
+        bool completionCommentAdded)
+    {
+        var missing = new List<string>();
+
+        foreach (var checkpoint in required)
+        {
+            if (checkpoint.Equals(CheckpointLastAgent, StringComparison.OrdinalIgnoreCase) && !lastAgentUpdated)
+            {
+                missing.Add(CheckpointLastAgent);
+            }
+            else if (checkpoint.Equals(CheckpointCurrentAiAgent, StringComparison.OrdinalIgnoreCase) && !currentAgentUpdated)
+            {
+                missing.Add(CheckpointCurrentAiAgent);
+            }
+            else if (checkpoint.Equals(CheckpointCompletionComment, StringComparison.OrdinalIgnoreCase) && !completionCommentAdded)
+            {
+                missing.Add(CheckpointCompletionComment);
+            }
+        }
+
+        return (missing.Count == 0, missing);
+    }
+
+    private static string? MapCheckpointToken(string value) => value.ToLowerInvariant() switch
+    {
+        "lastagent" or "last_agent" or "last-agent" => CheckpointLastAgent,
+        "currentaiagent" or "current_ai_agent" or "current-agent" => CheckpointCurrentAiAgent,
+        "completioncomment" or "comment" or "completion_comment" => CheckpointCompletionComment,
+        _ => null
+    };
 
     private static string FormatExceptionDetails(Exception ex)
     {

@@ -110,4 +110,60 @@ public sealed class CopilotBridgeWebhookTests
 
         Assert.True(result);
     }
+
+    // ========== CHECKPOINT ENFORCEMENT TESTS ==========
+
+    [Fact]
+    public void ParseRequiredAdoCheckpoints_Empty_UsesDefaults()
+    {
+        var checkpoints = CopilotBridgeWebhook.ParseRequiredAdoCheckpoints("");
+
+        Assert.Equal(3, checkpoints.Count);
+        Assert.Contains("LastAgent", checkpoints);
+        Assert.Contains("CurrentAIAgent", checkpoints);
+        Assert.Contains("CompletionComment", checkpoints);
+    }
+
+    [Fact]
+    public void ParseRequiredAdoCheckpoints_Aliases_Normalized()
+    {
+        var checkpoints = CopilotBridgeWebhook.ParseRequiredAdoCheckpoints("last_agent, current-agent, comment");
+
+        Assert.Equal(3, checkpoints.Count);
+        Assert.Contains("LastAgent", checkpoints);
+        Assert.Contains("CurrentAIAgent", checkpoints);
+        Assert.Contains("CompletionComment", checkpoints);
+    }
+
+    [Fact]
+    public void EvaluateRequiredCheckpointStatus_AllPresent_Passes()
+    {
+        var required = new[] { "LastAgent", "CurrentAIAgent", "CompletionComment" };
+
+        var (passed, missing) = CopilotBridgeWebhook.EvaluateRequiredCheckpointStatus(
+            required,
+            lastAgentUpdated: true,
+            currentAgentUpdated: true,
+            completionCommentAdded: true);
+
+        Assert.True(passed);
+        Assert.Empty(missing);
+    }
+
+    [Fact]
+    public void EvaluateRequiredCheckpointStatus_MissingCurrentAndComment_Fails()
+    {
+        var required = new[] { "LastAgent", "CurrentAIAgent", "CompletionComment" };
+
+        var (passed, missing) = CopilotBridgeWebhook.EvaluateRequiredCheckpointStatus(
+            required,
+            lastAgentUpdated: true,
+            currentAgentUpdated: false,
+            completionCommentAdded: false);
+
+        Assert.False(passed);
+        Assert.Equal(2, missing.Count);
+        Assert.Contains("CurrentAIAgent", missing);
+        Assert.Contains("CompletionComment", missing);
+    }
 }

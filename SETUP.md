@@ -113,6 +113,8 @@ Once the pipeline completes successfully:
 
 Use the generated `.adom8/mcp/*` files as your baseline and complete local client wiring manually.
 
+Advanced Copilot checkpoint tuning is optional and documented in `TROUBLESHOOTING.md` under **Optional Fine-Tuning: Copilot Checkpoint Enforcement**.
+
 ## Re-run Checklist (MyCreditPlan / Existing Projects)
 
 Use this quick checklist after re-running `adom8-onboarding-pipeline.yml` to confirm the latest runtime behavior is active.
