@@ -21,6 +21,7 @@ var host = new HostBuilder()
         services.Configure<DeploymentOptions>(configuration.GetSection(DeploymentOptions.SectionName));
         services.Configure<GitHubOptions>(configuration.GetSection(GitHubOptions.SectionName));
         services.Configure<CodebaseDocumentationOptions>(configuration.GetSection(CodebaseDocumentationOptions.SectionName));
+        services.Configure<RepositoryCapacityOptions>(configuration.GetSection(RepositoryCapacityOptions.SectionName));
         services.Configure<InputValidationOptions>(configuration.GetSection(InputValidationOptions.SectionName));
         services.Configure<CopilotOptions>(configuration.GetSection(CopilotOptions.SectionName));
         services.Configure<SaasOptions>(configuration.GetSection(SaasOptions.SectionName));
@@ -59,10 +60,14 @@ var host = new HostBuilder()
         if (gitProvider.Equals("GitHub", StringComparison.OrdinalIgnoreCase))
         {
             services.AddSingleton<IRepositoryProvider, GitHubRepositoryProvider>();
+            services.AddSingleton<IRepositorySizingService, GitHubRepositorySizingService>();
+            services.AddSingleton<ICodebaseOnboardingService, GitHubCodebaseOnboardingService>();
         }
         else
         {
             services.AddSingleton<IRepositoryProvider, AzureDevOpsRepositoryProvider>();
+            services.AddSingleton<IRepositorySizingService, NoOpRepositorySizingService>();
+            services.AddSingleton<ICodebaseOnboardingService, NoOpCodebaseOnboardingService>();
         }
 
         // Activity logging

@@ -23,6 +23,7 @@ public sealed class AgentTaskDispatcher
     private readonly ILogger<AgentTaskDispatcher> _logger;
     private readonly IActivityLogger _activityLogger;
     private readonly IAzureDevOpsClient _adoClient;
+    private readonly IRepositorySizingService _repositorySizingService;
     private readonly TelemetryClient _telemetry;
     private readonly ISaasCallbackService _saasCallback;
 
@@ -31,6 +32,7 @@ public sealed class AgentTaskDispatcher
         ILogger<AgentTaskDispatcher> logger,
         IActivityLogger activityLogger,
         IAzureDevOpsClient adoClient,
+        IRepositorySizingService repositorySizingService,
         TelemetryClient telemetry,
         ISaasCallbackService saasCallback)
     {
@@ -38,6 +40,7 @@ public sealed class AgentTaskDispatcher
         _logger = logger;
         _activityLogger = activityLogger;
         _adoClient = adoClient;
+        _repositorySizingService = repositorySizingService;
         _telemetry = telemetry;
         _saasCallback = saasCallback;
     }
@@ -134,6 +137,50 @@ public sealed class AgentTaskDispatcher
                     agentTask.WorkItemId,
                     $"Skipped — work item is in state '{currentState}' (too early for {agentTask.AgentType}). Stale queue message discarded.",
                     cancellationToken: cancellationToken);
+
+                return;
+            }
+        }
+
+        if (RequiresCloneCapacityCheck(agentTask.AgentType))
+        {
+            var sizing = await _repositorySizingService.EvaluateAsync(cancellationToken);
+            if (sizing.CheckPerformed && !sizing.CanProceed)
+            {
+                var blockedMessage = $"{sizing.Message} Agent stage blocked: {agentTask.AgentType}.";
+
+                await _activityLogger.LogAsync(
+                    agentTask.AgentType.ToString(),
+                    agentTask.WorkItemId,
+                    blockedMessage,
+                    "error",
+                    cancellationToken);
+
+                _telemetry.TrackEvent("RepositoryCapacityBlocked", new Dictionary<string, string>
+                {
+                    [TelemetryProperties.WorkItemId] = agentTask.WorkItemId.ToString(),
+                    [TelemetryProperties.AgentType] = agentTask.AgentType.ToString(),
+                    [TelemetryProperties.CorrelationId] = agentTask.CorrelationId,
+                    ["capacityMessage"] = sizing.Message
+                },
+                new Dictionary<string, double>
+                {
+                    ["estimatedWorkingTreeBytes"] = sizing.EstimatedWorkingTreeBytes,
+                    ["estimatedBinaryBytes"] = sizing.EstimatedBinaryBytes,
+                    ["estimatedFileCount"] = sizing.FileCount
+                });
+
+                if (agentTask.WorkItemId > 0)
+                {
+                    var failResult = AgentResult.Fail(ErrorCategory.Configuration, blockedMessage);
+                    await MarkWorkItemFailedAsync(agentTask, failResult, cancellationToken);
+                }
+
+                _logger.LogWarning(
+                    "Blocked {AgentType} for WI-{WorkItemId} by repository capacity policy: {Reason}",
+                    agentTask.AgentType,
+                    agentTask.WorkItemId,
+                    sizing.Message);
 
                 return;
             }
@@ -409,6 +456,17 @@ public sealed class AgentTaskDispatcher
             2 => agentType > AgentType.Coding,
             _ => false
         }
+    };
+
+    private static bool RequiresCloneCapacityCheck(AgentType agentType) => agentType switch
+    {
+        AgentType.Planning => true,
+        AgentType.Coding => true,
+        AgentType.Testing => true,
+        AgentType.Review => true,
+        AgentType.Documentation => true,
+        AgentType.CodebaseDocumentation => false,
+        _ => false
     };
 
     /// <summary>

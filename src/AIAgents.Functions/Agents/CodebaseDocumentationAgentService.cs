@@ -23,6 +23,7 @@ public sealed class CodebaseDocumentationAgentService : IAgentService
     private readonly IAIClient _aiClient;
     private readonly IAzureDevOpsClient _adoClient;
     private readonly IGitOperations _gitOps;
+    private readonly ICodebaseOnboardingService _codebaseOnboarding;
     private readonly IStoryContextFactory _contextFactory;
     private readonly IActivityLogger _activityLogger;
     private readonly CodebaseDocumentationOptions _options;
@@ -33,6 +34,7 @@ public sealed class CodebaseDocumentationAgentService : IAgentService
         IAIClientFactory aiClientFactory,
         IAzureDevOpsClient adoClient,
         IGitOperations gitOps,
+        ICodebaseOnboardingService codebaseOnboarding,
         IStoryContextFactory contextFactory,
         IActivityLogger activityLogger,
         IOptions<CodebaseDocumentationOptions> options,
@@ -41,6 +43,7 @@ public sealed class CodebaseDocumentationAgentService : IAgentService
         _aiClient = aiClientFactory.GetClientForAgent("CodebaseDocumentation");
         _adoClient = adoClient;
         _gitOps = gitOps;
+        _codebaseOnboarding = codebaseOnboarding;
         _contextFactory = contextFactory;
         _activityLogger = activityLogger;
         _options = options.Value;
@@ -63,6 +66,39 @@ public sealed class CodebaseDocumentationAgentService : IAgentService
         // Determine timeframe from work item description or use default
         var timeframe = ParseTimeframe(workItem?.Description);
         var isIncremental = workItem?.Description?.Contains("incremental", StringComparison.OrdinalIgnoreCase) == true;
+
+        if (_options.ApiOnlyInitializationEnabled)
+        {
+            await LogProgress(task.WorkItemId, "Running API-only onboarding scan (no clone)...", cancellationToken);
+
+            var includeGitHistory = workItem?.Description?.Contains("includeGitHistory=false", StringComparison.OrdinalIgnoreCase) != true;
+            var execution = await _codebaseOnboarding.GenerateAndPublishAsync(
+                incremental: isIncremental,
+                includeGitHistory: includeGitHistory,
+                cancellationToken: cancellationToken);
+
+            await LogProgress(task.WorkItemId, execution.Summary, cancellationToken);
+
+            if (task.WorkItemId > 0)
+            {
+                var summary = BuildSummaryComment(
+                    execution.Metadata,
+                    execution.ArtifactsPublished,
+                    isIncremental,
+                    _tokenUsage);
+
+                await _adoClient.AddWorkItemCommentAsync(task.WorkItemId, summary, cancellationToken);
+                await _adoClient.UpdateWorkItemStateAsync(task.WorkItemId, "Done", cancellationToken);
+            }
+
+            _logger.LogInformation(
+                "CodebaseDocumentation API-only mode completed for WI-{WorkItemId}: {Files} files scanned, {Artifacts} artifacts",
+                task.WorkItemId,
+                execution.FilesScanned,
+                execution.ArtifactsPublished);
+
+            return AgentResult.Ok();
+        }
 
         // Step 1: Clone/open repo on main branch
         await LogProgress(task.WorkItemId, "Cloning repository...", cancellationToken);

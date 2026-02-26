@@ -40,6 +40,14 @@ def main():
     copilot_create_issue = os.environ.get("COPILOT_CREATE_ISSUE", "true").strip().lower() in ["1", "true", "yes", "on"]
     copilot_model = os.environ.get("COPILOT_MODEL", "copilot").strip() or "copilot"
     copilot_webhook_secret = (os.environ.get("COPILOT_WEBHOOK_SECRET") or "").strip()
+    repo_capacity_enabled = os.environ.get("REPO_CAPACITY_ENABLED", "true").strip().lower() in ["1", "true", "yes", "on"]
+    repo_capacity_max_working_tree_mb = (os.environ.get("REPO_CAPACITY_MAX_WORKING_TREE_MB", "500").strip() or "500")
+    repo_capacity_max_binary_mb = (os.environ.get("REPO_CAPACITY_MAX_BINARY_MB", "150").strip() or "150")
+    repo_capacity_max_file_count = (os.environ.get("REPO_CAPACITY_MAX_FILE_COUNT", "120000").strip() or "120000")
+    repo_capacity_block_truncated_tree = os.environ.get("REPO_CAPACITY_BLOCK_TRUNCATED_TREE", "true").strip().lower() in ["1", "true", "yes", "on"]
+    codebase_api_only_init = os.environ.get("CODEBASE_API_ONLY_INIT", "true").strip().lower() in ["1", "true", "yes", "on"]
+    codebase_api_file_limit_kb = (os.environ.get("CODEBASE_API_FILE_LIMIT_KB", "100").strip() or "100")
+    codebase_api_publish_enabled = os.environ.get("CODEBASE_API_PUBLISH_ENABLED", "true").strip().lower() in ["1", "true", "yes", "on"]
 
     if not copilot_webhook_secret:
         copilot_webhook_secret = secrets.token_urlsafe(48)
@@ -171,6 +179,14 @@ def main():
         f"GitHub__Token=@Microsoft.KeyVault(VaultName={args.key_vault};SecretName=GITHUB-TOKEN)",
         f"AI__Provider={ai_provider}",
         f"AI__Model={ai_model}",
+        f"RepositoryCapacity__Enabled={'true' if repo_capacity_enabled else 'false'}",
+        f"RepositoryCapacity__MaxEstimatedWorkingTreeBytes={int(repo_capacity_max_working_tree_mb) * 1024 * 1024}",
+        f"RepositoryCapacity__MaxBinaryBytes={int(repo_capacity_max_binary_mb) * 1024 * 1024}",
+        f"RepositoryCapacity__MaxFileCount={int(repo_capacity_max_file_count)}",
+        f"RepositoryCapacity__BlockWhenTreeTruncated={'true' if repo_capacity_block_truncated_tree else 'false'}",
+        f"CodebaseDocumentation__ApiOnlyInitializationEnabled={'true' if codebase_api_only_init else 'false'}",
+        f"CodebaseDocumentation__ApiFileSizeLimitBytes={int(codebase_api_file_limit_kb) * 1024}",
+        f"CodebaseDocumentation__ApiPublishEnabled={'true' if codebase_api_publish_enabled else 'false'}",
     ]
     # Wire optional AI provider keys into Function App settings if they were provided
     if openai_api_key:

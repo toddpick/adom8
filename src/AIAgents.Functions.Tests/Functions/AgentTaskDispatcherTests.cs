@@ -22,6 +22,7 @@ public sealed class AgentTaskDispatcherTests
     private readonly Mock<IActivityLogger> _activityMock = new();
     private readonly Mock<IAzureDevOpsClient> _adoMock = new();
     private readonly Mock<IAgentService> _agentServiceMock = new();
+    private readonly Mock<IRepositorySizingService> _repositorySizingMock = new();
     private readonly TelemetryClient _telemetry;
 
     public AgentTaskDispatcherTests()
@@ -35,6 +36,16 @@ public sealed class AgentTaskDispatcherTests
         // Default: agent returns success
         _agentServiceMock.Setup(a => a.ExecuteAsync(It.IsAny<AgentTask>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(AgentResult.Ok());
+
+        // Default: repository capacity check passes
+        _repositorySizingMock
+            .Setup(r => r.EvaluateAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new AIAgents.Core.Models.RepositorySizingResult
+            {
+                CanProceed = true,
+                CheckPerformed = true,
+                Message = "Preflight passed"
+            });
     }
 
     private AgentTaskDispatcher CreateDispatcher(int autonomyLevel = 3, bool registerAgent = true)
@@ -62,6 +73,7 @@ public sealed class AgentTaskDispatcherTests
             NullLogger<AgentTaskDispatcher>.Instance,
             _activityMock.Object,
             _adoMock.Object,
+                _repositorySizingMock.Object,
             _telemetry,
             new Mock<ISaasCallbackService>().Object);
     }
@@ -166,7 +178,7 @@ public sealed class AgentTaskDispatcherTests
     }
 
     [Fact]
-    public async Task Run_AgentFailure_Rethrows()
+    public async Task Run_AgentFailure_WorkItemTask_DoesNotRethrow()
     {
         var dispatcher = CreateDispatcher(autonomyLevel: 3);
         _agentServiceMock.Setup(a => a.ExecuteAsync(It.IsAny<AgentTask>(), It.IsAny<CancellationToken>()))
@@ -174,8 +186,7 @@ public sealed class AgentTaskDispatcherTests
 
         var msg = Serialize(new AgentTask { WorkItemId = 12345, AgentType = AgentType.Planning });
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            dispatcher.Run(msg, CancellationToken.None));
+        await dispatcher.Run(msg, CancellationToken.None);
     }
 
     [Fact]

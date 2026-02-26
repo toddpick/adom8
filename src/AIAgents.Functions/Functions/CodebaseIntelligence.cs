@@ -24,6 +24,7 @@ public sealed class CodebaseIntelligence
 {
     private readonly IAzureDevOpsClient _adoClient;
     private readonly IGitOperations _gitOps;
+    private readonly ICodebaseOnboardingService _codebaseOnboarding;
     private readonly IActivityLogger _activityLogger;
     private readonly ILogger<CodebaseIntelligence> _logger;
     private readonly QueueClient _queueClient;
@@ -32,6 +33,7 @@ public sealed class CodebaseIntelligence
     public CodebaseIntelligence(
         IAzureDevOpsClient adoClient,
         IGitOperations gitOps,
+        ICodebaseOnboardingService codebaseOnboarding,
         IActivityLogger activityLogger,
         ILogger<CodebaseIntelligence> logger,
         IConfiguration configuration,
@@ -39,6 +41,7 @@ public sealed class CodebaseIntelligence
     {
         _adoClient = adoClient;
         _gitOps = gitOps;
+        _codebaseOnboarding = codebaseOnboarding;
         _activityLogger = activityLogger;
         _logger = logger;
         _copilotOptions = copilotOptions.Value;
@@ -138,19 +141,11 @@ public sealed class CodebaseIntelligence
 
         try
         {
-            // Try to read metadata from the repo's .agent/metadata.json
-            var repoPath = await _gitOps.EnsureBranchAsync("main", cancellationToken);
-            var metadataContent = await _gitOps.ReadFileAsync(
-                repoPath, ".agent/metadata.json", cancellationToken);
-
-            if (!string.IsNullOrWhiteSpace(metadataContent))
-            {
-                metadata = JsonSerializer.Deserialize<CodebaseAnalysisMetadata>(metadataContent);
-            }
+            metadata = await _codebaseOnboarding.TryGetMetadataAsync(cancellationToken);
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Could not read codebase metadata from repo");
+            _logger.LogWarning(ex, "Could not read codebase metadata via onboarding service");
         }
 
         var response = new CodebaseIntelligenceResponse

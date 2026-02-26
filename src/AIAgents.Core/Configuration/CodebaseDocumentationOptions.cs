@@ -70,4 +70,19 @@ public sealed class CodebaseDocumentationOptions
     /// Folder in the repository root where generated documentation is committed.
     /// </summary>
     public string OutputFolder { get; init; } = ".agent";
+
+    /// <summary>
+    /// Enables GitHub API-only onboarding for Initialize Codebase without local clone.
+    /// </summary>
+    public bool ApiOnlyInitializationEnabled { get; init; } = true;
+
+    /// <summary>
+    /// Maximum size (bytes) for individual files fetched via GitHub Contents API.
+    /// </summary>
+    public long ApiFileSizeLimitBytes { get; init; } = 100 * 1024;
+
+    /// <summary>
+    /// When false, API-only onboarding performs analysis but does not publish artifacts to the repository.
+    /// </summary>
+    public bool ApiPublishEnabled { get; init; } = true;
 }
