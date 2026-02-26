@@ -18,6 +18,11 @@ namespace AIAgents.Functions.Agents;
 /// </summary>
 public sealed class PlanningAgentService : IAgentService
 {
+    private static readonly JsonSerializerOptions s_artifactJsonOptions = new()
+    {
+        WriteIndented = true
+    };
+
     private readonly IAIClientFactory _aiClientFactory;
     private readonly IAzureDevOpsClient _adoClient;
     private readonly IGitOperations _gitOps;
@@ -76,6 +81,16 @@ public sealed class PlanningAgentService : IAgentService
         await using var context = _contextFactory.Create(task.WorkItemId, repoPath);
         var state = await context.LoadStateAsync(cancellationToken);
         state.CurrentState = "Story Planning";
+        state.CurrentStage = "Planning";
+        state.LastActivityUtc = DateTime.UtcNow;
+        state.Blockers.Clear();
+        state.HandoffRef = new StoryHandoffReference
+        {
+            Source = task.TriggerSource ?? "PlanningAgentService",
+            Stage = "Planning",
+            CorrelationId = task.CorrelationId,
+            Details = task.HandoffNote
+        };
         state.Agents["Planning"] = AgentStatus.InProgress();
         await context.SaveStateAsync(state, cancellationToken);
 
@@ -167,6 +182,8 @@ Analyze this story and create a comprehensive implementation plan.";
 
         // 6. Parse AI response
         var planResult = ParsePlanningResult(aiResult.Content);
+        var acceptanceTrace = BuildAcceptanceTrace(workItem.AcceptanceCriteria, planResult.SubTasks, planResult.AffectedFiles);
+        var initializationBundle = BuildInitializationBundle(existingFiles, supportingArtifacts.AllPaths, planResult, acceptanceTrace);
 
         // 7. Render plan template
         var templateModel = new Dictionary<string, object?>
@@ -206,6 +223,8 @@ Analyze this story and create a comprehensive implementation plan.";
         };
         var renderedTasks = await _templateEngine.RenderAsync("TASKS.template.md", tasksModel, cancellationToken);
         await context.WriteArtifactAsync("TASKS.md", renderedTasks, cancellationToken);
+        await context.WriteArtifactAsync("ACCEPTANCE_TRACE.json", JsonSerializer.Serialize(acceptanceTrace, s_artifactJsonOptions), cancellationToken);
+        await context.WriteArtifactAsync("INITIALIZATION_BUNDLE.json", JsonSerializer.Serialize(initializationBundle, s_artifactJsonOptions), cancellationToken);
 
         // 10. Commit and push
         await _gitOps.CommitAndPushAsync(repoPath,
@@ -268,6 +287,19 @@ Analyze this story and create a comprehensive implementation plan.";
                 ["blockerCount"] = readiness.Blockers.Count
             };
             state.CurrentState = "Needs Revision";
+            state.CurrentStage = "Planning";
+            state.LastActivityUtc = DateTime.UtcNow;
+            state.Blockers = readiness.Blockers
+                .Concat(readiness.Questions.Select(question => $"Clarification required: {question}"))
+                .ToList();
+            state.HandoffRef = new StoryHandoffReference
+            {
+                Source = "PlanningAgentService",
+                Stage = "Needs Revision",
+                CorrelationId = task.CorrelationId,
+                Details = readiness.Reason
+            };
+            state.AcceptanceTrace = acceptanceTrace;
             state.Decisions.Add(new Decision
             {
                 Agent = "Planning",
@@ -301,6 +333,21 @@ Analyze this story and create a comprehensive implementation plan.";
         // 12. Update story state
         state.Agents["Planning"] = AgentStatus.Completed();
         state.CurrentState = "AI Code";
+        state.CurrentStage = "Coding";
+        state.LastActivityUtc = DateTime.UtcNow;
+        state.Blockers.Clear();
+        state.HandoffRef = new StoryHandoffReference
+        {
+            Source = "PlanningAgentService",
+            Stage = "Coding",
+            CorrelationId = task.CorrelationId,
+            Details = "Planning completed and handed off to Coding"
+        };
+        state.AcceptanceTrace = acceptanceTrace;
+        AddDocArtifact(state.Artifacts.Docs, "PLAN.md");
+        AddDocArtifact(state.Artifacts.Docs, "TASKS.md");
+        AddDocArtifact(state.Artifacts.Docs, "ACCEPTANCE_TRACE.json");
+        AddDocArtifact(state.Artifacts.Docs, "INITIALIZATION_BUNDLE.json");
         state.Decisions.Add(new Decision
         {
             Agent = "Planning",
@@ -674,5 +721,141 @@ Analyze this story and create a comprehensive implementation plan.";
         }
 
         return sb.ToString();
+    }
+
+    private static void AddDocArtifact(ICollection<string> docs, string path)
+    {
+        if (!docs.Contains(path, StringComparer.OrdinalIgnoreCase))
+        {
+            docs.Add(path);
+        }
+    }
+
+    private static List<AcceptanceTraceItem> BuildAcceptanceTrace(string? acceptanceCriteria, IReadOnlyList<string> subTasks, IReadOnlyList<string> affectedFiles)
+    {
+        var criteriaItems = ParseAcceptanceCriteriaItems(acceptanceCriteria);
+        if (criteriaItems.Count == 0)
+        {
+            criteriaItems.Add("Deliver implementation aligned with story description and acceptance criteria.");
+        }
+
+        var trace = new List<AcceptanceTraceItem>();
+        for (var index = 0; index < criteriaItems.Count; index++)
+        {
+            var criteriaText = criteriaItems[index];
+            var relatedTasks = MatchSubTasks(criteriaText, subTasks);
+            if (relatedTasks.Count == 0)
+            {
+                relatedTasks = subTasks.Take(Math.Min(2, subTasks.Count)).ToList();
+            }
+
+            trace.Add(new AcceptanceTraceItem
+            {
+                AcceptanceId = $"AC-{index + 1:00}",
+                AcceptanceText = criteriaText,
+                MappedSubTasks = relatedTasks,
+                PlannedArtifacts = affectedFiles.Take(6).ToList()
+            });
+        }
+
+        return trace;
+    }
+
+    private static List<string> ParseAcceptanceCriteriaItems(string? acceptanceCriteria)
+    {
+        if (string.IsNullOrWhiteSpace(acceptanceCriteria))
+        {
+            return [];
+        }
+
+        var text = WebUtility.HtmlDecode(Regex.Replace(acceptanceCriteria, "<[^>]+>", "\n"));
+        var lines = text
+            .Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries)
+            .Select(line => line.Trim())
+            .Select(line => Regex.Replace(line, @"^[-*\d\.)\s]+", string.Empty).Trim())
+            .Where(line => !string.IsNullOrWhiteSpace(line))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        return lines;
+    }
+
+    private static List<string> MatchSubTasks(string criteria, IReadOnlyList<string> subTasks)
+    {
+        var criteriaTokens = Regex.Matches(criteria, @"\b[a-z0-9]{4,}\b", RegexOptions.IgnoreCase)
+            .Select(match => match.Value)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        if (criteriaTokens.Count == 0)
+        {
+            return [];
+        }
+
+        return subTasks
+            .Where(subTask => criteriaTokens.Any(token => subTask.Contains(token, StringComparison.OrdinalIgnoreCase)))
+            .Take(3)
+            .ToList();
+    }
+
+    private static InitializationBundle BuildInitializationBundle(
+        IReadOnlyList<string> existingFiles,
+        IReadOnlyList<string> supportingArtifactPaths,
+        PlanningResult planResult,
+        IReadOnlyList<AcceptanceTraceItem> acceptanceTrace)
+    {
+        return new InitializationBundle
+        {
+            GeneratedAtUtc = DateTime.UtcNow,
+            Summary = "Planning bootstrap bundle for downstream agents (context pointers, traceability, and progress memory).",
+            Categories = new List<InitializationCategory>
+            {
+                BuildCategory("architecture", existingFiles, [".agent/ARCHITECTURE.md", ".agent/CODEBASE_CONTEXT.md"]),
+                BuildCategory("structure", existingFiles, [".agent/CONTEXT_INDEX.md", ".agent/FILE_MAP.json"]),
+                BuildCategory("conventions", existingFiles, [".agent/CODING_STANDARDS.md"]),
+                BuildCategory("testing", existingFiles, [".agent/TESTING_STRATEGY.md"]),
+                BuildCategory("integrations", existingFiles, [".agent/API_REFERENCE.md", ".agent/FEATURE_INDEX.json", ".agent/ONBOARDING_METADATA.json"]),
+                BuildCategory("concerns", existingFiles, [".agent/COMMON_PATTERNS.md", ".agent/DEPLOYMENT.md"])
+            },
+            PlannedSubTasks = planResult.SubTasks.ToList(),
+            PlannedRisks = planResult.Risks.ToList(),
+            AcceptanceTraceIds = acceptanceTrace.Select(item => item.AcceptanceId).ToList(),
+            SupportingArtifacts = supportingArtifactPaths.Take(20).ToList()
+        };
+    }
+
+    private static InitializationCategory BuildCategory(string category, IReadOnlyList<string> existingFiles, IReadOnlyList<string> preferredPaths)
+    {
+        var matchedPaths = preferredPaths
+            .Where(path => existingFiles.Contains(path, StringComparer.OrdinalIgnoreCase))
+            .ToList();
+
+        var missingPaths = preferredPaths
+            .Where(path => !matchedPaths.Contains(path, StringComparer.OrdinalIgnoreCase))
+            .ToList();
+
+        return new InitializationCategory
+        {
+            Name = category,
+            Pointers = matchedPaths,
+            MissingRecommendedPointers = missingPaths
+        };
+    }
+
+    private sealed class InitializationBundle
+    {
+        public DateTime GeneratedAtUtc { get; init; }
+        public required string Summary { get; init; }
+        public List<InitializationCategory> Categories { get; init; } = [];
+        public List<string> PlannedSubTasks { get; init; } = [];
+        public List<string> PlannedRisks { get; init; } = [];
+        public List<string> AcceptanceTraceIds { get; init; } = [];
+        public List<string> SupportingArtifacts { get; init; } = [];
+    }
+
+    private sealed class InitializationCategory
+    {
+        public required string Name { get; init; }
+        public List<string> Pointers { get; init; } = [];
+        public List<string> MissingRecommendedPointers { get; init; } = [];
     }
 }

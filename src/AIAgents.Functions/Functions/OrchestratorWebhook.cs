@@ -189,7 +189,10 @@ public sealed class OrchestratorWebhook
         var agentTask = new AgentTask
         {
             WorkItemId = workItemId,
-            AgentType = agentType
+            AgentType = agentType,
+            TriggerSource = nameof(OrchestratorWebhook),
+            ResumeFromStage = newState,
+            HandoffNote = $"State transition webhook: {newState}"
         };
 
         await _taskQueue.EnqueueAsync(agentTask, cancellationToken);

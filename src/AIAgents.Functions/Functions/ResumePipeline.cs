@@ -120,7 +120,10 @@ public sealed class ResumePipeline
         {
             WorkItemId = workItemId,
             AgentType = resumeTarget.AgentType,
-            CorrelationId = Guid.NewGuid().ToString("N")
+            CorrelationId = Guid.NewGuid().ToString("N"),
+            TriggerSource = nameof(ResumePipeline),
+            ResumeFromStage = request.Stage,
+            HandoffNote = $"Manual resume requested at stage {resumeTarget.Stage}"
         };
         await _taskQueue.EnqueueAsync(task, cancellationToken);
 

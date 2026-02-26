@@ -187,8 +187,12 @@ public sealed class AgentTaskDispatcher
         }
 
         _logger.LogInformation(
-            "Dispatching {AgentType} agent for WI-{WorkItemId} (correlation: {CorrelationId})",
-            agentTask.AgentType, agentTask.WorkItemId, agentTask.CorrelationId);
+            "Dispatching {AgentType} agent for WI-{WorkItemId} (correlation: {CorrelationId}, source: {TriggerSource}, resumeFrom: {ResumeFromStage})",
+            agentTask.AgentType,
+            agentTask.WorkItemId,
+            agentTask.CorrelationId,
+            agentTask.TriggerSource ?? "unspecified",
+            agentTask.ResumeFromStage ?? "n/a");
 
         var agentKey = agentTask.AgentType.ToString();
 
@@ -206,7 +210,7 @@ public sealed class AgentTaskDispatcher
         await _activityLogger.LogAsync(
             agentKey,
             agentTask.WorkItemId,
-            $"{agentKey} agent started processing",
+            $"{agentKey} agent started processing (source={agentTask.TriggerSource ?? "unspecified"}, resumeFrom={agentTask.ResumeFromStage ?? "n/a"})",
             cancellationToken: cancellationToken);
 
         _telemetry.TrackEvent(TelemetryEvents.AgentStarted, new Dictionary<string, string>

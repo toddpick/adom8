@@ -98,11 +98,14 @@ public sealed class GitHubCodebaseOnboardingService : ICodebaseOnboardingService
             FeaturesDocumentedList = featureIndex.Keys.OrderBy(k => k).ToList()
         };
 
+        var initializationBundle = BuildInitializationBundleArtifact(metadata, defaultBranch, headSha, includeGitHistory, incremental);
+
         var artifacts = new Dictionary<string, string>
         {
             [".agent/CODEBASE_CONTEXT.md"] = contextMarkdown,
             [".agent/FILE_MAP.json"] = JsonSerializer.Serialize(fileMap, JsonOptions),
             [".agent/FEATURE_INDEX.json"] = JsonSerializer.Serialize(featureIndex, JsonOptions),
+            [".agent/INITIALIZATION_BUNDLE.json"] = JsonSerializer.Serialize(initializationBundle, JsonOptions),
             [".agent/ONBOARDING_METADATA.json"] = JsonSerializer.Serialize(new
             {
                 generatedOn,
@@ -146,6 +149,53 @@ public sealed class GitHubCodebaseOnboardingService : ICodebaseOnboardingService
             LastCommitDateUtc = commitSummary.LastCommitUtc,
             Summary = summary,
             Metadata = metadata
+        };
+    }
+
+    private static object BuildInitializationBundleArtifact(
+        CodebaseAnalysisMetadata metadata,
+        string branch,
+        string headSha,
+        bool includeGitHistory,
+        bool incremental)
+    {
+        static object BuildCategory(string name, params string[] pointers)
+            => new
+            {
+                name,
+                pointers
+            };
+
+        return new
+        {
+            generatedAtUtc = DateTime.UtcNow,
+            source = "github-rest-api",
+            branch,
+            headSha,
+            includeGitHistory,
+            incremental,
+            summary = "Initialization bundle for downstream planning/coding/testing/review agents.",
+            categories = new[]
+            {
+                BuildCategory("architecture", ".agent/CODEBASE_CONTEXT.md"),
+                BuildCategory("structure", ".agent/FILE_MAP.json"),
+                BuildCategory("conventions", ".agent/CODEBASE_CONTEXT.md"),
+                BuildCategory("testing", ".agent/CODEBASE_CONTEXT.md"),
+                BuildCategory("integrations", ".agent/FEATURE_INDEX.json", ".agent/ONBOARDING_METADATA.json"),
+                BuildCategory("concerns", ".agent/CODEBASE_CONTEXT.md")
+            },
+            progress = new
+            {
+                filesAnalyzed = metadata.FilesAnalyzed,
+                featuresDocumented = metadata.FeaturesDocumented,
+                lastAnalysis = metadata.LastAnalysis,
+                commitsAnalyzed = metadata.CommitsAnalyzed
+            },
+            traceability = new
+            {
+                features = metadata.FeaturesDocumentedList,
+                languages = metadata.LanguagesDetected
+            }
         };
     }
 

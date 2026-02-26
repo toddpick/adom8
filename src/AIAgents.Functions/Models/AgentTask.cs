@@ -31,4 +31,22 @@ public sealed record AgentTask
     /// </summary>
     [JsonPropertyName("enqueuedAt")]
     public DateTime EnqueuedAt { get; init; } = DateTime.UtcNow;
+
+    /// <summary>
+    /// Optional source that requested this task (e.g., OrchestratorWebhook, ResumePipeline).
+    /// </summary>
+    [JsonPropertyName("triggerSource")]
+    public string? TriggerSource { get; init; }
+
+    /// <summary>
+    /// Optional previous stage this task is resuming from.
+    /// </summary>
+    [JsonPropertyName("resumeFromStage")]
+    public string? ResumeFromStage { get; init; }
+
+    /// <summary>
+    /// Optional handoff note to help diagnostics and resumability.
+    /// </summary>
+    [JsonPropertyName("handoffNote")]
+    public string? HandoffNote { get; init; }
 }
