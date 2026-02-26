@@ -2,7 +2,7 @@
   "workItemId": 113,
   "currentState": "AI Code",
   "createdAt": "2026-02-26T18:12:56.3775181Z",
-  "updatedAt": "2026-02-26T18:15:33.9342958Z",
+  "updatedAt": "2026-02-26T19:00:09.6169981Z",
   "agents": {
     "Planning": {
       "status": "in_progress",
@@ -12,14 +12,9 @@
     },
     "Coding": {
       "status": "in_progress",
-      "startedAt": "2026-02-26T18:15:33.9324846Z",
+      "startedAt": "2026-02-26T19:00:09.4183783Z",
       "completedAt": null,
-      "additionalData": {
-        "mode": "copilot-delegated",
-        "issueNumber": 96,
-        "delegatedAt": "2026-02-26T18:15:33.9325145Z",
-        "agent": "copilot"
-      }
+      "additionalData": null
     }
   },
   "artifacts": {
