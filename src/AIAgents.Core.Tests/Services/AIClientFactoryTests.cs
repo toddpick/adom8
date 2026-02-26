@@ -211,6 +211,21 @@ public sealed class AIClientFactoryTests
         Assert.Equal("sk-ant-test-key", effective.ApiKey); // fallback — will fail at runtime, warning logged
     }
 
+    [Fact]
+    public void Resolve_Rewrites_Deprecated_Claude_Model_To_Alias()
+    {
+        var factory = CreateFactory();
+        var overrides = new StoryModelOverrides
+        {
+            TestingModel = "claude-3-5-haiku-20241022"
+        };
+
+        var effective = factory.ResolveEffectiveOptions("Testing", overrides);
+
+        Assert.Equal("Claude", effective.Provider);
+        Assert.Equal("claude-3-5-haiku-latest", effective.Model);
+    }
+
     // ── ResolveEffectiveOptions — tier + auto-detect ─────────────────
 
     [Fact]

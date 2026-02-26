@@ -22,6 +22,12 @@ namespace AIAgents.Core.Services;
 /// </summary>
 public sealed class AIClientFactory : IAIClientFactory
 {
+    private static readonly IReadOnlyDictionary<string, string> s_modelAliases =
+        new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["claude-3-5-haiku-20241022"] = "claude-3-5-haiku-latest"
+        };
+
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly AIOptions _defaults;
     private readonly ILogger<AIClient> _logger;
@@ -105,6 +111,14 @@ public sealed class AIClientFactory : IAIClientFactory
                     "Story-level model override for agent '{Agent}': {Model}",
                     agentName, storyModel);
             }
+        }
+
+        if (s_modelAliases.TryGetValue(model, out var aliasedModel))
+        {
+            _logger.LogWarning(
+                "Deprecated model '{DeprecatedModel}' detected for agent '{Agent}'. Rewriting to '{AliasedModel}'.",
+                model, agentName, aliasedModel);
+            model = aliasedModel;
         }
 
         // Step 5: Auto-detect provider from model name and resolve credentials.
