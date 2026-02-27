@@ -95,10 +95,11 @@ public sealed class CopilotCodingStrategy : ICodingStrategy
 
             // Assign to Copilot coding agent via the proper GitHub API
             await AssignIssueToAgentAsync(issueNumber, context.BranchName, cancellationToken);
+            await PostKickoffCommentAsync(issueNumber, context, cancellationToken);
 
             _logger.LogInformation(
-                "Created GitHub Issue #{IssueNumber} and assigned to @{Agent} for WI-{WorkItemId}",
-                issueNumber, _agentAssignee, context.WorkItemId);
+                "Created GitHub Issue #{IssueNumber}, assigned Copilot agent, and posted kickoff for WI-{WorkItemId}",
+                issueNumber, context.WorkItemId);
         }
         else
         {
@@ -271,40 +272,84 @@ public sealed class CopilotCodingStrategy : ICodingStrategy
             ? ""
             : _agentAssignee;
 
-        var requestBody = new Dictionary<string, object>
-        {
-            ["assignees"] = new[] { "copilot-swe-agent[bot]" },
-            ["agent_assignment"] = new Dictionary<string, string>
-            {
-                ["target_repo"] = $"{_githubOptions.Owner}/{_githubOptions.Repo}",
-                ["base_branch"] = baseBranch,
-                ["custom_instructions"] = "",
-                ["custom_agent"] = customAgent,
-                ["model"] = ""
-            }
-        };
+        // GitHub UI displays this as "Copilot", while legacy API examples often use
+        // the bot login. Try both for compatibility across org feature rollouts.
+        var assigneeCandidates = new[] { "copilot", "copilot-swe-agent[bot]" };
+        HttpStatusCode? lastStatusCode = null;
+        string? lastResponseBody = null;
 
-        var json = JsonSerializer.Serialize(requestBody);
-        var content = new StringContent(json, Encoding.UTF8, "application/json");
+        foreach (var assignee in assigneeCandidates)
+        {
+            var requestBody = new Dictionary<string, object>
+            {
+                ["assignees"] = new[] { assignee },
+                ["agent_assignment"] = new Dictionary<string, string>
+                {
+                    ["target_repo"] = $"{_githubOptions.Owner}/{_githubOptions.Repo}",
+                    ["base_branch"] = baseBranch,
+                    ["custom_instructions"] = "",
+                    ["custom_agent"] = customAgent,
+                    ["model"] = ""
+                }
+            };
+
+            var json = JsonSerializer.Serialize(requestBody);
+            var content = new StringContent(json, Encoding.UTF8, "application/json");
+
+            var response = await _httpClient.PostAsync(
+                $"repos/{_githubOptions.Owner}/{_githubOptions.Repo}/issues/{issueNumber}/assignees",
+                content, cancellationToken);
+
+            if (response.IsSuccessStatusCode)
+            {
+                _logger.LogInformation(
+                    "Successfully assigned Issue #{IssueNumber} to {Assignee} (agent={Agent}, base={BaseBranch})",
+                    issueNumber, assignee, _agentAssignee, baseBranch);
+                return;
+            }
+
+            lastStatusCode = response.StatusCode;
+            lastResponseBody = await response.Content.ReadAsStringAsync(cancellationToken);
+
+            _logger.LogWarning(
+                "Copilot assignment attempt failed for Issue #{IssueNumber} (assignee={Assignee}, agent={Agent}, status={StatusCode}): {Body}",
+                issueNumber, assignee, _agentAssignee, response.StatusCode, lastResponseBody);
+        }
+
+        _logger.LogWarning(
+            "Failed to assign Issue #{IssueNumber} to Copilot after all attempts (status={StatusCode}): {Body}. " +
+            "Issue was created but may require manual start from GitHub UI.",
+            issueNumber,
+            lastStatusCode,
+            lastResponseBody ?? "(no response body)");
+    }
+
+    private async Task PostKickoffCommentAsync(int issueNumber, CodingContext context, CancellationToken cancellationToken)
+    {
+        var kickoffComment =
+            "@copilot Please start this implementation now. " +
+            $"Use `{context.BranchName}` as the base branch and open a PR back to `{context.BranchName}` when complete.";
+
+        var payload = new { body = kickoffComment };
+        var content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
 
         var response = await _httpClient.PostAsync(
-            $"repos/{_githubOptions.Owner}/{_githubOptions.Repo}/issues/{issueNumber}/assignees",
-            content, cancellationToken);
+            $"repos/{_githubOptions.Owner}/{_githubOptions.Repo}/issues/{issueNumber}/comments",
+            content,
+            cancellationToken);
 
         if (!response.IsSuccessStatusCode)
         {
-            var responseBody = await response.Content.ReadAsStringAsync(cancellationToken);
+            var body = await response.Content.ReadAsStringAsync(cancellationToken);
             _logger.LogWarning(
-                "Failed to assign Issue #{IssueNumber} to copilot-swe-agent[bot] (agent={Agent}, status={StatusCode}): {Body}. " +
-                "Issue was created but may need manual agent assignment.",
-                issueNumber, _agentAssignee, response.StatusCode, responseBody);
+                "Failed to post Copilot kickoff comment for Issue #{IssueNumber} (status={StatusCode}): {Body}",
+                issueNumber,
+                response.StatusCode,
+                body);
+            return;
         }
-        else
-        {
-            _logger.LogInformation(
-                "Successfully assigned Issue #{IssueNumber} to copilot-swe-agent[bot] (agent={Agent}, base={BaseBranch})",
-                issueNumber, _agentAssignee, baseBranch);
-        }
+
+        _logger.LogInformation("Posted Copilot kickoff comment for Issue #{IssueNumber}", issueNumber);
     }
 
     /// <summary>
