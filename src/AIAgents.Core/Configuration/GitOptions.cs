@@ -42,6 +42,12 @@ public sealed class GitOptions
     public required string Name { get; init; }
 
     /// <summary>
+    /// Preferred base branch for creating new AI feature branches.
+    /// Defaults to <c>main</c> when not configured.
+    /// </summary>
+    public string BaseBranch { get; init; } = "main";
+
+    /// <summary>
     /// Local directory path for cloning repositories.
     /// Defaults to a temp directory if not specified.
     /// </summary>

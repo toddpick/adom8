@@ -19,6 +19,7 @@ Before running the pipeline, you need to gather the following information and cr
 9. **Azure Service Connection**: The name of an existing Azure Resource Manager service connection in your ADO project that has Contributor access to your subscription.
 10. **Copilot Enabled (Optional)**: Set pipeline variable `COPILOT_ENABLED` (`true` by default) to delegate coding to GitHub Copilot by default.
 11. **MCP Bootstrap Enabled (Optional)**: Set pipeline variable `MCP_BOOTSTRAP_ENABLED` (`true` by default) to create MCP bootstrap guidance files in your GitHub repo.
+12. **GitHub Base Branch (Optional)**: Set pipeline variable `GITHUB_BASE_BRANCH` (`main` by default) to choose which branch AI feature branches are created from (for example, `dev`).
 
 ### Create Tokens
 
@@ -66,6 +67,7 @@ Create a Fine-grained Personal Access Token in GitHub scoped to your target repo
    - `AZURE_SERVICE_CONNECTION`
    - `COPILOT_ENABLED` (optional, defaults to `true`)
    - `MCP_BOOTSTRAP_ENABLED` (optional, defaults to `true`)
+   - `GITHUB_BASE_BRANCH` (optional, defaults to `main`; set to `dev` if you want AI feature branches based on your dev branch)
    
    **Secret Variables** (Make sure to check "Keep this value secret"):
    - `ONBOARDING_PAT`

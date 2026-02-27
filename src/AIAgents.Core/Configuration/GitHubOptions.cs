@@ -28,6 +28,12 @@ public sealed class GitHubOptions
     public required string Token { get; init; }
 
     /// <summary>
+    /// Preferred base branch for AI story branches and Copilot delegation bootstrap.
+    /// Defaults to <c>main</c> when not configured.
+    /// </summary>
+    public string BaseBranch { get; init; } = "main";
+
+    /// <summary>
     /// The filename of the GitHub Actions workflow to trigger for Level 5 autonomy.
     /// Must accept <c>workflow_dispatch</c> trigger.
     /// Example: <c>deploy.yml</c>

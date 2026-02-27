@@ -42,6 +42,7 @@ def main():
     copilot_checkpoint_enforcement_enabled = os.environ.get("COPILOT_CHECKPOINT_ENFORCEMENT_ENABLED", "true").strip().lower() in ["1", "true", "yes", "on"]
     copilot_checkpoint_fail_hard = os.environ.get("COPILOT_CHECKPOINT_FAIL_HARD", "true").strip().lower() in ["1", "true", "yes", "on"]
     copilot_required_ado_checkpoints = os.environ.get("COPILOT_REQUIRED_ADO_CHECKPOINTS", "LastAgent,CurrentAIAgent,CompletionComment").strip() or "LastAgent,CurrentAIAgent,CompletionComment"
+    github_base_branch = os.environ.get("GITHUB_BASE_BRANCH", "main").strip() or "main"
     copilot_webhook_secret = (os.environ.get("COPILOT_WEBHOOK_SECRET") or "").strip()
     repo_capacity_enabled = os.environ.get("REPO_CAPACITY_ENABLED", "true").strip().lower() in ["1", "true", "yes", "on"]
     repo_capacity_max_working_tree_mb = (os.environ.get("REPO_CAPACITY_MAX_WORKING_TREE_MB", "500").strip() or "500")
@@ -183,7 +184,9 @@ def main():
         f"Git__Name=ADOm8 Agent",
         f"GitHub__Owner={args.github_org}",
         f"GitHub__Repo={args.github_repo}",
+        f"GitHub__BaseBranch={github_base_branch}",
         f"GitHub__Token=@Microsoft.KeyVault(VaultName={args.key_vault};SecretName=GITHUB-TOKEN)",
+        f"Git__BaseBranch={github_base_branch}",
         f"AI__Provider={ai_provider}",
         f"AI__Model={ai_model}",
         f"RepositoryCapacity__Enabled={'true' if repo_capacity_enabled else 'false'}",

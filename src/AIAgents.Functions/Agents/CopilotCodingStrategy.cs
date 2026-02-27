@@ -178,10 +178,29 @@ public sealed class CopilotCodingStrategy : ICodingStrategy
 
         var repoJson = await repoResponse.Content.ReadAsStringAsync(cancellationToken);
         using var repoDoc = JsonDocument.Parse(repoJson);
-        var defaultBranch = repoDoc.RootElement.GetProperty("default_branch").GetString() ?? "main";
+        var repositoryDefaultBranch = repoDoc.RootElement.GetProperty("default_branch").GetString() ?? "main";
+        var preferredBaseBranch = string.IsNullOrWhiteSpace(_githubOptions.BaseBranch)
+            ? repositoryDefaultBranch
+            : _githubOptions.BaseBranch;
+
+        var baseBranchToUse = preferredBaseBranch;
+
+        var preferredRefResponse = await _httpClient.GetAsync(
+            $"repos/{_githubOptions.Owner}/{_githubOptions.Repo}/git/ref/heads/{Uri.EscapeDataString(preferredBaseBranch)}",
+            cancellationToken);
+
+        if (!preferredRefResponse.IsSuccessStatusCode)
+        {
+            _logger.LogWarning(
+                "Configured GitHub base branch '{PreferredBranch}' not found or inaccessible (status {StatusCode}); falling back to repository default branch '{DefaultBranch}'",
+                preferredBaseBranch,
+                preferredRefResponse.StatusCode,
+                repositoryDefaultBranch);
+            baseBranchToUse = repositoryDefaultBranch;
+        }
 
         var baseRefResponse = await _httpClient.GetAsync(
-            $"repos/{_githubOptions.Owner}/{_githubOptions.Repo}/git/ref/heads/{Uri.EscapeDataString(defaultBranch)}",
+            $"repos/{_githubOptions.Owner}/{_githubOptions.Repo}/git/ref/heads/{Uri.EscapeDataString(baseBranchToUse)}",
             cancellationToken);
         baseRefResponse.EnsureSuccessStatusCode();
 
@@ -191,7 +210,7 @@ public sealed class CopilotCodingStrategy : ICodingStrategy
 
         if (string.IsNullOrWhiteSpace(sha))
         {
-            throw new InvalidOperationException($"Could not resolve base SHA for default branch '{defaultBranch}'.");
+            throw new InvalidOperationException($"Could not resolve base SHA for base branch '{baseBranchToUse}'.");
         }
 
         var createPayload = new
@@ -209,9 +228,9 @@ public sealed class CopilotCodingStrategy : ICodingStrategy
         {
             // 422 means the branch was created concurrently.
             _logger.LogInformation(
-                "Ensured branch {Branch} exists for Copilot delegation (default base: {DefaultBranch})",
+                "Ensured branch {Branch} exists for Copilot delegation (base: {BaseBranch})",
                 branchName,
-                defaultBranch);
+                baseBranchToUse);
             return;
         }
 

@@ -132,11 +132,22 @@ public sealed class GitOperations : IGitOperations
             }
             else if (branch is null)
             {
-                // Brand new branch — create from default branch
-                var defaultBranch = repo.Head;
+                // Brand new branch — create from configured base branch when available
+                var configuredBase = (_options.BaseBranch ?? string.Empty).Trim();
+                var baseBranchRef = !string.IsNullOrWhiteSpace(configuredBase)
+                    ? repo.Branches[$"origin/{configuredBase}"]
+                    : null;
+                var baseCommit = baseBranchRef?.Tip ?? repo.Head.Tip;
+                var baseBranchName = baseBranchRef?.FriendlyName ?? repo.Head.FriendlyName;
+
+                if (baseCommit is null)
+                {
+                    throw new InvalidOperationException("Could not determine a base commit for branch creation.");
+                }
+
                 _logger.LogInformation("Creating branch '{BranchName}' from '{DefaultBranch}'",
-                    branchName, defaultBranch.FriendlyName);
-                branch = repo.CreateBranch(branchName, defaultBranch.Tip);
+                    branchName, baseBranchName);
+                branch = repo.CreateBranch(branchName, baseCommit);
             }
             else if (remoteBranch is not null)
             {
