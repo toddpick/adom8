@@ -98,7 +98,7 @@ Once the pipeline completes successfully:
 5. **Register MCP Servers in GitHub Copilot (Required for MCP Tools)**:
    - Open GitHub repository settings → **Copilot** → **Coding agent** → **MCP configuration**.
    - Copy/paste `.adom8/mcp/mcp.template.json` into the MCP configuration box.
-   - Replace `{{ADOM8_FUNCTION_KEY}}` with your Function App key and save.
+   - If you enable the optional `ado` MCP server, add Copilot environment secret `COPILOT_MCP_AZURE_DEVOPS_PAT` before starting sessions.
    - This UI registration step is manual and required; pipeline bootstrap prepares the config file but cannot populate the GitHub MCP textbox via API.
 6. **Access the Dashboard**: Your dashboard is available at the Static Web App URL (found in the pipeline summary). Use the `AdoDashboardKey` you provided to log in. The Static Web App resource name is derived from your `AZURE_DEVOPS_PROJECT`, but Azure still generates the default `*.azurestaticapps.net` hostname. Configure a custom domain in the Azure Portal if you want a friendly URL.
 7. **Default Field Values (Auto-Enforced)**: The pipeline now enforces `Custom.AutonomyLevel` as a picklist (`1-5`) with default `3 - Review & Pause`, and sets `Custom.AIMinimumReviewScore` default to `85` for User Story work items.
@@ -109,7 +109,8 @@ Once the pipeline completes successfully:
 ### Automated by the onboarding pipeline
 - Create repository MCP bootstrap guidance in `.adom8/mcp/README.md`.
 - Create starter template at `.adom8/mcp/mcp.template.json`.
-- Include a GitHub Copilot Coding Agent MCP-ready `adom8_orchestrator` server template with Phase 1 tools (`set_stage`, `add_comment`, `stage_event`).
+- Include a schema-valid GitHub Copilot Coding Agent MCP server template (`github-mcp-server`, optional `ado`).
+- Include guidance for Phase 1 ADOm8 REST bridge endpoints (`/api/mcp/set-stage`, `/api/mcp/add-comment`, `/api/mcp/stage-event`).
 - Keep these files idempotent across re-runs.
 
 ### Not automatable via Azure DevOps pipeline (manual)

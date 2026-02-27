@@ -416,18 +416,24 @@ This repository was bootstrapped by the ADOm8 onboarding pipeline with MCP guida
 - Created this guidance folder under `.adom8/mcp/`
 - Added a starter MCP manifest at `.adom8/mcp/mcp.template.json`
 
-    ## GitHub Copilot Coding Agent quick setup
+## GitHub Copilot Coding Agent quick setup
 
-    1. Open GitHub repository settings → Copilot → Coding agent → MCP configuration.
-    2. Copy the contents of `.adom8/mcp/mcp.template.json` into that panel.
-    3. Replace `{{ADOM8_FUNCTION_KEY}}` with your Function App key (do not commit secrets).
-    4. Save and run a coding session.
+1. Open GitHub repository settings → Copilot → Coding agent → MCP configuration.
+2. Copy the contents of `.adom8/mcp/mcp.template.json` into that panel.
+3. Save and run a coding session.
 
-    The generated template includes an `adom8_orchestrator` MCP server with Phase 1 tools:
+The generated template is schema-valid for GitHub Copilot Coding Agent MCP config.
 
-    - `set_stage` → `{function_base_url}/mcp/set-stage?code={{ADOM8_FUNCTION_KEY}}`
-    - `add_comment` → `{function_base_url}/mcp/add-comment?code={{ADOM8_FUNCTION_KEY}}`
-    - `stage_event` → `{function_base_url}/mcp/stage-event?code={{ADOM8_FUNCTION_KEY}}`
+## Phase 1 ADOm8 stage bridge endpoints
+
+Phase 1 stage updates are exposed as Function-key secured REST endpoints:
+
+- `set-stage` → `{function_base_url}/mcp/set-stage?code=<FUNCTION_KEY>`
+- `add-comment` → `{function_base_url}/mcp/add-comment?code=<FUNCTION_KEY>`
+- `stage-event` → `{function_base_url}/mcp/stage-event?code=<FUNCTION_KEY>`
+
+These are currently REST bridge endpoints (not native MCP protocol servers).
+Use them directly from Copilot instructions/tooling when you need deterministic ADO updates.
 
 ## What cannot be automated in Azure DevOps pipeline
 
@@ -441,76 +447,35 @@ Use `mcp.template.json` as a starting point in your MCP client and provide crede
 """
 
         mcp_template = json.dumps({
-            "version": 1,
-            "generatedBy": "ADOm8 onboarding pipeline",
             "mcpServers": {
-                "github": {
-                    "description": "Built-in GitHub server for coding agent sessions.",
-                    "requiredAuth": "GitHub token with repository access",
-                    "context": {
-                        "owner": args.github_org,
-                        "repo": args.github_repo
+                "github-mcp-server": {
+                    "type": "http",
+                    "url": "https://api.githubcopilot.com/mcp/readonly",
+                    "tools": ["*"],
+                    "headers": {
+                        "X-MCP-Toolsets": "repos,issues,users,pull_requests,code_security,secret_protection,actions,web_search"
                     }
                 },
-                "azure_devops": {
-                    "description": "Azure DevOps MCP-compatible connector for story operations.",
-                    "requiredAuth": "Azure DevOps PAT with work item/code access",
-                    "organizationUrl": args.ado_org,
-                    "project": args.ado_project
-                },
-                "adom8_orchestrator": {
-                    "description": "Phase 1 MCP bridge endpoints for deterministic ADO updates via Azure Functions.",
-                    "transport": "http",
-                    "baseUrl": function_base_url,
-                    "auth": {
-                        "type": "query",
-                        "param": "code",
-                        "value": "{{ADOM8_FUNCTION_KEY}}"
-                    },
-                    "tools": {
-                        "set_stage": {
-                            "method": "POST",
-                            "path": "/mcp/set-stage",
-                            "schema": {
-                                "workItemId": "number",
-                                "runId": "string",
-                                "fromStage": "string",
-                                "stage": "string",
-                                "message": "string",
-                                "severity": "string",
-                                "idempotencyKey": "string",
-                                "source": "string"
-                            }
-                        },
-                        "add_comment": {
-                            "method": "POST",
-                            "path": "/mcp/add-comment",
-                            "schema": {
-                                "workItemId": "number",
-                                "comment": "string",
-                                "source": "string",
-                                "runId": "string"
-                            }
-                        },
-                        "stage_event": {
-                            "method": "POST",
-                            "path": "/mcp/stage-event",
-                            "schema": {
-                                "workItemId": "number",
-                                "eventType": "string",
-                                "message": "string",
-                                "severity": "string",
-                                "runId": "string",
-                                "addAdoComment": "boolean"
-                            }
-                        }
+                "ado": {
+                    "type": "local",
+                    "command": "npx",
+                    "args": [
+                        "-y",
+                        "@azure-devops/mcp",
+                        args.ado_org,
+                        "-a",
+                        "azcli"
+                    ],
+                    "tools": ["*"],
+                    "env": {
+                        "AZURE_DEVOPS_EXT_PAT": "COPILOT_MCP_AZURE_DEVOPS_PAT"
                     }
                 }
             },
             "notes": [
-                "This is a bootstrap template intended for GitHub Copilot Coding Agent MCP configuration.",
-                "Replace {{ADOM8_FUNCTION_KEY}} in the MCP panel; never commit secret values.",
-                "If your MCP client requires different JSON shape, use this as source data and map fields accordingly."
+                "Schema-valid MCP template for GitHub Copilot Coding Agent.",
+                "For ADO MCP server auth, create Copilot environment secret COPILOT_MCP_AZURE_DEVOPS_PAT.",
+                f"ADOm8 stage bridge REST endpoints (non-MCP): {function_base_url}/mcp/set-stage|add-comment|stage-event?code=<FUNCTION_KEY>"
             ]
         }, indent=2)
 
