@@ -227,14 +227,30 @@ public sealed class GitOperations : IGitOperations
             return;
         }
 
-        var quotedPaths = string.Join(" ", cleanedPaths.Select(p => $"\"{p}\""));
-
         // Avoid sparse-checkout metadata (extensions.worktreeconfig) because some
         // runtime git/libgit2 combinations used by Functions cannot read it.
-        // Hydrate only requested files directly from HEAD.
-        await RunGitCommandAsync(repositoryPath,
-            $"checkout --force HEAD -- {quotedPaths}",
-            cancellationToken);
+        // Hydrate requested files directly from HEAD, tolerating missing paths.
+        foreach (var path in cleanedPaths)
+        {
+            var result = await RunGitCommandAsync(
+                repositoryPath,
+                $"checkout --force HEAD -- \"{path}\"",
+                cancellationToken,
+                ignoreExitCode: true);
+
+            if (result.ExitCode == 0)
+            {
+                continue;
+            }
+
+            if (result.StandardError.Contains("did not match any file", StringComparison.OrdinalIgnoreCase))
+            {
+                _logger.LogDebug("Skipping hydration for missing git path '{Path}'", path);
+                continue;
+            }
+
+            throw new InvalidOperationException($"git checkout failed while hydrating '{path}' (exit {result.ExitCode}): {result.StandardError.Trim()}");
+        }
     }
 
     public Task CommitAndPushAsync(string repositoryPath, string message, CancellationToken cancellationToken = default)
@@ -413,7 +429,7 @@ public sealed class GitOperations : IGitOperations
         logger.LogInformation("Shallow clone complete at {TargetDir}", targetDir);
     }
 
-    private static async Task RunGitCommandAsync(
+    private static async Task<(int ExitCode, string StandardError)> RunGitCommandAsync(
         string repositoryPath,
         string args,
         CancellationToken cancellationToken,
@@ -443,6 +459,8 @@ public sealed class GitOperations : IGitOperations
         {
             throw new InvalidOperationException($"git {args} failed (exit {process.ExitCode}): {stderr.Trim()}");
         }
+
+        return (process.ExitCode, stderr);
     }
 
     /// <summary>

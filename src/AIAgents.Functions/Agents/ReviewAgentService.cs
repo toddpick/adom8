@@ -57,9 +57,6 @@ public sealed class ReviewAgentService : IAgentService
         var branchName = $"feature/US-{task.WorkItemId}";
         repoPath = await _gitOps.EnsureBranchAsync(branchName, lightweightCheckout: true, cancellationToken);
 
-        var statePath = $".ado/stories/US-{task.WorkItemId}/state.json";
-        await _gitOps.HydrateWorkingTreeAsync(repoPath, new[] { statePath }, cancellationToken);
-
         await using var context = _contextFactory.Create(task.WorkItemId, repoPath);
         var state = await context.LoadStateAsync(cancellationToken);
         state.CurrentState = "AI Review";
@@ -97,7 +94,6 @@ public sealed class ReviewAgentService : IAgentService
         }
 
         var hydratePaths = allPaths
-            .Concat(new[] { statePath })
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
         await _gitOps.HydrateWorkingTreeAsync(repoPath, hydratePaths, cancellationToken);
