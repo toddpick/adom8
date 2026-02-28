@@ -2,6 +2,7 @@
 
 ## In Progress
 - Running the onboarding pipeline on the first real project (My Credit Plan DNN)
+- Multi-user GitHub PAT routing prototype is implemented on branch `feature/multi-user-github-pat-routing` (not merged yet)
 
 ---
 
@@ -65,6 +66,11 @@ Consider: single update at end of run vs. progressive updates per stage.
 - [ ] Add token-budgeting rules per stage/agent with fallback behavior when limits are hit
 - [ ] Add onboarding flow for org-provided custom agents and approval of generated defaults
 - [ ] Roll out in phases: Phase 1 (baseline), Phase 2 (governance), Phase 3 (advanced tuning)
+
+### #9 â€” Multi-User GitHub PAT Routing (feature branch exists)
+- [ ] Review prototype branch `feature/multi-user-github-pat-routing`
+- [ ] Decide merge scope (full feature vs. phased rollout)
+- [ ] Merge to `main` after docs and governance checks
 
 ---
 
