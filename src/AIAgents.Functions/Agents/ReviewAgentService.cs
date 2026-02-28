@@ -55,7 +55,10 @@ public sealed class ReviewAgentService : IAgentService
         var workItem = await _adoClient.GetWorkItemAsync(task.WorkItemId, cancellationToken);
         var aiClient = _aiClientFactory.GetClientForAgent("Review", workItem.GetModelOverrides());
         var branchName = $"feature/US-{task.WorkItemId}";
-        repoPath = await _gitOps.EnsureBranchAsync(branchName, cancellationToken);
+        repoPath = await _gitOps.EnsureBranchAsync(branchName, lightweightCheckout: true, cancellationToken);
+
+        var statePath = $".ado/stories/US-{task.WorkItemId}/state.json";
+        await _gitOps.HydrateWorkingTreeAsync(repoPath, new[] { statePath }, cancellationToken);
 
         await using var context = _contextFactory.Create(task.WorkItemId, repoPath);
         var state = await context.LoadStateAsync(cancellationToken);
@@ -92,6 +95,12 @@ public sealed class ReviewAgentService : IAgentService
             _logger.LogInformation("Git diff fallback found {Count} reviewable source files for WI-{WorkItemId}",
                 allPaths.Count, task.WorkItemId);
         }
+
+        var hydratePaths = allPaths
+            .Concat(new[] { statePath })
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        await _gitOps.HydrateWorkingTreeAsync(repoPath, hydratePaths, cancellationToken);
 
         _logger.LogInformation("Reviewing {Count} files for WI-{WorkItemId}: {Files}",
             allPaths.Count, task.WorkItemId, string.Join(", ", allPaths.Take(10)));

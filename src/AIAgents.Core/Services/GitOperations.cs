@@ -30,9 +30,12 @@ public sealed class GitOperations : IGitOperations
         };
     }
 
-    public async Task<string> EnsureBranchAsync(string branchName, CancellationToken cancellationToken = default)
+    public Task<string> EnsureBranchAsync(string branchName, CancellationToken cancellationToken = default)
+        => EnsureBranchAsync(branchName, lightweightCheckout: false, cancellationToken);
+
+    public async Task<string> EnsureBranchAsync(string branchName, bool lightweightCheckout, CancellationToken cancellationToken = default)
     {
-        var basePath = _options.LocalBasePath ?? Path.Combine(Path.GetTempPath(), "ado-agent-repos");
+        var basePath = _options.LocalBasePath ?? GetDefaultBasePath();
         var repoDir = Path.Combine(basePath, SanitizeDirectoryName(branchName));
 
         // Sweep stale clone dirs to prevent disk exhaustion on Consumption plans.
@@ -98,7 +101,7 @@ public sealed class GitOperations : IGitOperations
 
             _logger.LogInformation("Shallow-cloning repository (depth=1) to {RepoDir}", repoDir);
             Directory.CreateDirectory(repoDir);
-            await ShallowCloneAsync(_options.RepositoryUrl, repoDir, _options.Username, _options.Token, _logger);
+            await ShallowCloneAsync(_options.RepositoryUrl, repoDir, _options.Username, _options.Token, _logger, lightweightCheckout);
         }
         else
         {
@@ -113,11 +116,33 @@ public sealed class GitOperations : IGitOperations
             {
                 CredentialsProvider = (_, _, _) => _credentials
             };
-            Commands.Fetch(repo, remote.Name, remote.FetchRefSpecs.Select(r => r.Specification), fetchOptions, null);
+
+            // For lightweight review flow, fetch only the target branch to minimize disk usage.
+            if (lightweightCheckout)
+            {
+                var targetRefSpec = $"+refs/heads/{branchName}:refs/remotes/origin/{branchName}";
+                try
+                {
+                    Commands.Fetch(repo, remote.Name, new[] { targetRefSpec }, fetchOptions, null);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex,
+                        "Targeted fetch for branch '{BranchName}' failed; continuing with existing refs",
+                        branchName);
+                }
+            }
+            else
+            {
+                Commands.Fetch(repo, remote.Name, remote.FetchRefSpecs.Select(r => r.Specification), fetchOptions, null);
+            }
 
             // Clean working directory before any branch switch to avoid conflicts
-            repo.Reset(ResetMode.Hard);
-            repo.RemoveUntrackedFiles();
+            if (!lightweightCheckout)
+            {
+                repo.Reset(ResetMode.Hard);
+                repo.RemoveUntrackedFiles();
+            }
 
             var branch = repo.Branches[branchName];
             var remoteBranch = repo.Branches[$"origin/{branchName}"];
@@ -166,14 +191,56 @@ public sealed class GitOperations : IGitOperations
                 repo.Branches.Update(branch, b => b.TrackedBranch = remoteBranch.CanonicalName);
             }
 
-            Commands.Checkout(repo, branch, new CheckoutOptions
+            if (lightweightCheckout)
             {
-                CheckoutModifiers = CheckoutModifiers.Force
-            });
-            _logger.LogInformation("Checked out branch '{BranchName}'", branchName);
+                repo.Refs.UpdateTarget("HEAD", branch.CanonicalName);
+                _logger.LogInformation("Prepared branch '{BranchName}' in lightweight mode (full checkout skipped)", branchName);
+            }
+            else
+            {
+                Commands.Checkout(repo, branch, new CheckoutOptions
+                {
+                    CheckoutModifiers = CheckoutModifiers.Force
+                });
+                _logger.LogInformation("Checked out branch '{BranchName}'", branchName);
+            }
         }
 
         return repoDir;
+    }
+
+    public async Task HydrateWorkingTreeAsync(string repositoryPath, IReadOnlyCollection<string> relativePaths, CancellationToken cancellationToken = default)
+    {
+        if (relativePaths is null || relativePaths.Count == 0)
+        {
+            return;
+        }
+
+        var cleanedPaths = relativePaths
+            .Where(p => !string.IsNullOrWhiteSpace(p))
+            .Select(p => p.Replace('\\', '/').Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        if (cleanedPaths.Length == 0)
+        {
+            return;
+        }
+
+        var quotedPaths = string.Join(" ", cleanedPaths.Select(p => $"\"{p}\""));
+
+        await RunGitCommandAsync(repositoryPath,
+            $"sparse-checkout init --no-cone",
+            cancellationToken,
+            ignoreExitCode: true);
+
+        await RunGitCommandAsync(repositoryPath,
+            $"sparse-checkout set --no-cone {quotedPaths}",
+            cancellationToken);
+
+        await RunGitCommandAsync(repositoryPath,
+            "checkout --force",
+            cancellationToken);
     }
 
     public Task CommitAndPushAsync(string repositoryPath, string message, CancellationToken cancellationToken = default)
@@ -315,14 +382,15 @@ public sealed class GitOperations : IGitOperations
     /// Performs a shallow (depth=1) clone via the git CLI to avoid full history download.
     /// LibGit2Sharp does not support shallow clones, so we shell out for the initial clone only.
     /// </summary>
-    private static async Task ShallowCloneAsync(string repoUrl, string targetDir, string username, string token, ILogger logger)
+    private static async Task ShallowCloneAsync(string repoUrl, string targetDir, string username, string token, ILogger logger, bool lightweightCheckout)
     {
         // Embed credentials in the URL so git CLI can authenticate without an interactive prompt.
         var uri = new Uri(repoUrl);
         var authedUrl = $"{uri.Scheme}://{Uri.EscapeDataString(username)}:{Uri.EscapeDataString(token)}@{uri.Host}{uri.PathAndQuery}";
 
+        var noCheckoutArg = lightweightCheckout ? " --no-checkout" : string.Empty;
         var psi = new ProcessStartInfo("git",
-            $"-c credential.helper= clone --depth 1 --single-branch --filter=blob:none \"{authedUrl}\" \"{targetDir}\"")
+            $"-c credential.helper= clone --depth 1 --single-branch --filter=blob:none{noCheckoutArg} \"{authedUrl}\" \"{targetDir}\"")
         {
             RedirectStandardOutput = true,
             RedirectStandardError  = true,
@@ -334,6 +402,8 @@ public sealed class GitOperations : IGitOperations
                 ["GIT_TERMINAL_PROMPT"] = "0",
                 // Ensure credential managers do not prompt/engage in headless hosts.
                 ["GCM_INTERACTIVE"] = "Never",
+                // Avoid pulling LFS content during clone on constrained disks.
+                ["GIT_LFS_SKIP_SMUDGE"] = "1",
             }
         };
 
@@ -347,6 +417,38 @@ public sealed class GitOperations : IGitOperations
             throw new InvalidOperationException($"git clone --depth 1 failed (exit {process.ExitCode}): {stderr.Trim()}");
 
         logger.LogInformation("Shallow clone complete at {TargetDir}", targetDir);
+    }
+
+    private static async Task RunGitCommandAsync(
+        string repositoryPath,
+        string args,
+        CancellationToken cancellationToken,
+        bool ignoreExitCode = false)
+    {
+        var psi = new ProcessStartInfo("git", $"-C \"{repositoryPath}\" {args}")
+        {
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            Environment =
+            {
+                ["GIT_TERMINAL_PROMPT"] = "0",
+                ["GCM_INTERACTIVE"] = "Never",
+                ["GIT_LFS_SKIP_SMUDGE"] = "1",
+            }
+        };
+
+        using var process = Process.Start(psi)
+            ?? throw new InvalidOperationException("Failed to start git process.");
+
+        var stderr = await process.StandardError.ReadToEndAsync(cancellationToken);
+        await process.WaitForExitAsync(cancellationToken);
+
+        if (process.ExitCode != 0 && !ignoreExitCode)
+        {
+            throw new InvalidOperationException($"git {args} failed (exit {process.ExitCode}): {stderr.Trim()}");
+        }
     }
 
     /// <summary>
@@ -364,5 +466,16 @@ public sealed class GitOperations : IGitOperations
     private static string SanitizeDirectoryName(string name)
     {
         return string.Concat(name.Select(c => Path.GetInvalidFileNameChars().Contains(c) ? '_' : c));
+    }
+
+    private static string GetDefaultBasePath()
+    {
+        var home = Environment.GetEnvironmentVariable("HOME");
+        if (!string.IsNullOrWhiteSpace(home))
+        {
+            return Path.Combine(home, "data", "ado-agent-repos");
+        }
+
+        return Path.Combine(Path.GetTempPath(), "ado-agent-repos");
     }
 }

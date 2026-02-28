@@ -15,6 +15,18 @@ public interface IGitOperations
     Task<string> EnsureBranchAsync(string branchName, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Clones or opens the repository and prepares the specified branch.
+    /// When <paramref name="lightweightCheckout"/> is true, avoids full working-tree checkout.
+    /// </summary>
+    Task<string> EnsureBranchAsync(string branchName, bool lightweightCheckout, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Hydrates only the specified paths into the working tree for lightweight clones.
+    /// Paths must be repository-relative.
+    /// </summary>
+    Task HydrateWorkingTreeAsync(string repositoryPath, IReadOnlyCollection<string> relativePaths, CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Stages all changes, commits with the given message, and pushes to origin.
     /// </summary>
     /// <param name="repositoryPath">Local path to the repository.</param>
