@@ -39,6 +39,7 @@ public sealed class CopilotBridgeWebhook
     private readonly CopilotOptions _copilotOptions;
     private readonly GitHubOptions _githubOptions;
     private readonly ICopilotDelegationService _delegationService;
+    private readonly IGitHubTokenResolver _gitHubTokenResolver;
     private readonly IGitOperations _gitOps;
     private readonly IStoryContextFactory _contextFactory;
     private readonly IAzureDevOpsClient _adoClient;
@@ -50,6 +51,7 @@ public sealed class CopilotBridgeWebhook
         IOptions<CopilotOptions> copilotOptions,
         IOptions<GitHubOptions> githubOptions,
         ICopilotDelegationService delegationService,
+        IGitHubTokenResolver? gitHubTokenResolver,
         IGitOperations gitOps,
         IStoryContextFactory contextFactory,
         IAzureDevOpsClient adoClient,
@@ -60,12 +62,38 @@ public sealed class CopilotBridgeWebhook
         _copilotOptions = copilotOptions.Value;
         _githubOptions = githubOptions.Value;
         _delegationService = delegationService;
+        _gitHubTokenResolver = gitHubTokenResolver ??
+            new DefaultGitHubTokenResolver(_githubOptions.Token);
         _gitOps = gitOps;
         _contextFactory = contextFactory;
         _adoClient = adoClient;
         _taskQueue = taskQueue;
         _activityLogger = activityLogger;
         _logger = logger;
+    }
+
+    public CopilotBridgeWebhook(
+        IOptions<CopilotOptions> copilotOptions,
+        IOptions<GitHubOptions> githubOptions,
+        ICopilotDelegationService delegationService,
+        IGitOperations gitOps,
+        IStoryContextFactory contextFactory,
+        IAzureDevOpsClient adoClient,
+        IAgentTaskQueue taskQueue,
+        IActivityLogger activityLogger,
+        ILogger<CopilotBridgeWebhook> logger)
+        : this(
+            copilotOptions,
+            githubOptions,
+            delegationService,
+            null,
+            gitOps,
+            contextFactory,
+            adoClient,
+            taskQueue,
+            activityLogger,
+            logger)
+    {
     }
 
     [Function("CopilotBridgeWebhook")]
@@ -260,8 +288,30 @@ public sealed class CopilotBridgeWebhook
                 prNumber, workItemId);
         }
 
+        // Fetch story metadata first to resolve per-story GitHub token selection
+        var tokenSelection = _gitHubTokenResolver.ResolveDefault();
+        var isInitializeCodebaseStory = false;
+        try
+        {
+            var workItem = await _adoClient.GetWorkItemAsync(workItemId, cancellationToken);
+            tokenSelection = _gitHubTokenResolver.ResolveForStory(workItem);
+            isInitializeCodebaseStory = workItem.Tags.Any(tag =>
+                string.Equals(tag, AIPipelineNames.InitializeCodebaseTag, StringComparison.OrdinalIgnoreCase));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex,
+                "Could not evaluate InitializeCodebase tag for WI-{WorkItemId}; proceeding with standard Copilot handoff",
+                workItemId);
+        }
+
+        _logger.LogInformation(
+            "Using GitHub token alias '{Alias}' for Copilot reconciliation WI-{WorkItemId}",
+            tokenSelection.Alias,
+            workItemId);
+
         // Fetch PR file list and metrics from GitHub API
-        var (changedFiles, metrics) = await FetchPrDetailsAsync(prNumber, delegation.DelegatedAt, cancellationToken);
+        var (changedFiles, metrics) = await FetchPrDetailsAsync(prNumber, delegation.DelegatedAt, tokenSelection.Token, cancellationToken);
 
         // Safety check: don't reconcile if Copilot hasn't pushed any actual file changes yet.
         // This prevents closing the issue and resuming the pipeline with 0 code changes.
@@ -290,27 +340,13 @@ public sealed class CopilotBridgeWebhook
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
 
-        var isInitializeCodebaseStory = false;
-        try
-        {
-            var workItem = await _adoClient.GetWorkItemAsync(workItemId, cancellationToken);
-            isInitializeCodebaseStory = workItem.Tags.Any(tag =>
-                string.Equals(tag, AIPipelineNames.InitializeCodebaseTag, StringComparison.OrdinalIgnoreCase));
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex,
-                "Could not evaluate InitializeCodebase tag for WI-{WorkItemId}; proceeding with standard Copilot handoff",
-                workItemId);
-        }
-
         // Close Copilot's PR if configured
         // Intentionally do not merge or close PR here. Human review controls merge decisions.
 
         // Close the GitHub Issue if one was created (safe if already closed)
         if (delegation.IssueNumber > 0)
         {
-            try { await CloseIssueAsync(delegation.IssueNumber, cancellationToken); }
+            try { await CloseIssueAsync(delegation.IssueNumber, tokenSelection.Token, cancellationToken); }
             catch (Exception ex) { _logger.LogWarning(ex, "Failed to close issue #{IssueNumber} — may already be closed", delegation.IssueNumber); }
         }
 
@@ -651,9 +687,12 @@ public sealed class CopilotBridgeWebhook
     /// Fetches PR changed files and metrics from GitHub API.
     /// </summary>
     private async Task<(List<PrFile> Files, CopilotMetrics Metrics)> FetchPrDetailsAsync(
-        int prNumber, DateTime delegatedAt, CancellationToken cancellationToken)
+        int prNumber,
+        DateTime delegatedAt,
+        string githubToken,
+        CancellationToken cancellationToken)
     {
-        using var httpClient = CreateGitHubClient();
+        using var httpClient = CreateGitHubClient(githubToken);
 
         // Get PR metadata
         var prResponse = await httpClient.GetAsync(
@@ -709,9 +748,12 @@ public sealed class CopilotBridgeWebhook
     /// Fetches raw file content from a specific branch via GitHub API.
     /// </summary>
     private async Task<string?> FetchFileContentAsync(
-        PrFile file, string branch, CancellationToken cancellationToken)
+        PrFile file,
+        string branch,
+        string githubToken,
+        CancellationToken cancellationToken)
     {
-        using var httpClient = CreateGitHubClient();
+        using var httpClient = CreateGitHubClient(githubToken);
         httpClient.DefaultRequestHeaders.Accept.Clear();
         httpClient.DefaultRequestHeaders.Accept.Add(
             new MediaTypeWithQualityHeaderValue("application/vnd.github.raw+json"));
@@ -751,9 +793,9 @@ public sealed class CopilotBridgeWebhook
     /// <summary>
     /// Closes a PR with a comment.
     /// </summary>
-    private async Task ClosePullRequestAsync(int prNumber, string comment, CancellationToken cancellationToken)
+    private async Task ClosePullRequestAsync(int prNumber, string comment, string githubToken, CancellationToken cancellationToken)
     {
-        using var httpClient = CreateGitHubClient();
+        using var httpClient = CreateGitHubClient(githubToken);
 
         // Add comment
         var commentBody = JsonSerializer.Serialize(new { body = comment });
@@ -775,9 +817,9 @@ public sealed class CopilotBridgeWebhook
     /// <summary>
     /// Closes a GitHub Issue with a completion label.
     /// </summary>
-    private async Task CloseIssueAsync(int issueNumber, CancellationToken cancellationToken)
+    private async Task CloseIssueAsync(int issueNumber, string githubToken, CancellationToken cancellationToken)
     {
-        using var httpClient = CreateGitHubClient();
+        using var httpClient = CreateGitHubClient(githubToken);
 
         var closeBody = JsonSerializer.Serialize(new
         {
@@ -792,7 +834,7 @@ public sealed class CopilotBridgeWebhook
         _logger.LogInformation("Closed GitHub Issue #{IssueNumber} (copilot-completed)", issueNumber);
     }
 
-    private HttpClient CreateGitHubClient()
+    private HttpClient CreateGitHubClient(string githubToken)
     {
         var client = new HttpClient
         {
@@ -800,7 +842,7 @@ public sealed class CopilotBridgeWebhook
             Timeout = TimeSpan.FromSeconds(30)
         };
         client.DefaultRequestHeaders.Authorization =
-            new AuthenticationHeaderValue("Bearer", _githubOptions.Token);
+            new AuthenticationHeaderValue("Bearer", githubToken);
         client.DefaultRequestHeaders.UserAgent.ParseAdd("AIAgents/1.0");
         client.DefaultRequestHeaders.Accept.Add(
             new MediaTypeWithQualityHeaderValue("application/vnd.github+json"));
@@ -813,5 +855,21 @@ public sealed class CopilotBridgeWebhook
         public required string Filename { get; init; }
         public required string Status { get; init; }
         public string? ContentsUrl { get; init; }
+    }
+
+    private sealed class DefaultGitHubTokenResolver : IGitHubTokenResolver
+    {
+        private readonly string _token;
+
+        public DefaultGitHubTokenResolver(string token)
+        {
+            _token = token;
+        }
+
+        public GitHubTokenSelection ResolveForStory(StoryWorkItem workItem)
+            => new("default", _token);
+
+        public GitHubTokenSelection ResolveDefault()
+            => new("default", _token);
     }
 }

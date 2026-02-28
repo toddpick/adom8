@@ -59,6 +59,12 @@ public sealed record StoryWorkItem
     public string? AICodingProvider { get; init; }
 
     /// <summary>
+    /// Optional GitHub user/account alias to route Copilot and GitHub API calls
+    /// to a specific PAT from configured alias mappings.
+    /// </summary>
+    public string? GitHubUserAccount { get; init; }
+
+    /// <summary>
     /// Builds a <see cref="StoryModelOverrides"/> from this work item's
     /// per-story model fields. Returns null if no overrides are set.
     /// </summary>

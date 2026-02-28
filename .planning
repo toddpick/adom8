@@ -2,6 +2,7 @@
 
 ## In Progress
 - Running the onboarding pipeline on the first real project (My Credit Plan DNN)
+- Multi-user GitHub PAT routing prototype is implemented on branch `feature/multi-user-github-pat-routing` (not merged to main yet)
 
 ---
 
@@ -65,6 +66,21 @@ Consider: single update at end of run vs. progressive updates per stage.
 - [ ] Add token-budgeting rules per stage/agent with fallback behavior when limits are hit
 - [ ] Add onboarding flow for org-provided custom agents and approval of generated defaults
 - [ ] Roll out in phases: Phase 1 (baseline), Phase 2 (governance), Phase 3 (advanced tuning)
+
+### #9 â€” Multi-User GitHub PAT Routing (credit distribution)
+- [x] Add optional User Story field: `GitHub User Account` and map it into `StoryWorkItem`
+- [x] Keep backward-compatible default behavior: if field is empty, use the existing default GitHub token
+- [x] Add pipeline/setup variables to support alias map payloads (`GITHUB_DEFAULT_USER_ALIAS`, `GITHUB_USER_TOKENS_JSON`, `GITHUB_USER_ALIASES_JSON`)
+- [x] Store each PAT in Key Vault as separate secrets and keep alias-to-secret mapping in app settings
+- [x] Resolve selected alias at runtime and use that token for GitHub issue delegation and webhook reconciliation
+- [x] Add alias-level audit visibility in logs (alias only, never token)
+- [ ] Harden allow-list validation behavior for unknown aliases (currently falls back to default with warning)
+- [ ] Update get-started docs with rotation/ownership guidance and team governance recommendations
+
+**Implementation status note:**
+- Completed as prototype on branch `feature/multi-user-github-pat-routing`.
+- Build and targeted tests pass locally on that branch.
+- Remaining work before merge: docs + stricter enforcement semantics (if desired) for unknown aliases.
 
 ---
 

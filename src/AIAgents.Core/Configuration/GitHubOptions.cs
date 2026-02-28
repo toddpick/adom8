@@ -34,6 +34,24 @@ public sealed class GitHubOptions
     public string BaseBranch { get; init; } = "main";
 
     /// <summary>
+    /// Optional default GitHub user alias for per-story PAT routing.
+    /// When unset, the primary <see cref="Token"/> is used as the default.
+    /// </summary>
+    public string? DefaultUserAlias { get; init; }
+
+    /// <summary>
+    /// Optional alias-to-token map for per-story PAT routing.
+    /// Example env var key format: <c>GitHub__UserTokens__john</c>.
+    /// </summary>
+    public Dictionary<string, string> UserTokens { get; init; } = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Optional display-name/label to alias map for friendly story values.
+    /// Example env var key format: <c>GitHub__UserAliases__John Doe</c> = <c>john</c>.
+    /// </summary>
+    public Dictionary<string, string> UserAliases { get; init; } = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
     /// The filename of the GitHub Actions workflow to trigger for Level 5 autonomy.
     /// Must accept <c>workflow_dispatch</c> trigger.
     /// Example: <c>deploy.yml</c>

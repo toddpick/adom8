@@ -29,6 +29,7 @@ public sealed class CopilotCodingStrategy : ICodingStrategy
     private readonly HttpClient _httpClient;
 
     private readonly string _agentAssignee;
+    private readonly string _tokenAlias;
 
     /// <summary>The GitHub agent username this strategy will assign issues to.</summary>
     public string AgentAssignee => _agentAssignee;
@@ -38,13 +39,17 @@ public sealed class CopilotCodingStrategy : ICodingStrategy
         IOptions<CopilotOptions> copilotOptions,
         ICopilotDelegationService delegationService,
         ILogger logger,
-        string? agentOverride = null)
+        string? agentOverride = null,
+        string? tokenOverride = null,
+        string? tokenAlias = null)
     {
         _githubOptions = githubOptions.Value;
         _copilotOptions = copilotOptions.Value;
         _delegationService = delegationService;
         _logger = logger;
         _agentAssignee = agentOverride ?? _copilotOptions.Model ?? "copilot";
+        _tokenAlias = string.IsNullOrWhiteSpace(tokenAlias) ? "default" : tokenAlias.Trim();
+        var githubToken = string.IsNullOrWhiteSpace(tokenOverride) ? _githubOptions.Token : tokenOverride;
 
         _httpClient = new HttpClient
         {
@@ -52,7 +57,7 @@ public sealed class CopilotCodingStrategy : ICodingStrategy
             Timeout = TimeSpan.FromSeconds(30)
         };
         _httpClient.DefaultRequestHeaders.Authorization =
-            new AuthenticationHeaderValue("Bearer", _githubOptions.Token);
+            new AuthenticationHeaderValue("Bearer", githubToken);
         _httpClient.DefaultRequestHeaders.UserAgent.ParseAdd("AIAgents/1.0");
         _httpClient.DefaultRequestHeaders.Accept.Add(
             new MediaTypeWithQualityHeaderValue("application/vnd.github+json"));
@@ -62,8 +67,9 @@ public sealed class CopilotCodingStrategy : ICodingStrategy
     public async Task<CodingResult> ExecuteAsync(CodingContext context, CancellationToken cancellationToken = default)
     {
         _logger.LogInformation(
-            "Delegating coding for WI-{WorkItemId} to GitHub Copilot coding agent",
-            context.WorkItemId);
+            "Delegating coding for WI-{WorkItemId} to GitHub Copilot coding agent (token alias: {Alias})",
+            context.WorkItemId,
+            _tokenAlias);
 
         // Guard against duplicate triggers — if a delegation already exists for this work item,
         // return immediately instead of creating another GitHub Issue + Copilot agent run.
@@ -126,7 +132,8 @@ public sealed class CopilotCodingStrategy : ICodingStrategy
             ["mode"] = "copilot-delegated",
             ["issueNumber"] = issueNumber,
             ["delegatedAt"] = DateTime.UtcNow.ToString("O"),
-            ["agent"] = _agentAssignee
+            ["agent"] = _agentAssignee,
+            ["githubUserAlias"] = _tokenAlias
         };
 
         var summary = _copilotOptions.CreateIssue

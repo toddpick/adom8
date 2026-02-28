@@ -83,6 +83,7 @@ public sealed class ProvisionAzureDevOps
         new("AI Review Model", "Custom.AIReviewModel", "string"),
         new("AI Documentation Model", "Custom.AIDocumentationModel", "string"),
         new("AI Coding Provider", "Custom.AICodingProvider", "string"),
+        new("GitHub User Account", "Custom.GitHubUserAccount", "string"),
 
         new("AI Tokens Used", "Custom.AITokensUsed", "integer"),
         new("AI Cost", "Custom.AICost", "string"),

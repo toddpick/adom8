@@ -43,6 +43,9 @@ def main():
     copilot_checkpoint_fail_hard = os.environ.get("COPILOT_CHECKPOINT_FAIL_HARD", "true").strip().lower() in ["1", "true", "yes", "on"]
     copilot_required_ado_checkpoints = os.environ.get("COPILOT_REQUIRED_ADO_CHECKPOINTS", "LastAgent,CurrentAIAgent,CompletionComment").strip() or "LastAgent,CurrentAIAgent,CompletionComment"
     github_base_branch = os.environ.get("GITHUB_BASE_BRANCH", "main").strip() or "main"
+    github_default_user_alias = (os.environ.get("GITHUB_DEFAULT_USER_ALIAS") or "").strip()
+    github_user_tokens_json_raw = (os.environ.get("GITHUB_USER_TOKENS_JSON") or "").strip()
+    github_user_aliases_json_raw = (os.environ.get("GITHUB_USER_ALIASES_JSON") or "").strip()
     copilot_webhook_secret = (os.environ.get("COPILOT_WEBHOOK_SECRET") or "").strip()
     repo_capacity_enabled = os.environ.get("REPO_CAPACITY_ENABLED", "true").strip().lower() in ["1", "true", "yes", "on"]
     repo_capacity_max_working_tree_mb = (os.environ.get("REPO_CAPACITY_MAX_WORKING_TREE_MB", "500").strip() or "500")
@@ -151,6 +154,42 @@ def main():
         secrets_to_store["GOOGLE-API-KEY"] = google_api_key
         print("Google API key detected — will be provisioned.")
 
+    github_user_tokens = {}
+    github_user_aliases = {}
+
+    if github_user_tokens_json_raw:
+        try:
+            parsed = json.loads(github_user_tokens_json_raw)
+            if isinstance(parsed, dict):
+                github_user_tokens = {
+                    str(alias).strip(): str(token).strip()
+                    for alias, token in parsed.items()
+                    if str(alias).strip() and str(token).strip()
+                }
+            else:
+                print("Warning: GITHUB_USER_TOKENS_JSON is not an object; ignoring.")
+        except Exception as ex:
+            print(f"Warning: Failed to parse GITHUB_USER_TOKENS_JSON: {ex}")
+
+    if github_user_aliases_json_raw:
+        try:
+            parsed = json.loads(github_user_aliases_json_raw)
+            if isinstance(parsed, dict):
+                github_user_aliases = {
+                    str(label).strip(): str(alias).strip()
+                    for label, alias in parsed.items()
+                    if str(label).strip() and str(alias).strip()
+                }
+            else:
+                print("Warning: GITHUB_USER_ALIASES_JSON is not an object; ignoring.")
+        except Exception as ex:
+            print(f"Warning: Failed to parse GITHUB_USER_ALIASES_JSON: {ex}")
+
+    for alias, token in github_user_tokens.items():
+        secret_alias = "".join(ch if ch.isalnum() or ch in ["-", "_"] else "-" for ch in alias)
+        secret_name = f"GITHUB-TOKEN-{secret_alias}".upper()
+        secrets_to_store[secret_name] = token
+
     for secret_name, secret_value in secrets_to_store.items():
         try:
             set_secret_if_changed(secret_name, secret_value)
@@ -198,6 +237,19 @@ def main():
         f"CodebaseDocumentation__ApiFileSizeLimitBytes={int(codebase_api_file_limit_kb) * 1024}",
         f"CodebaseDocumentation__ApiPublishEnabled={'true' if codebase_api_publish_enabled else 'false'}",
     ]
+
+    if github_default_user_alias:
+        app_settings.append(f"GitHub__DefaultUserAlias={github_default_user_alias}")
+
+    for alias in github_user_tokens.keys():
+        secret_alias = "".join(ch if ch.isalnum() or ch in ["-", "_"] else "-" for ch in alias)
+        secret_name = f"GITHUB-TOKEN-{secret_alias}".upper()
+        app_settings.append(
+            f"GitHub__UserTokens__{alias}=@Microsoft.KeyVault(VaultName={args.key_vault};SecretName={secret_name})"
+        )
+
+    for label, alias in github_user_aliases.items():
+        app_settings.append(f"GitHub__UserAliases__{label}={alias}")
     # Wire optional AI provider keys into Function App settings if they were provided
     if openai_api_key:
         app_settings.append(f"AI__ProviderKeys__OpenAI__ApiKey=@Microsoft.KeyVault(VaultName={args.key_vault};SecretName=OPENAI-API-KEY)")

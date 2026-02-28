@@ -58,6 +58,12 @@ public static class CustomFieldNames
     /// </summary>
     public const string CodingProvider = "Custom.AICodingProvider";
 
+    /// <summary>
+    /// Optional per-story GitHub user/account alias used for PAT routing.
+    /// When blank, runtime falls back to the default GitHub token.
+    /// </summary>
+    public const string GitHubUserAccount = "Custom.GitHubUserAccount";
+
     // ── Output Fields (written by agents during processing) ─────────
 
     /// <summary>
@@ -156,5 +162,6 @@ public static class CustomFieldNames
         public const string ReviewModel = "/fields/" + CustomFieldNames.ReviewModel;
         public const string DocumentationModel = "/fields/" + CustomFieldNames.DocumentationModel;
         public const string CodingProvider = "/fields/" + CustomFieldNames.CodingProvider;
+        public const string GitHubUserAccount = "/fields/" + CustomFieldNames.GitHubUserAccount;
     }
 }

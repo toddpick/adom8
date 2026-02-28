@@ -370,6 +370,7 @@ public sealed class AzureDevOpsClient : IAzureDevOpsClient, IDisposable
             AIReviewModel = GetField<string>(fields, CustomFieldNames.ReviewModel),
             AIDocumentationModel = GetField<string>(fields, CustomFieldNames.DocumentationModel),
             AICodingProvider = GetField<string>(fields, CustomFieldNames.CodingProvider),
+            GitHubUserAccount = GetField<string>(fields, CustomFieldNames.GitHubUserAccount),
 
             // AI Output Fields (written by agents, readable for dashboards/queries)
             AITokensUsed = GetField<double?>(fields, CustomFieldNames.TokensUsed) is double tu

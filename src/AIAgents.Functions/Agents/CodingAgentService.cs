@@ -41,6 +41,7 @@ public sealed class CodingAgentService : IAgentService
     private readonly IActivityLogger _activityLogger;
     private readonly CopilotOptions _copilotOptions;
     private readonly ICopilotDelegationService _delegationService;
+    private readonly IGitHubTokenResolver _gitHubTokenResolver;
     private readonly IOptions<GitHubOptions> _githubOptions;
     private readonly IOptions<CopilotOptions> _copilotOptionsAccessor;
 
@@ -55,6 +56,7 @@ public sealed class CodingAgentService : IAgentService
         IActivityLogger activityLogger,
         IOptions<CopilotOptions> copilotOptions,
         ICopilotDelegationService delegationService,
+        IGitHubTokenResolver? gitHubTokenResolver,
         IOptions<GitHubOptions> githubOptions)
     {
         _aiClientFactory = aiClientFactory;
@@ -69,6 +71,36 @@ public sealed class CodingAgentService : IAgentService
         _copilotOptionsAccessor = copilotOptions;
         _delegationService = delegationService;
         _githubOptions = githubOptions;
+        _gitHubTokenResolver = gitHubTokenResolver ??
+            new DefaultGitHubTokenResolver(_githubOptions.Value.Token);
+    }
+
+    public CodingAgentService(
+        IAIClientFactory aiClientFactory,
+        IAzureDevOpsClient adoClient,
+        IGitOperations gitOps,
+        IStoryContextFactory contextFactory,
+        ICodebaseContextProvider codebaseContext,
+        ILogger<CodingAgentService> logger,
+        IAgentTaskQueue taskQueue,
+        IActivityLogger activityLogger,
+        IOptions<CopilotOptions> copilotOptions,
+        ICopilotDelegationService delegationService,
+        IOptions<GitHubOptions> githubOptions)
+        : this(
+            aiClientFactory,
+            adoClient,
+            gitOps,
+            contextFactory,
+            codebaseContext,
+            logger,
+            taskQueue,
+            activityLogger,
+            copilotOptions,
+            delegationService,
+            null,
+            githubOptions)
+    {
     }
 
     public async Task<AgentResult> ExecuteAsync(AgentTask task, CancellationToken cancellationToken = default)
@@ -394,7 +426,7 @@ public sealed class CodingAgentService : IAgentService
                 _logger.LogInformation(
                     "Routing WI-{WorkItemId} to {Agent} strategy (per-story AICodingProvider override)",
                     workItem.Id, agentName);
-                return CreateCopilotStrategy(agentName);
+                return CreateCopilotStrategy(workItem, agentName);
             }
 
             _logger.LogWarning(
@@ -413,7 +445,7 @@ public sealed class CodingAgentService : IAgentService
             _logger.LogInformation(
                 "Routing WI-{WorkItemId} to Copilot strategy (Mode=Always)", workItem.Id);
 
-            return CreateCopilotStrategy();
+            return CreateCopilotStrategy(workItem);
         }
 
         // Mode = Auto (default) → route based on complexity threshold
@@ -425,7 +457,7 @@ public sealed class CodingAgentService : IAgentService
                 "Routing WI-{WorkItemId} to Copilot strategy ({StoryPoints} SP ≥ {Threshold} threshold)",
                 workItem.Id, storyPoints, _copilotOptions.ComplexityThreshold);
 
-            return CreateCopilotStrategy();
+            return CreateCopilotStrategy(workItem);
         }
 
         _logger.LogInformation(
@@ -438,8 +470,23 @@ public sealed class CodingAgentService : IAgentService
     private AgenticCodingStrategy CreateAgenticStrategy() =>
         new(_aiClientFactory, _gitOps, _codebaseContext, _logger);
 
-    private CopilotCodingStrategy CreateCopilotStrategy(string? agentOverride = null) =>
-        new(_githubOptions, _copilotOptionsAccessor, _delegationService, _logger, agentOverride);
+    private CopilotCodingStrategy CreateCopilotStrategy(StoryWorkItem workItem, string? agentOverride = null)
+    {
+        var tokenSelection = _gitHubTokenResolver.ResolveForStory(workItem);
+        _logger.LogInformation(
+            "Using GitHub token alias '{Alias}' for WI-{WorkItemId} Copilot strategy",
+            tokenSelection.Alias,
+            workItem.Id);
+
+        return new CopilotCodingStrategy(
+            _githubOptions,
+            _copilotOptionsAccessor,
+            _delegationService,
+            _logger,
+            agentOverride,
+            tokenSelection.Token,
+            tokenSelection.Alias);
+    }
 
     private static bool IsInitializeCodebaseNoClonePath(StoryWorkItem workItem, ICodingStrategy strategy)
     {
@@ -610,5 +657,21 @@ public sealed class CodingAgentService : IAgentService
 
         // Default: moderate rounds if no complexity info available
         return 15;
+    }
+
+    private sealed class DefaultGitHubTokenResolver : IGitHubTokenResolver
+    {
+        private readonly string _token;
+
+        public DefaultGitHubTokenResolver(string token)
+        {
+            _token = token;
+        }
+
+        public GitHubTokenSelection ResolveForStory(StoryWorkItem workItem)
+            => new("default", _token);
+
+        public GitHubTokenSelection ResolveDefault()
+            => new("default", _token);
     }
 }
