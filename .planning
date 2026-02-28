@@ -72,6 +72,60 @@ Consider: single update at end of run vs. progressive updates per stage.
 - [ ] Decide merge scope (full feature vs. phased rollout)
 - [ ] Merge to `main` after docs and governance checks
 
+### #10 â€” HIGH PRIORITY Future Phase: Replace Custom Coding Agent with Claude GitHub App (Post-demo)
+**Future phase only — no current implementation changes.**
+
+**Problem statement:** The current custom Coding Agent clone/generation path in Azure is creating storage capacity failures and long-term maintenance burden.
+
+**Target Coding Tier Strategy (future state):**
+- **Tier 1 (Primary):** GitHub Copilot native agent (issue assignment or `@copilot` mention), visible in GitHub Agents tab, uses existing Copilot subscription.
+- **Tier 2 (Secondary):** Claude GitHub App (triggered by `@claude` mention on PR), runs on GitHub runners, uses customer `ANTHROPIC_API_KEY` GitHub repository secret, model configurable in workflow YAML (`claude-sonnet-4-6` default, `claude-opus-4-6` for higher complexity).
+- **Tier 3 (Fallback):** Existing OpenAI-based internal agentic path retained for customers without Copilot/Claude access.
+
+**Orchestrator role in this phase:**
+- Azure Function orchestrator posts the trigger comment (`@claude`) and tracks outcome/status.
+- Remove dependence on full custom clone/generation path for Tier 2 use cases.
+
+**Security posture note (documented for enterprise review):**
+- Tier 1 under existing Microsoft/GitHub Enterprise DPA.
+- Tier 2 under Anthropic API agreement.
+- No additional third-party vendor security review expected beyond existing approved vendors.
+
+**Benefits to document:**
+- Eliminates Azure storage blowup risk from custom clone-heavy coding path.
+- Reduces largest maintenance hotspot in orchestrator codebase.
+- Provides native real-time visibility in GitHub (Agents/Actions surfaces).
+- Creates clean two-vendor security narrative (Microsoft/GitHub + Anthropic).
+
+**Phase gates:**
+- [ ] Architecture RFC and rollback plan approved
+- [ ] Tier routing policy finalized (Copilot/Claude/OpenAI fallback)
+- [ ] Enterprise security and legal sign-off notes added to docs
+- [ ] Pilot on one project before general rollout
+
+### #11 â€” LOWER PRIORITY Future Phase: Native GitHub App Integration for ADO Plumbing (Post-demo)
+**Future phase only — additive integration, not a replacement of Azure Functions.**
+
+Known installed GitHub Apps in org (for future exploration):
+- Azure Boards (scoped to my-credit-plan-dnn and my-credit-plan-portal)
+- Azure Pipelines (scoped to my-credit-plan-dnn, my-credit-plan-portal, and adom8Fork)
+- Claude (permission update pending approval)
+
+Potential future explorations:
+- Use Azure Boards `AB#[workitem]` commit/PR linking for native work-item association.
+- Use Azure Pipelines native GitHub checks so Deployment Agent can monitor check status instead of direct ADO pipeline polling where appropriate.
+- Use `@claude` as alternate Coding Agent trigger with model selection via workflow YAML.
+
+**Critical constraint (must remain explicit):**
+- Azure Functions remain the intelligence layer for event capture, enrichment, custom-field updates (including `Current AI Agent`), analytics, and SaaS dashboard data.
+- GitHub Apps only replace plumbing portions where native integrations are stronger.
+- Current webhook + direct API architecture remains fully in place until this phase is explicitly prioritized and approved.
+
+**Phase gates:**
+- [ ] Integration boundaries documented (what moves vs. what stays in Functions)
+- [ ] No-regression plan for custom fields and dashboard telemetry
+- [ ] Pilot with one repo using dual-path monitoring before broader adoption
+
 ---
 
 ## Completed
