@@ -57,8 +57,10 @@ Before running the pipeline, you must configure the required variables.
    - `ONBOARDING_PAT`: The ADO PAT you created in Step 1.
    - `GITHUB_TOKEN`: The GitHub PAT you created in Step 1.
    - `CLAUDE_API_KEY`: Your AI provider API key.
+   - `COPILOT_MCP_AZURE_DEVOPS_PAT` (optional override): only needed if you want a dedicated MCP PAT; otherwise onboarding falls back to `ONBOARDING_PAT`.
 3. Add optional non-secret override variable:
    - `COPILOT_ENABLED`: Defaults to `true`. Set to `false` if you want to disable GitHub Copilot delegation.
+   - `MCP_BOOTSTRAP_ENABLED`: Defaults to `true`. Keep enabled to generate `.adom8/mcp/mcp.template.json`.
 4. The pipeline will prompt you for the following parameters when you click Run:
    - `AZURE_SERVICE_CONNECTION`: The name of your Azure Resource Manager service connection in ADO.
    - `AZURE_SUBSCRIPTION_ID`: Your Azure Subscription ID.
@@ -96,8 +98,13 @@ Click **Run**. The pipeline will execute the following stages:
        - `Metadata` (Read)
     - For org-owned repositories, verify **Organization Settings → Third-party access → Personal access tokens** policy.
        - If **Require admin approval** is enabled, each PAT must be approved before Copilot can auto-start.
-5. **Static Web App URL Note**: The Static Web App resource name is derived from your ADO project name, but Azure still assigns the default `*.azurestaticapps.net` hostname. Use a custom domain if you want a friendly URL.
-6. **Default Field Values (Auto-Enforced)**: The pipeline enforces `Custom.AutonomyLevel` as a picklist (`1-5`) with default `3 - Review & Pause`, and sets `Custom.AIMinimumReviewScore` default to `85` for User Story work items.
+5. **Register MCP Servers in GitHub Copilot (Required for MCP tools)**:
+   - Open GitHub repository settings → **Copilot** → **Coding agent** → **MCP configuration**.
+   - Copy/paste `.adom8/mcp/mcp.template.json` from your repo.
+   - Ensure secret `COPILOT_MCP_AZURE_DEVOPS_PAT` is available in Copilot session secret context.
+   - Onboarding auto-syncs this secret name in the repo; value comes from `COPILOT_MCP_AZURE_DEVOPS_PAT` when provided, otherwise `ONBOARDING_PAT` is used.
+6. **Static Web App URL Note**: The Static Web App resource name is derived from your ADO project name, but Azure still assigns the default `*.azurestaticapps.net` hostname. Use a custom domain if you want a friendly URL.
+7. **Default Field Values (Auto-Enforced)**: The pipeline enforces `Custom.AutonomyLevel` as a picklist (`1-5`) with default `3 - Review & Pause`, and sets `Custom.AIMinimumReviewScore` default to `85` for User Story work items.
 
 You are now ready to create your first User Story and assign it to the `AI Agent` state!
 

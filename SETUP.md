@@ -19,7 +19,8 @@ Before running the pipeline, you need to gather the following information and cr
 9. **Azure Service Connection**: The name of an existing Azure Resource Manager service connection in your ADO project that has Contributor access to your subscription.
 10. **Copilot Enabled (Optional)**: Set pipeline variable `COPILOT_ENABLED` (`true` by default) to delegate coding to GitHub Copilot by default.
 11. **MCP Bootstrap Enabled (Optional)**: Set pipeline variable `MCP_BOOTSTRAP_ENABLED` (`true` by default) to create MCP bootstrap guidance files in your GitHub repo.
-12. **GitHub Base Branch (Optional)**: Set pipeline variable `GITHUB_BASE_BRANCH` (`main` by default) to choose which branch AI feature branches are created from (for example, `dev`).
+12. **Copilot ADO MCP PAT (Optional override)**: Set secret pipeline variable `COPILOT_MCP_AZURE_DEVOPS_PAT` only if you want a dedicated PAT for MCP; otherwise onboarding reuses `ONBOARDING_PAT` automatically for MCP secret sync.
+13. **GitHub Base Branch (Optional)**: Set pipeline variable `GITHUB_BASE_BRANCH` (`main` by default) to choose which branch AI feature branches are created from (for example, `dev`).
 
 ### Create Tokens
 
@@ -67,6 +68,7 @@ Create a Fine-grained Personal Access Token in GitHub scoped to your target repo
    - `AZURE_SERVICE_CONNECTION`
    - `COPILOT_ENABLED` (optional, defaults to `true`)
    - `MCP_BOOTSTRAP_ENABLED` (optional, defaults to `true`)
+   - `COPILOT_MCP_AZURE_DEVOPS_PAT` (optional secret override; if omitted, pipeline uses `ONBOARDING_PAT`)
    - `GITHUB_BASE_BRANCH` (optional, defaults to `main`; set to `dev` if you want AI feature branches based on your dev branch)
    
    **Secret Variables** (Make sure to check "Keep this value secret"):
@@ -105,7 +107,8 @@ Once the pipeline completes successfully:
 5. **Register MCP Servers in GitHub Copilot (Required for MCP Tools)**:
    - Open GitHub repository settings → **Copilot** → **Coding agent** → **MCP configuration**.
    - Copy/paste `.adom8/mcp/mcp.template.json` into the MCP configuration box.
-   - If you enable the optional `ado` MCP server, add Copilot environment secret `COPILOT_MCP_AZURE_DEVOPS_PAT` before starting sessions.
+   - If you enable the optional `ado` MCP server, ensure secret `COPILOT_MCP_AZURE_DEVOPS_PAT` is available in Copilot session secret context.
+   - Onboarding auto-syncs a repository secret with this name; value comes from `COPILOT_MCP_AZURE_DEVOPS_PAT` when supplied, otherwise falls back to `ONBOARDING_PAT`.
    - This UI registration step is manual and required; pipeline bootstrap prepares the config file but cannot populate the GitHub MCP textbox via API.
 6. **Access the Dashboard**: Your dashboard is available at the Static Web App URL (found in the pipeline summary). Use the `AdoDashboardKey` you provided to log in. The Static Web App resource name is derived from your `AZURE_DEVOPS_PROJECT`, but Azure still generates the default `*.azurestaticapps.net` hostname. Configure a custom domain in the Azure Portal if you want a friendly URL.
 7. **Default Field Values (Auto-Enforced)**: The pipeline now enforces `Custom.AutonomyLevel` as a picklist (`1-5`) with default `3 - Review & Pause`, and sets `Custom.AIMinimumReviewScore` default to `85` for User Story work items.

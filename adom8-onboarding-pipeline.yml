@@ -26,6 +26,7 @@ variables:
   # - AZURE_SERVICE_CONNECTION
   # - AdoDashboardKey (secret)
   # - COPILOT_ENABLED (optional; defaults to true)
+  # - COPILOT_MCP_AZURE_DEVOPS_PAT (optional secret; enables ADO MCP PAT auth template + repo secret sync)
 
   # Resource names are derived at runtime from RESOURCE_GROUP_NAME so they are
   # stable across re-runs — same group name always produces the same suffix.
@@ -52,6 +53,7 @@ variables:
   CODEBASE_API_FILE_LIMIT_KB: '100'
   CODEBASE_API_PUBLISH_ENABLED: 'true'
   MCP_BOOTSTRAP_ENABLED: 'true'
+  COPILOT_MCP_AZURE_DEVOPS_PAT: ''
 
 stages:
 - stage: Infrastructure
@@ -273,6 +275,7 @@ stages:
           export CODEBASE_API_FILE_LIMIT_KB="$(CODEBASE_API_FILE_LIMIT_KB)"
           export CODEBASE_API_PUBLISH_ENABLED="$(CODEBASE_API_PUBLISH_ENABLED)"
           export MCP_BOOTSTRAP_ENABLED="$(MCP_BOOTSTRAP_ENABLED)"
+          export COPILOT_MCP_AZURE_DEVOPS_PAT="$(COPILOT_MCP_AZURE_DEVOPS_PAT)"
           
           python scripts/adom8-pipeline-setup.py \
             --subscription-id "$(AZURE_SUBSCRIPTION_ID)" \
@@ -338,6 +341,13 @@ stages:
           set_secret_with_retry "AZURE_FUNCTIONAPP_NAME" "$FUNCTION_APP_NAME" || failed=1
           set_secret_with_retry "AZURE_FUNCTIONAPP_PUBLISH_PROFILE" "$PUBLISH_PROFILE" || failed=1
           set_secret_with_retry "AZURE_STATIC_WEB_APPS_API_TOKEN" "$SWA_TOKEN" || failed=1
+
+          EFFECTIVE_MCP_PAT="$(COPILOT_MCP_AZURE_DEVOPS_PAT)"
+          if [ -z "$EFFECTIVE_MCP_PAT" ]; then
+            EFFECTIVE_MCP_PAT="$(ONBOARDING_PAT)"
+            echo "##vso[task.logissue type=warning]COPILOT_MCP_AZURE_DEVOPS_PAT not supplied. Falling back to ONBOARDING_PAT for COPILOT_MCP_AZURE_DEVOPS_PAT secret sync."
+          fi
+          set_secret_with_retry "COPILOT_MCP_AZURE_DEVOPS_PAT" "$EFFECTIVE_MCP_PAT" || failed=1
 
           if [ "$failed" = "1" ]; then
             echo "##vso[task.logissue type=warning]One or more GitHub secrets could not be set due to API rate limiting. Re-run this pipeline stage once the rate limit resets (resets hourly). Infrastructure and Function App deployment are unaffected."

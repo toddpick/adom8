@@ -53,6 +53,7 @@ def main():
     codebase_api_file_limit_kb = (os.environ.get("CODEBASE_API_FILE_LIMIT_KB", "100").strip() or "100")
     codebase_api_publish_enabled = os.environ.get("CODEBASE_API_PUBLISH_ENABLED", "true").strip().lower() in ["1", "true", "yes", "on"]
     mcp_bootstrap_enabled = os.environ.get("MCP_BOOTSTRAP_ENABLED", "true").strip().lower() in ["1", "true", "yes", "on"]
+    copilot_mcp_ado_pat = (os.environ.get("COPILOT_MCP_AZURE_DEVOPS_PAT") or "").strip()
 
     if not copilot_webhook_secret:
         copilot_webhook_secret = secrets.token_urlsafe(48)
@@ -86,6 +87,12 @@ def main():
     # The actual API endpoint is POST https://vssps.dev.azure.com/{organization}/_apis/tokens/pats?api-version=7.1-preview.1
     
     ado_org_url = args.ado_org.rstrip('/')
+    if not ado_org_url.lower().startswith("https://dev.azure.com/"):
+        print("Error: --ado-org must be a full Azure DevOps URL like https://dev.azure.com/<org>.")
+        sys.exit(1)
+    if "YOUR_ORG" in ado_org_url.upper() or "<YOUR_ORG>" in ado_org_url.upper():
+        print("Error: --ado-org contains placeholder text (YOUR_ORG). Use your real org URL.")
+        sys.exit(1)
     org_name = ado_org_url.split('/')[-1]
     
     headers = {
@@ -480,6 +487,12 @@ This repository was bootstrapped by the ADOm8 onboarding pipeline with MCP guida
 
 The generated template is schema-valid for GitHub Copilot Coding Agent MCP config.
 
+## ADO MCP authentication
+
+- The generated `ado` MCP server is configured for PAT auth mode.
+- Create secret `COPILOT_MCP_AZURE_DEVOPS_PAT` in GitHub/Copilot secret store before starting sessions.
+- This pipeline can also sync a repository secret with the same name when `COPILOT_MCP_AZURE_DEVOPS_PAT` is provided as a pipeline secret variable.
+
 ## Phase 1 ADOm8 stage bridge endpoints
 
 Phase 1 stage updates are exposed as Function-key secured REST endpoints:
@@ -520,7 +533,7 @@ Use `mcp.template.json` as a starting point in your MCP client and provide crede
                         "@azure-devops/mcp",
                         args.ado_org,
                         "-a",
-                        "azcli"
+                        "pat"
                     ],
                     "tools": ["*"],
                     "env": {
@@ -547,6 +560,10 @@ Use `mcp.template.json` as a starting point in your MCP client and provide crede
             "docs: add MCP bootstrap template",
             overwrite=True
         )
+        if copilot_mcp_ado_pat:
+            print("Detected COPILOT_MCP_AZURE_DEVOPS_PAT in pipeline environment; repository secret sync uses this override value.")
+        else:
+            print("COPILOT_MCP_AZURE_DEVOPS_PAT override not provided; pipeline falls back to ONBOARDING_PAT for MCP secret sync.")
     else:
         print("MCP bootstrap disabled via MCP_BOOTSTRAP_ENABLED=false")
 
