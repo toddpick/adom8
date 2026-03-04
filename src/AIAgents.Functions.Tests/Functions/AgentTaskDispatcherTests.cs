@@ -141,7 +141,7 @@ public sealed class AgentTaskDispatcherTests
     }
 
     [Fact]
-    public async Task Run_Level3_GitHubOrchestratedStagesBypassLocalExecution()
+    public async Task Run_Level3_AllStagesRun_WhenNotInitializeCodebase()
     {
         var dispatcher = CreateDispatcher(autonomyLevel: 3);
 
@@ -152,13 +152,8 @@ public sealed class AgentTaskDispatcherTests
             var msg = Serialize(new AgentTask { WorkItemId = 12345, AgentType = agentType });
             await dispatcher.Run(msg, CancellationToken.None);
 
-            var shouldRunLocally = agentType is AgentType.Planning or AgentType.Coding or AgentType.Deployment;
-            var expectedInvocations = shouldRunLocally ? Times.Once() : Times.Never();
-
-            _agentServiceMock.Verify(a => a.ExecuteAsync(It.IsAny<AgentTask>(), It.IsAny<CancellationToken>()), expectedInvocations,
-                shouldRunLocally
-                    ? $"{agentType} should run locally at autonomy level 3"
-                    : $"{agentType} should be bypassed by no-clone delegation policy");
+            _agentServiceMock.Verify(a => a.ExecuteAsync(It.IsAny<AgentTask>(), It.IsAny<CancellationToken>()), Times.Once(),
+                $"{agentType} should run locally at autonomy level 3 when InitializeCodebase tag is absent");
         }
     }
 

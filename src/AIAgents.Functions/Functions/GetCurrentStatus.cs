@@ -587,6 +587,7 @@ public sealed class GetCurrentStatus
             "testing agent" => "Testing",
             "review agent" => "Review",
             "documentation agent" => "Documentation",
+            "deploy agent" => "Deployment",
             "deployment agent" => "Deployment",
             _ => null
         };

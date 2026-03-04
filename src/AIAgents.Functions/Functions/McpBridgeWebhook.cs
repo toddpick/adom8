@@ -52,11 +52,7 @@ public sealed class McpBridgeWebhook
 
         if (!string.IsNullOrWhiteSpace(mapping.CurrentAgent))
         {
-            await _adoClient.UpdateWorkItemFieldAsync(
-                payload.WorkItemId,
-                CustomFieldNames.Paths.CurrentAIAgent,
-                mapping.CurrentAgent,
-                cancellationToken);
+            await UpdateCurrentAgentAsync(payload.WorkItemId, mapping.CurrentAgent, cancellationToken);
         }
 
         if (!string.IsNullOrWhiteSpace(payload.FromStage))
@@ -66,11 +62,6 @@ public sealed class McpBridgeWebhook
                 CustomFieldNames.Paths.LastAgent,
                 payload.FromStage,
                 cancellationToken);
-        }
-
-        if (!string.IsNullOrWhiteSpace(mapping.State))
-        {
-            await _adoClient.UpdateWorkItemStateAsync(payload.WorkItemId, mapping.State, cancellationToken);
         }
 
         if (!string.IsNullOrWhiteSpace(payload.Message))
@@ -175,16 +166,43 @@ public sealed class McpBridgeWebhook
         }
     }
 
+    private async Task UpdateCurrentAgentAsync(int workItemId, string currentAgent, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await _adoClient.UpdateWorkItemFieldAsync(
+                workItemId,
+                CustomFieldNames.Paths.CurrentAIAgent,
+                currentAgent,
+                cancellationToken);
+        }
+        catch (Exception ex) when (string.Equals(currentAgent, AIPipelineNames.CurrentAgentValues.Deployment, StringComparison.OrdinalIgnoreCase))
+        {
+            // Some ADO projects use "Deploy Agent" in the picklist instead of "Deployment Agent".
+            _logger.LogWarning(
+                ex,
+                "Failed to set Current AI Agent to '{CurrentAgent}' for WI-{WorkItemId}; retrying with legacy value 'Deploy Agent'",
+                currentAgent,
+                workItemId);
+
+            await _adoClient.UpdateWorkItemFieldAsync(
+                workItemId,
+                CustomFieldNames.Paths.CurrentAIAgent,
+                "Deploy Agent",
+                cancellationToken);
+        }
+    }
+
     internal static StageMapping? MapStage(string stage) => stage.Trim().ToLowerInvariant() switch
     {
-        "planning" => new StageMapping(AIPipelineNames.ProcessingState, AIPipelineNames.CurrentAgentValues.Planning),
-        "coding" => new StageMapping(AIPipelineNames.ProcessingState, AIPipelineNames.CurrentAgentValues.Coding),
-        "testing" => new StageMapping(AIPipelineNames.ProcessingState, AIPipelineNames.CurrentAgentValues.Testing),
-        "review" => new StageMapping(AIPipelineNames.ProcessingState, AIPipelineNames.CurrentAgentValues.Review),
-        "documentation" => new StageMapping(AIPipelineNames.ProcessingState, AIPipelineNames.CurrentAgentValues.Documentation),
-        "deployment" => new StageMapping(AIPipelineNames.ProcessingState, AIPipelineNames.CurrentAgentValues.Deployment),
-        "needsinfo" or "needs_info" or "needs revision" => new StageMapping("Needs Revision", null),
-        "done" => new StageMapping("Code Review", null),
+        "planning" => new StageMapping(null, AIPipelineNames.CurrentAgentValues.Planning),
+        "coding" => new StageMapping(null, AIPipelineNames.CurrentAgentValues.Coding),
+        "testing" => new StageMapping(null, AIPipelineNames.CurrentAgentValues.Testing),
+        "review" => new StageMapping(null, AIPipelineNames.CurrentAgentValues.Review),
+        "documentation" => new StageMapping(null, AIPipelineNames.CurrentAgentValues.Documentation),
+        "deployment" or "deploy" => new StageMapping(null, AIPipelineNames.CurrentAgentValues.Deployment),
+        "needsinfo" or "needs_info" or "needs revision" => new StageMapping(null, null),
+        "done" => new StageMapping(null, null),
         _ => null
     };
 

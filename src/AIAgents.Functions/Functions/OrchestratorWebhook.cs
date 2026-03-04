@@ -2,6 +2,7 @@ using System.Text.Json;
 using AIAgents.Core.Constants;
 using AIAgents.Core.Configuration;
 using AIAgents.Core.Interfaces;
+using AIAgents.Core.Models;
 using AIAgents.Core.Telemetry;
 using AIAgents.Functions.Models;
 using AIAgents.Functions.Services;
@@ -28,6 +29,7 @@ public sealed class OrchestratorWebhook
     private readonly IInputValidator _inputValidator;
     private readonly TelemetryClient _telemetry;
     private readonly CopilotOptions _copilotOptions;
+    private readonly IGitHubOrchestrationLauncherService _orchestrationLauncher;
 
     // Maps ADO work item states to the agent that processes them.
     // ONLY "AI Agent" is here — all other transitions are handled by direct
@@ -45,7 +47,8 @@ public sealed class OrchestratorWebhook
         [AIPipelineNames.CurrentAgentValues.Testing] = AgentType.Testing,
         [AIPipelineNames.CurrentAgentValues.Review] = AgentType.Review,
         [AIPipelineNames.CurrentAgentValues.Documentation] = AgentType.Documentation,
-        [AIPipelineNames.CurrentAgentValues.Deployment] = AgentType.Deployment
+        [AIPipelineNames.CurrentAgentValues.Deployment] = AgentType.Deployment,
+        ["Deploy Agent"] = AgentType.Deployment
     };
 
     public OrchestratorWebhook(
@@ -55,7 +58,8 @@ public sealed class OrchestratorWebhook
         IAzureDevOpsClient adoClient,
         IInputValidator inputValidator,
         TelemetryClient telemetry,
-        IOptions<CopilotOptions> copilotOptions)
+        IOptions<CopilotOptions> copilotOptions,
+        IGitHubOrchestrationLauncherService orchestrationLauncher)
     {
         _logger = logger;
         _activityLogger = activityLogger;
@@ -64,6 +68,7 @@ public sealed class OrchestratorWebhook
         _inputValidator = inputValidator;
         _telemetry = telemetry;
         _copilotOptions = copilotOptions.Value;
+        _orchestrationLauncher = orchestrationLauncher;
     }
 
     [Function("OrchestratorWebhook")]
@@ -117,6 +122,26 @@ public sealed class OrchestratorWebhook
         var newState = stateChange?.NewValue;
         var oldState = stateChange?.OldValue;
 
+        if (_copilotOptions.Enabled &&
+            (string.Equals(newState, "Needs Revision", StringComparison.OrdinalIgnoreCase)
+             || string.Equals(newState, "Agent Failed", StringComparison.OrdinalIgnoreCase)))
+        {
+            await _orchestrationLauncher.CleanupForStoryStateAsync(workItemId, newState!, cancellationToken);
+
+            await _activityLogger.LogAsync(
+                "Orchestrator",
+                workItemId,
+                $"Closed delegated GitHub artifacts due to state transition to '{newState}'",
+                cancellationToken: cancellationToken);
+
+            return new OkObjectResult(new
+            {
+                status = "cleaned-up",
+                workItemId,
+                state = newState
+            });
+        }
+
         if (string.IsNullOrEmpty(newState) || !s_stateToAgent.TryGetValue(newState, out var agentType))
         {
             _logger.LogInformation(
@@ -127,9 +152,10 @@ public sealed class OrchestratorWebhook
 
         // Validate work item content before queuing
         string? currentAIAgentValue = null;
+        StoryWorkItem? workItem = null;
         try
         {
-            var workItem = await _adoClient.GetWorkItemAsync(workItemId, cancellationToken);
+            workItem = await _adoClient.GetWorkItemAsync(workItemId, cancellationToken);
             currentAIAgentValue = workItem.CurrentAIAgent;
             var validation = _inputValidator.ValidateWorkItem(workItem);
 
@@ -203,6 +229,104 @@ public sealed class OrchestratorWebhook
                 workItemId,
                 oldState ?? "(unknown)",
                 newState ?? "(unknown)");
+        }
+
+        if (_copilotOptions.Enabled)
+        {
+            if (agentType == AgentType.Planning && !shouldResumeFromCurrentAgent)
+            {
+                try
+                {
+                    await _adoClient.UpdateWorkItemFieldAsync(
+                        workItemId,
+                        CustomFieldNames.Paths.CurrentAIAgent,
+                        AIPipelineNames.CurrentAgentValues.Planning,
+                        cancellationToken);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex,
+                        "Failed to seed Current AI Agent=Planning for WI-{WorkItemId} before GitHub kickoff",
+                        workItemId);
+                }
+
+                var kickoffResult = await _orchestrationLauncher.KickoffAsync(
+                    workItem ?? await _adoClient.GetWorkItemAsync(workItemId, cancellationToken),
+                    Guid.NewGuid().ToString("N"),
+                    forceNewIssue: true,
+                    cancellationToken);
+
+                await _adoClient.AddWorkItemCommentAsync(
+                    workItemId,
+                    kickoffResult.ExistingDelegation
+                        ? $"<b>🤖 AI Orchestration</b><br/>Existing GitHub orchestration is already pending on Issue #{kickoffResult.IssueNumber}."
+                        : $"<b>🤖 AI Orchestration Delegated</b><br/>Created GitHub Issue #{kickoffResult.IssueNumber} and assigned @{kickoffResult.AgentAssignee}.<br/>GitHub agent now owns Planning through Documentation and will update ADO via MCP.",
+                    cancellationToken);
+
+                await _activityLogger.LogAsync(
+                    "Orchestrator",
+                    workItemId,
+                    kickoffResult.ExistingDelegation
+                        ? $"Reused existing GitHub orchestration issue #{kickoffResult.IssueNumber}"
+                        : $"Delegated full pipeline kickoff to GitHub issue #{kickoffResult.IssueNumber}",
+                    cancellationToken: cancellationToken);
+
+                return new OkObjectResult(new
+                {
+                    status = "delegated",
+                    workItemId,
+                    agent = "GitHub",
+                    issueNumber = kickoffResult.IssueNumber
+                });
+            }
+
+            if (shouldResumeFromCurrentAgent)
+            {
+                if (agentType == AgentType.Deployment)
+                {
+                    var currentWorkItem = workItem ?? await _adoClient.GetWorkItemAsync(workItemId, cancellationToken);
+                    if (currentWorkItem.AutonomyLevel < 5)
+                    {
+                        await _activityLogger.LogAsync(
+                            "Orchestrator",
+                            workItemId,
+                            "Skipped Deployment enqueue: full GitHub mode only allows Azure deployment execution at autonomy level 5.",
+                            cancellationToken: cancellationToken);
+
+                        _logger.LogInformation(
+                            "Skipping Deployment enqueue for WI-{WorkItemId}: autonomy level {AutonomyLevel} < 5",
+                            workItemId,
+                            currentWorkItem.AutonomyLevel);
+
+                        return new OkObjectResult(new
+                        {
+                            status = "skipped",
+                            reason = "Deployment only runs in Azure for autonomy level 5",
+                            workItemId
+                        });
+                    }
+                }
+                else
+                {
+                    await _activityLogger.LogAsync(
+                        "Orchestrator",
+                        workItemId,
+                        $"Observed MCP stage transition to {agentType} in full GitHub mode — no local enqueue required.",
+                        cancellationToken: cancellationToken);
+
+                    _logger.LogInformation(
+                        "Skipping local enqueue for WI-{WorkItemId} at {AgentType}: full GitHub mode owns Planning through Documentation",
+                        workItemId,
+                        agentType);
+
+                    return new OkObjectResult(new
+                    {
+                        status = "observed",
+                        workItemId,
+                        stage = agentType.ToString()
+                    });
+                }
+            }
         }
 
         if (agentType == AgentType.Planning)

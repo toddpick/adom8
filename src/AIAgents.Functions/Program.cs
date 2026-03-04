@@ -91,6 +91,7 @@ var host = new HostBuilder()
 
         // Copilot delegation tracking (Azure Table Storage)
         services.AddSingleton<ICopilotDelegationService, TableStorageCopilotDelegationService>();
+        services.AddSingleton<IGitHubOrchestrationLauncherService, GitHubOrchestrationLauncherService>();
 
         // SaaS Mode — optional real-time callback reporting to adom8.dev dashboard
         // No-op when SaaS:Enabled is false (default for fully standalone deployments)

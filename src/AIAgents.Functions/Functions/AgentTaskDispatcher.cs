@@ -500,7 +500,13 @@ public sealed class AgentTaskDispatcher
 
     private static bool IsNoCloneDelegationPath(StoryWorkItem? workItem, AgentTask task, CopilotOptions copilotOptions)
     {
-        return workItem is not null;
+        if (workItem is null)
+        {
+            return false;
+        }
+
+        return workItem.Tags.Any(tag =>
+            string.Equals(tag, AIPipelineNames.InitializeCodebaseTag, StringComparison.OrdinalIgnoreCase));
     }
 
     private static bool ShouldSkipForInitializeNoClone(AgentType agentType) => agentType switch
