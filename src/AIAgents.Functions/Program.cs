@@ -83,6 +83,10 @@ var host = new HostBuilder()
         // Agent task queue — abstracts Azure Storage Queue for testability
         services.AddSingleton<IAgentTaskQueue, AgentTaskQueue>();
 
+        // GitHub API context service — provides file tree, content, and write operations
+        // without cloning the repository to local disk.
+        services.AddSingleton<IGitHubApiContextService, GitHubApiContextService>();
+
         // Codebase context provider (loads .agent/ docs for AI prompts)
         services.AddSingleton<ICodebaseContextProvider, CodebaseContextLoader>();
 

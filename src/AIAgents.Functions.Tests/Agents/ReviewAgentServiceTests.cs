@@ -19,7 +19,7 @@ public sealed class ReviewAgentServiceTests
     private readonly Mock<IAIClientFactory> _aiFactoryMock = new();
     private readonly Mock<IAIClient> _aiClientMock = new();
     private readonly Mock<IAzureDevOpsClient> _adoMock = new();
-    private readonly Mock<IGitOperations> _gitMock = new();
+    private readonly Mock<IGitHubApiContextService> _githubContextMock = new();
     private readonly Mock<IStoryContextFactory> _contextFactoryMock = new();
     private readonly Mock<IStoryContext> _contextMock = new();
     private readonly Mock<ITemplateEngine> _templateMock = new();
@@ -48,7 +48,7 @@ public sealed class ReviewAgentServiceTests
         var result = await service.ExecuteAsync(new AgentTask { WorkItemId = wi.Id, AgentType = AgentType.Review, CorrelationId = "corr-1" });
 
         Assert.True(result.Success);
-        _gitMock.Verify(g => g.EnsureBranchAsync(It.IsAny<string>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()), Times.Never);
+        _githubContextMock.Verify(g => g.GetFileTreeAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
         _taskQueueMock.Verify(q => q.EnqueueAsync(
             It.Is<AgentTask>(t => t.WorkItemId == wi.Id && t.AgentType == AgentType.Documentation),
             It.IsAny<CancellationToken>()), Times.Once);
@@ -62,7 +62,7 @@ public sealed class ReviewAgentServiceTests
     private ReviewAgentService CreateService()
     {
         return new ReviewAgentService(
-            _aiFactoryMock.Object, _adoMock.Object, _gitMock.Object,
+            _aiFactoryMock.Object, _adoMock.Object, _githubContextMock.Object,
             _contextFactoryMock.Object, _templateMock.Object, _codebaseMock.Object,
             NullLogger<ReviewAgentService>.Instance, _taskQueueMock.Object);
     }
@@ -75,9 +75,10 @@ public sealed class ReviewAgentServiceTests
         state.Artifacts.Tests.Add("tests/RegistrationServiceTests.cs");
 
         _adoMock.Setup(a => a.GetWorkItemAsync(wi.Id, It.IsAny<CancellationToken>())).ReturnsAsync(wi);
-        _gitMock.Setup(g => g.EnsureBranchAsync(It.IsAny<string>(), It.IsAny<CancellationToken>())).ReturnsAsync(@"C:\repos\test");
-        _gitMock.Setup(g => g.ReadFileAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync("public class Test { }");
+        _githubContextMock.Setup(g => g.GetFileContentsAsync(It.IsAny<string>(), It.IsAny<IReadOnlyList<string>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Dictionary<string, string?> { ["src/Services/RegistrationService.cs"] = "public class Test { }" });
+        _githubContextMock.Setup(g => g.WriteFilesAsync(It.IsAny<string>(), It.IsAny<IReadOnlyDictionary<string, string>>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
 
         _contextMock.Setup(c => c.LoadStateAsync(It.IsAny<CancellationToken>())).ReturnsAsync(state);
         _contextMock.Setup(c => c.SaveStateAsync(It.IsAny<StoryState>(), It.IsAny<CancellationToken>()))
@@ -176,7 +177,7 @@ public sealed class ReviewAgentServiceTests
     }
 
     [Fact]
-    public async Task ExecuteAsync_EmptyArtifacts_FallsBackToGitDiff()
+    public async Task ExecuteAsync_EmptyArtifacts_StillCompletesWithEmptyCode()
     {
         // Set up the same as happy path but with empty artifacts
         var wi = MockAIResponses.SampleWorkItem(state: "AI Review");
@@ -184,11 +185,8 @@ public sealed class ReviewAgentServiceTests
         // Intentionally leave state.Artifacts.Code empty
 
         _adoMock.Setup(a => a.GetWorkItemAsync(wi.Id, It.IsAny<CancellationToken>())).ReturnsAsync(wi);
-        _gitMock.Setup(g => g.EnsureBranchAsync(It.IsAny<string>(), It.IsAny<CancellationToken>())).ReturnsAsync(@"C:\repos\test");
-        _gitMock.Setup(g => g.ReadFileAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync("public class Test { }");
-        _gitMock.Setup(g => g.GetChangedFilesAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new List<string> { "src/Services/MyService.cs", "src/Models/MyModel.cs" });
+        _githubContextMock.Setup(g => g.WriteFilesAsync(It.IsAny<string>(), It.IsAny<IReadOnlyDictionary<string, string>>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
 
         _contextMock.Setup(c => c.LoadStateAsync(It.IsAny<CancellationToken>())).ReturnsAsync(state);
         _contextMock.Setup(c => c.SaveStateAsync(It.IsAny<StoryState>(), It.IsAny<CancellationToken>()))
@@ -216,12 +214,7 @@ public sealed class ReviewAgentServiceTests
         var service = CreateService();
         await service.ExecuteAsync(new AgentTask { WorkItemId = 12345, AgentType = AgentType.Review });
 
-        // Verify git diff was called as fallback
-        _gitMock.Verify(g => g.GetChangedFilesAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
-        // Verify files from git diff were read
-        _gitMock.Verify(g => g.ReadFileAsync(It.IsAny<string>(), "src/Services/MyService.cs", It.IsAny<CancellationToken>()), Times.Once);
-        _gitMock.Verify(g => g.ReadFileAsync(It.IsAny<string>(), "src/Models/MyModel.cs", It.IsAny<CancellationToken>()), Times.Once);
-        // Verify review still completed
+        // Verify review still completed even with no code artifacts
         Assert.Equal("AI Docs", _capturedState.CurrentState);
         Assert.Equal(85, _capturedState.Agents["Review"].AdditionalData!["score"]);
     }

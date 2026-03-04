@@ -19,7 +19,7 @@ public sealed class DocumentationAgentService : IAgentService
     private readonly IAIClientFactory _aiClientFactory;
     private readonly IAzureDevOpsClient _adoClient;
     private readonly IRepositoryProvider _repoProvider;
-    private readonly IGitOperations _gitOps;
+    private readonly IGitHubApiContextService _githubContext;
     private readonly IStoryContextFactory _contextFactory;
     private readonly ITemplateEngine _templateEngine;
     private readonly ICodebaseContextProvider _codebaseContext;
@@ -30,7 +30,7 @@ public sealed class DocumentationAgentService : IAgentService
         IAIClientFactory aiClientFactory,
         IAzureDevOpsClient adoClient,
         IRepositoryProvider repoProvider,
-        IGitOperations gitOps,
+        IGitHubApiContextService githubContext,
         IStoryContextFactory contextFactory,
         ITemplateEngine templateEngine,
         ICodebaseContextProvider codebaseContext,
@@ -40,7 +40,7 @@ public sealed class DocumentationAgentService : IAgentService
         _aiClientFactory = aiClientFactory;
         _adoClient = adoClient;
         _repoProvider = repoProvider;
-        _gitOps = gitOps;
+        _githubContext = githubContext;
         _contextFactory = contextFactory;
         _templateEngine = templateEngine;
         _codebaseContext = codebaseContext;
@@ -53,7 +53,6 @@ public sealed class DocumentationAgentService : IAgentService
         var failureStage = "initialization";
         var sourceBranch = $"feature/US-{task.WorkItemId}";
         var targetBranch = "main";
-        string? repoPath = null;
         try
         {
         _logger.LogInformation("Documentation agent starting for WI-{WorkItemId}", task.WorkItemId);
@@ -63,10 +62,8 @@ public sealed class DocumentationAgentService : IAgentService
         failureStage = "resolve_ai_client";
         var aiClient = _aiClientFactory.GetClientForAgent("Documentation", workItem.GetModelOverrides());
         var branchName = sourceBranch;
-        failureStage = "ensure_branch";
-        repoPath = await _gitOps.EnsureBranchAsync(branchName, cancellationToken);
 
-        await using var context = _contextFactory.Create(task.WorkItemId, repoPath);
+        await using var context = _contextFactory.Create(task.WorkItemId, string.Empty);
         var state = await context.LoadStateAsync(cancellationToken);
         state.CurrentState = "AI Docs";
         state.Agents["Documentation"] = AgentStatus.InProgress();
@@ -79,16 +76,21 @@ public sealed class DocumentationAgentService : IAgentService
         var plan = await context.ReadArtifactAsync("PLAN.md", cancellationToken) ?? "";
         var review = await context.ReadArtifactAsync("CODE_REVIEW.md", cancellationToken) ?? "";
 
+        // Fetch all code files via GitHub API
         var codeContents = new List<string>();
-        foreach (var path in state.Artifacts.Code)
+        if (state.Artifacts.Code.Count > 0)
         {
-            var content = await _gitOps.ReadFileAsync(repoPath, path, cancellationToken);
-            if (content is not null)
-                codeContents.Add($"// File: {path}\n{content}");
+            var codeFiles = await _githubContext.GetFileContentsAsync(
+                branchName, state.Artifacts.Code.ToList(), cancellationToken);
+            foreach (var path in state.Artifacts.Code)
+            {
+                if (codeFiles.TryGetValue(path, out var content) && content is not null)
+                    codeContents.Add($"// File: {path}\n{content}");
+            }
         }
         var allCodeRaw = string.Join("\n\n", codeContents);
         var (allCode, codeTruncated, omittedCodeChars) = TruncateForPrompt(allCodeRaw, 80000);
-        var codebaseContextRaw = await _codebaseContext.LoadRelevantContextAsync(repoPath, workItem.Title, workItem.Description, cancellationToken);
+        var codebaseContextRaw = await _codebaseContext.LoadRelevantContextAsync(branchName, workItem.Title, workItem.Description, cancellationToken);
         var (codebaseContext, contextTruncated, omittedContextChars) = TruncateForPrompt(codebaseContextRaw, 50000);
 
         // AI documentation generation
@@ -156,10 +158,16 @@ Generate comprehensive documentation for these changes.";
         await context.WriteArtifactAsync("DOCUMENTATION.md", renderedDocs, cancellationToken);
         state.Artifacts.Docs.Add($".ado/stories/US-{workItem.Id}/DOCUMENTATION.md");
 
-        // Final commit
-        failureStage = "git_commit_and_push_documentation";
-        await _gitOps.CommitAndPushAsync(repoPath,
-            $"[AI Docs] US-{workItem.Id}: Documentation generated", cancellationToken);
+        // Commit documentation artifact via GitHub API
+        failureStage = "github_api_commit_documentation";
+        await _githubContext.WriteFilesAsync(
+            branchName,
+            new Dictionary<string, string>
+            {
+                [$".ado/stories/US-{workItem.Id}/DOCUMENTATION.md"] = renderedDocs
+            },
+            $"[AI Docs] US-{workItem.Id}: Documentation generated",
+            cancellationToken);
 
         // Create pull request
         var prDescription = $@"## AI-Generated Changes for US-{workItem.Id}
@@ -266,20 +274,6 @@ Generate comprehensive documentation for these changes.";
         {
             return AgentResult.Fail(ErrorCategory.Code, $"Unexpected error in Documentation agent for WI-{task.WorkItemId} at stage '{failureStage}': {ex.Message}", ex);
         }
-        finally
-        {
-            if (repoPath is not null)
-            {
-                try { await _gitOps.CleanupRepoAsync(repoPath, cancellationToken); }
-                catch (Exception ex) { _logger.LogWarning(ex, "Failed to clean up repo at {Path}", repoPath); }
-            }
-        }
-    }
-
-    private static string ExtractRepoName(string repoPath)
-    {
-        // Extract repo name from path (last directory component)
-        return new DirectoryInfo(repoPath).Name;
     }
 
     private static (string Text, bool Truncated, int OmittedChars) TruncateForPrompt(string? input, int maxChars)

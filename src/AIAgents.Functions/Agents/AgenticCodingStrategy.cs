@@ -6,9 +6,11 @@ namespace AIAgents.Functions.Agents;
 
 /// <summary>
 /// Built-in coding strategy: runs a multi-turn agentic tool-use loop where the AI
-/// iteratively reads, understands, and modifies the codebase using tools 
+/// iteratively reads, understands, and modifies the codebase using tools
 /// (read_file, write_file, edit_file, list_files, search_code).
-/// 
+/// All file writes are buffered in memory and committed atomically via GitHub Trees API
+/// at the end — no local git clone needed.
+///
 /// This is the default strategy and handles the majority of stories. Extracted from
 /// <see cref="CodingAgentService"/> to support the Strategy pattern for hybrid
 /// Copilot integration.
@@ -16,18 +18,18 @@ namespace AIAgents.Functions.Agents;
 public sealed class AgenticCodingStrategy : ICodingStrategy
 {
     private readonly IAIClientFactory _aiClientFactory;
-    private readonly IGitOperations _gitOps;
+    private readonly IGitHubApiContextService _githubContext;
     private readonly ICodebaseContextProvider _codebaseContext;
     private readonly ILogger _logger;
 
     public AgenticCodingStrategy(
         IAIClientFactory aiClientFactory,
-        IGitOperations gitOps,
+        IGitHubApiContextService githubContext,
         ICodebaseContextProvider codebaseContext,
         ILogger logger)
     {
         _aiClientFactory = aiClientFactory;
-        _gitOps = gitOps;
+        _githubContext = githubContext;
         _codebaseContext = codebaseContext;
         _logger = logger;
     }
@@ -36,8 +38,8 @@ public sealed class AgenticCodingStrategy : ICodingStrategy
     {
         var aiClient = _aiClientFactory.GetClientForAgent("Coding", context.WorkItem.GetModelOverrides());
 
-        // Set up the tool executor
-        var toolExecutor = new CodingToolExecutor(_gitOps, context.RepositoryPath, _logger);
+        // Set up the tool executor — uses GitHub API, buffers writes in memory
+        var toolExecutor = new CodingToolExecutor(_githubContext, context.BranchName, _logger);
 
         // Build prompts for the agentic loop
         var systemPrompt = CodingAgentService.BuildSystemPrompt();
@@ -75,6 +77,20 @@ public sealed class AgenticCodingStrategy : ICodingStrategy
             "Agentic loop completed for WI-{WorkItemId}: {Rounds} rounds, {ToolCalls} tool calls, {Files} files modified, completed={Completed}",
             context.WorkItemId, agenticResult.RoundsExecuted, agenticResult.ToolCalls.Count,
             filesModified, agenticResult.CompletedNaturally);
+
+        // Commit all buffered file writes atomically via GitHub Trees API
+        if (toolExecutor.PendingWrites.Count > 0)
+        {
+            await _githubContext.WriteFilesAsync(
+                context.BranchName,
+                toolExecutor.PendingWrites,
+                $"[AI Coding] US-{context.WorkItemId}: Implemented via agentic loop ({filesModified} file(s), {agenticResult.RoundsExecuted} rounds)",
+                cancellationToken);
+
+            _logger.LogInformation(
+                "Committed {Count} files to branch {Branch} for WI-{WorkItemId}",
+                toolExecutor.PendingWrites.Count, context.BranchName, context.WorkItemId);
+        }
 
         // Track modified files as code artifacts
         foreach (var file in toolExecutor.ModifiedFiles)

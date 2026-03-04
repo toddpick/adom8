@@ -20,7 +20,7 @@ public sealed class PlanningAgentServiceTests
     private readonly Mock<IAIClientFactory> _aiFactoryMock;
     private readonly Mock<IAIClient> _aiClientMock;
     private readonly Mock<IAzureDevOpsClient> _adoMock;
-    private readonly Mock<IGitOperations> _gitMock;
+    private readonly Mock<IGitHubApiContextService> _githubContextMock;
     private readonly Mock<IStoryContextFactory> _contextFactoryMock;
     private readonly Mock<IStoryContext> _contextMock;
     private readonly Mock<ITemplateEngine> _templateMock;
@@ -34,7 +34,7 @@ public sealed class PlanningAgentServiceTests
         _aiFactoryMock = new Mock<IAIClientFactory>();
         _aiClientMock = new Mock<IAIClient>();
         _adoMock = new Mock<IAzureDevOpsClient>();
-        _gitMock = new Mock<IGitOperations>();
+        _githubContextMock = new Mock<IGitHubApiContextService>();
         _contextFactoryMock = new Mock<IStoryContextFactory>();
         _contextMock = new Mock<IStoryContext>();
         _templateMock = new Mock<ITemplateEngine>();
@@ -50,7 +50,7 @@ public sealed class PlanningAgentServiceTests
         return new PlanningAgentService(
             _aiFactoryMock.Object,
             _adoMock.Object,
-            _gitMock.Object,
+            _githubContextMock.Object,
             _contextFactoryMock.Object,
             _templateMock.Object,
             _codebaseMock.Object,
@@ -68,12 +68,12 @@ public sealed class PlanningAgentServiceTests
         _adoMock.Setup(a => a.DownloadSupportingArtifactsAsync(wi.Id, It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new WorkItemSupportingArtifacts());
 
-        _gitMock.Setup(g => g.EnsureBranchAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(@"C:\repos\test");
-        _gitMock.Setup(g => g.ListFilesAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+        _githubContextMock.Setup(g => g.GetFileTreeAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new List<string> { "src/Program.cs", "README.md" });
-        _gitMock.Setup(g => g.ReadFileAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync("<button id=\"provision-btn\"></button>\n<button id=\"function-key-btn\"></button>\n<span id=\"codebase-badge\"></span>");
+        _githubContextMock.Setup(g => g.GetFileContentsAsync(It.IsAny<string>(), It.IsAny<IReadOnlyList<string>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Dictionary<string, string?> { ["src/Program.cs"] = "<button id=\"provision-btn\"></button>\n<button id=\"function-key-btn\"></button>\n<span id=\"codebase-badge\"></span>" });
+        _githubContextMock.Setup(g => g.WriteFilesAsync(It.IsAny<string>(), It.IsAny<IReadOnlyDictionary<string, string>>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
 
         _contextMock.Setup(c => c.LoadStateAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(state);
@@ -146,8 +146,11 @@ public sealed class PlanningAgentServiceTests
 
         await service.ExecuteAsync(task);
 
-        _gitMock.Verify(g => g.CommitAndPushAsync(
-            It.IsAny<string>(), It.Is<string>(m => m.Contains("AI Planning")), It.IsAny<CancellationToken>()), Times.Once);
+        _githubContextMock.Verify(g => g.WriteFilesAsync(
+            It.IsAny<string>(),
+            It.IsAny<IReadOnlyDictionary<string, string>>(),
+            It.Is<string>(m => m.Contains("AI Planning")),
+            It.IsAny<CancellationToken>()), Times.Once);
     }
 
     [Fact]
@@ -278,8 +281,8 @@ public sealed class PlanningAgentServiceTests
     public async Task ExecuteAsync_GitFailure_ReturnsFailedResult()
     {
         SetupHappyPath();
-        _gitMock.Setup(g => g.EnsureBranchAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ThrowsAsync(new InvalidOperationException("Git clone failed"));
+        _githubContextMock.Setup(g => g.GetFileTreeAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("GitHub API unavailable"));
 
         var service = CreateService();
         var task = new AgentTask { WorkItemId = 12345, AgentType = AgentType.Planning };

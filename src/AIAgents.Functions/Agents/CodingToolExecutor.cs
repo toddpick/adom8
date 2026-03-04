@@ -5,25 +5,39 @@ using Microsoft.Extensions.Logging;
 namespace AIAgents.Functions.Agents;
 
 /// <summary>
-/// Executes tool calls from the agentic coding loop against the actual repository.
-/// Tools: read_file, write_file, list_files, search_code
+/// Executes tool calls from the agentic coding loop against the repository via GitHub REST API.
+/// File writes are buffered in memory during the loop; the caller commits all changes atomically
+/// via <see cref="IGitHubApiContextService.WriteFilesAsync"/> at the end.
+/// Tools: read_file, write_file, edit_file, list_files, search_code
 /// </summary>
 public sealed class CodingToolExecutor
 {
-    private readonly IGitOperations _gitOps;
-    private readonly string _repoPath;
+    private readonly IGitHubApiContextService _githubContext;
+    private readonly string _branch;
     private readonly ILogger _logger;
     private readonly HashSet<string> _modifiedFiles = new(StringComparer.OrdinalIgnoreCase);
 
-    public CodingToolExecutor(IGitOperations gitOps, string repoPath, ILogger logger)
+    // In-memory file buffer: holds pending writes (path → content)
+    private readonly Dictionary<string, string> _writeBuffer = new(StringComparer.OrdinalIgnoreCase);
+
+    // Read-through cache to avoid redundant API calls during the loop
+    private readonly Dictionary<string, string?> _readCache = new(StringComparer.OrdinalIgnoreCase);
+
+    public CodingToolExecutor(IGitHubApiContextService githubContext, string branch, ILogger logger)
     {
-        _gitOps = gitOps;
-        _repoPath = repoPath;
+        _githubContext = githubContext;
+        _branch = branch;
         _logger = logger;
     }
 
     /// <summary>Files that were modified or created during the agentic loop.</summary>
     public IReadOnlySet<string> ModifiedFiles => _modifiedFiles;
+
+    /// <summary>
+    /// All pending file writes buffered during the agentic loop.
+    /// The caller should commit these atomically after the loop completes.
+    /// </summary>
+    public IReadOnlyDictionary<string, string> PendingWrites => _writeBuffer;
 
     /// <summary>
     /// Returns the tool definitions for Claude's tool-use API.
@@ -117,7 +131,7 @@ public sealed class CodingToolExecutor
         return toolCall.Name switch
         {
             "read_file" => await ReadFileAsync(input, cancellationToken),
-            "write_file" => await WriteFileAsync(input, cancellationToken),
+            "write_file" => WriteFile(input),
             "list_files" => await ListFilesAsync(input, cancellationToken),
             "search_code" => await SearchCodeAsync(input, cancellationToken),
             "edit_file" => await EditFileAsync(input, cancellationToken),
@@ -128,7 +142,23 @@ public sealed class CodingToolExecutor
     private async Task<string> ReadFileAsync(JsonElement input, CancellationToken ct)
     {
         var path = input.GetProperty("path").GetString()!;
-        var content = await _gitOps.ReadFileAsync(_repoPath, path, ct);
+
+        // Check write buffer first (AI may have written a file and wants to re-read it)
+        string? content;
+        if (_writeBuffer.TryGetValue(path, out var buffered))
+        {
+            content = buffered;
+        }
+        else if (_readCache.TryGetValue(path, out var cached))
+        {
+            content = cached;
+        }
+        else
+        {
+            var results = await _githubContext.GetFileContentsAsync(_branch, new[] { path }, ct);
+            results.TryGetValue(path, out content);
+            _readCache[path] = content;
+        }
 
         if (content is null)
             return $"Error: File not found: {path}";
@@ -146,38 +176,52 @@ public sealed class CodingToolExecutor
         return numbered.ToString();
     }
 
-    private async Task<string> WriteFileAsync(JsonElement input, CancellationToken ct)
+    private string WriteFile(JsonElement input)
     {
         var path = input.GetProperty("path").GetString()!;
         var content = input.GetProperty("content").GetString()!;
 
-        await _gitOps.WriteFileAsync(_repoPath, path, content, ct);
+        _writeBuffer[path] = content;
+        _readCache[path] = content; // Keep read cache consistent
         _modifiedFiles.Add(path);
 
-        _logger.LogInformation("Tool write_file: {Path} ({Length} chars)", path, content.Length);
+        _logger.LogInformation("Tool write_file (buffered): {Path} ({Length} chars)", path, content.Length);
         return $"Successfully wrote {content.Length} characters to {path}";
     }
 
     private async Task<string> ListFilesAsync(JsonElement input, CancellationToken ct)
     {
         var directory = input.TryGetProperty("directory", out var d) ? d.GetString() : null;
-        var allFiles = await _gitOps.ListFilesAsync(_repoPath, ct);
+        var allFiles = await _githubContext.GetFileTreeAsync(_branch, ct);
 
         var filtered = string.IsNullOrEmpty(directory)
             ? allFiles
             : allFiles.Where(f => f.Replace('\\', '/').StartsWith(directory.Replace('\\', '/'), StringComparison.OrdinalIgnoreCase)).ToList();
 
-        if (filtered.Count == 0)
+        // Include any newly buffered files not yet committed
+        foreach (var bufferedPath in _writeBuffer.Keys)
+        {
+            if (!filtered.Contains(bufferedPath, StringComparer.OrdinalIgnoreCase))
+            {
+                if (string.IsNullOrEmpty(directory) ||
+                    bufferedPath.Replace('\\', '/').StartsWith(directory.Replace('\\', '/'), StringComparison.OrdinalIgnoreCase))
+                {
+                    filtered = filtered.Append(bufferedPath).ToList();
+                }
+            }
+        }
+
+        if (!filtered.Any())
             return directory != null
                 ? $"No files found matching directory: {directory}"
                 : "Repository is empty.";
 
-        _logger.LogDebug("Tool list_files: {Count} files (filter: {Dir})", filtered.Count, directory ?? "(all)");
+        _logger.LogDebug("Tool list_files: {Count} files (filter: {Dir})", filtered.Count(), directory ?? "(all)");
 
-        // Limit output to avoid huge context
-        var result = filtered.Count > 200
-            ? string.Join("\n", filtered.Take(200)) + $"\n\n[... and {filtered.Count - 200} more files]"
-            : string.Join("\n", filtered);
+        var filteredList = filtered.ToList();
+        var result = filteredList.Count > 200
+            ? string.Join("\n", filteredList.Take(200)) + $"\n\n[... and {filteredList.Count - 200} more files]"
+            : string.Join("\n", filteredList);
 
         return result;
     }
@@ -187,7 +231,7 @@ public sealed class CodingToolExecutor
         var pattern = input.GetProperty("pattern").GetString()!;
         var extFilter = input.TryGetProperty("file_extension", out var ef) ? ef.GetString() : null;
 
-        var allFiles = await _gitOps.ListFilesAsync(_repoPath, ct);
+        var allFiles = await _githubContext.GetFileTreeAsync(_branch, ct);
 
         if (!string.IsNullOrEmpty(extFilter))
             allFiles = allFiles.Where(f => f.EndsWith(extFilter, StringComparison.OrdinalIgnoreCase)).ToList();
@@ -195,9 +239,20 @@ public sealed class CodingToolExecutor
         var matches = new List<string>();
         var filesSearched = 0;
 
-        foreach (var file in allFiles.Take(100)) // Cap to prevent excessive I/O
+        foreach (var file in allFiles.Take(100)) // Cap to prevent excessive API calls
         {
-            var rawContent = await _gitOps.ReadFileAsync(_repoPath, file, ct);
+            string? rawContent;
+            if (_writeBuffer.TryGetValue(file, out var buffered))
+                rawContent = buffered;
+            else if (_readCache.TryGetValue(file, out var cached))
+                rawContent = cached;
+            else
+            {
+                var results = await _githubContext.GetFileContentsAsync(_branch, new[] { file }, ct);
+                results.TryGetValue(file, out rawContent);
+                _readCache[file] = rawContent;
+            }
+
             if (rawContent is null) continue;
             filesSearched++;
 
@@ -233,7 +288,19 @@ public sealed class CodingToolExecutor
         var search = input.GetProperty("search").GetString()!;
         var replace = input.GetProperty("replace").GetString()!;
 
-        var content = await _gitOps.ReadFileAsync(_repoPath, path, ct);
+        // Prefer write buffer (in-flight changes), then read cache, then GitHub API
+        string? content;
+        if (_writeBuffer.TryGetValue(path, out var buffered))
+            content = buffered;
+        else if (_readCache.TryGetValue(path, out var cached))
+            content = cached;
+        else
+        {
+            var results = await _githubContext.GetFileContentsAsync(_branch, new[] { path }, ct);
+            results.TryGetValue(path, out content);
+            _readCache[path] = content;
+        }
+
         if (content is null)
             return $"Error: File not found: {path}";
 
@@ -266,10 +333,11 @@ public sealed class CodingToolExecutor
 
         var occurrences = CountOccurrences(content, search);
         var newContent = content.Replace(search, replace);
-        await _gitOps.WriteFileAsync(_repoPath, path, newContent, ct);
+        _writeBuffer[path] = newContent;
+        _readCache[path] = newContent;
         _modifiedFiles.Add(path);
 
-        _logger.LogInformation("Tool edit_file: {Path} ({Occurrences} replacement(s))", path, occurrences);
+        _logger.LogInformation("Tool edit_file (buffered): {Path} ({Occurrences} replacement(s))", path, occurrences);
         return $"Successfully edited {path}: replaced {occurrences} occurrence(s).";
     }
 

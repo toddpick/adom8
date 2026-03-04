@@ -20,7 +20,7 @@ public sealed class CodingAgentServiceTests
     private readonly Mock<IAIClientFactory> _aiFactoryMock = new();
     private readonly Mock<IAIClient> _aiClientMock = new();
     private readonly Mock<IAzureDevOpsClient> _adoMock = new();
-    private readonly Mock<IGitOperations> _gitMock = new();
+    private readonly Mock<IGitHubApiContextService> _githubContextMock = new();
     private readonly Mock<IStoryContextFactory> _contextFactoryMock = new();
     private readonly Mock<IStoryContext> _contextMock = new();
     private readonly Mock<ICodebaseContextProvider> _codebaseMock = new();
@@ -43,7 +43,7 @@ public sealed class CodingAgentServiceTests
     {
         var opts = copilotOverride ?? _copilotOptions;
         return new CodingAgentService(
-            _aiFactoryMock.Object, _adoMock.Object, _gitMock.Object,
+            _aiFactoryMock.Object, _adoMock.Object, _githubContextMock.Object,
             _contextFactoryMock.Object, _codebaseMock.Object,
             NullLogger<CodingAgentService>.Instance, _taskQueueMock.Object,
             _activityLoggerMock.Object,
@@ -60,12 +60,11 @@ public sealed class CodingAgentServiceTests
         _adoMock.Setup(a => a.GetWorkItemAsync(wi.Id, It.IsAny<CancellationToken>())).ReturnsAsync(wi);
         _adoMock.Setup(a => a.DownloadSupportingArtifactsAsync(wi.Id, It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new WorkItemSupportingArtifacts());
-        _gitMock.Setup(g => g.EnsureBranchAsync(It.IsAny<string>(), It.IsAny<CancellationToken>())).ReturnsAsync(@"C:\repos\test");
-        _gitMock.Setup(g => g.ListFilesAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+        _githubContextMock.Setup(g => g.GetFileTreeAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new List<string> { "src/Program.cs", "dashboard/index.html" });
-        _gitMock.Setup(g => g.ReadFileAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync("Console.WriteLine(\"Hello\");");
-        _gitMock.Setup(g => g.WriteFileAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+        _githubContextMock.Setup(g => g.GetFileContentsAsync(It.IsAny<string>(), It.IsAny<IReadOnlyList<string>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Dictionary<string, string?> { ["src/Program.cs"] = "Console.WriteLine(\"Hello\");" });
+        _githubContextMock.Setup(g => g.WriteFilesAsync(It.IsAny<string>(), It.IsAny<IReadOnlyDictionary<string, string>>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
             .Returns(Task.CompletedTask);
 
         _contextMock.Setup(c => c.LoadStateAsync(It.IsAny<CancellationToken>())).ReturnsAsync(state);
@@ -279,7 +278,7 @@ public sealed class CodingAgentServiceTests
                 comment.Contains("Needs Revision", StringComparison.OrdinalIgnoreCase)),
             It.IsAny<CancellationToken>()), Times.Once);
 
-        _gitMock.Verify(g => g.EnsureBranchAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+        _githubContextMock.Verify(g => g.GetFileTreeAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
         _taskQueueMock.Verify(q => q.EnqueueAsync(It.IsAny<AgentTask>(), It.IsAny<CancellationToken>()), Times.Never);
         _aiClientMock.Verify(a => a.CompleteWithToolsAsync(
             It.IsAny<string>(), It.IsAny<string>(),

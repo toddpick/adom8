@@ -11,7 +11,7 @@ public sealed class CodebaseContextLoaderTests
     [Fact]
     public async Task LoadRelevantContextAsync_IncludesOrchestrationContractBeforeContextIndex()
     {
-        var files = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        var files = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase)
         {
             [".agent/ORCHESTRATION_CONTRACT.md"] = "# Orchestration Contract\nRules",
             [".agent/CONTEXT_INDEX.md"] = "# Context Index\nOverview",
@@ -19,11 +19,11 @@ public sealed class CodebaseContextLoaderTests
             [".agent/TECH_STACK.md"] = "# Tech Stack"
         };
 
-        var gitOps = new FakeGitOperations(files);
+        var githubContext = new FakeGitHubApiContextService(files);
         var options = Options.Create(new CodebaseDocumentationOptions());
-        var loader = new CodebaseContextLoader(gitOps, options, NullLogger<CodebaseContextLoader>.Instance);
+        var loader = new CodebaseContextLoader(githubContext, options, NullLogger<CodebaseContextLoader>.Instance);
 
-        var context = await loader.LoadRelevantContextAsync("repo", "Sample story", "No keywords");
+        var context = await loader.LoadRelevantContextAsync("main", "Sample story", "No keywords");
 
         var contractIndex = context.IndexOf("<!-- ORCHESTRATION_CONTRACT.md -->", StringComparison.Ordinal);
         var contextIndex = context.IndexOf("<!-- CONTEXT_INDEX.md -->", StringComparison.Ordinal);
@@ -33,44 +33,40 @@ public sealed class CodebaseContextLoaderTests
         Assert.True(contractIndex < contextIndex, "Expected orchestration contract to be loaded before context index.");
     }
 
-    private sealed class FakeGitOperations : IGitOperations
+    private sealed class FakeGitHubApiContextService : IGitHubApiContextService
     {
-        private readonly Dictionary<string, string> _files;
+        private readonly Dictionary<string, string?> _files;
 
-        public FakeGitOperations(Dictionary<string, string> files)
+        public FakeGitHubApiContextService(Dictionary<string, string?> files)
         {
             _files = files;
         }
 
-        public Task<string> EnsureBranchAsync(string branchName, CancellationToken cancellationToken = default)
-            => throw new NotSupportedException();
+        public Task<IReadOnlyList<string>> GetFileTreeAsync(string branch, CancellationToken ct = default)
+            => Task.FromResult<IReadOnlyList<string>>(_files.Keys.ToList());
 
-        public Task<string> EnsureBranchAsync(string branchName, bool lightweightCheckout, CancellationToken cancellationToken = default)
-            => throw new NotSupportedException();
-
-        public Task HydrateWorkingTreeAsync(string repositoryPath, IReadOnlyCollection<string> relativePaths, CancellationToken cancellationToken = default)
-            => throw new NotSupportedException();
-
-        public Task CommitAndPushAsync(string repositoryPath, string message, CancellationToken cancellationToken = default)
-            => throw new NotSupportedException();
-
-        public Task WriteFileAsync(string repositoryPath, string relativePath, string content, CancellationToken cancellationToken = default)
-            => throw new NotSupportedException();
-
-        public Task<string?> ReadFileAsync(string repositoryPath, string relativePath, CancellationToken cancellationToken = default)
+        public Task<IReadOnlyDictionary<string, string?>> GetFileContentsAsync(
+            string branch,
+            IReadOnlyList<string> paths,
+            CancellationToken ct = default)
         {
-            var normalized = relativePath.Replace('\\', '/');
-            _files.TryGetValue(normalized, out var value);
-            return Task.FromResult<string?>(value);
+            var result = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+            foreach (var path in paths)
+            {
+                var normalized = path.Replace('\\', '/');
+                _files.TryGetValue(normalized, out var value);
+                result[path] = value;
+            }
+            return Task.FromResult<IReadOnlyDictionary<string, string?>>(result);
         }
 
-        public Task<IReadOnlyList<string>> ListFilesAsync(string repositoryPath, CancellationToken cancellationToken = default)
-            => Task.FromResult<IReadOnlyList<string>>(Array.Empty<string>());
+        public Task<string> GetRecentCommitSummaryAsync(string branch, int count = 20, CancellationToken ct = default)
+            => Task.FromResult(string.Empty);
 
-        public Task<IReadOnlyList<string>> GetChangedFilesAsync(string repositoryPath, CancellationToken cancellationToken = default)
+        public Task WriteFileAsync(string branch, string path, string content, string commitMessage, CancellationToken ct = default)
             => throw new NotSupportedException();
 
-        public Task CleanupRepoAsync(string repositoryPath, CancellationToken cancellationToken = default)
+        public Task WriteFilesAsync(string branch, IReadOnlyDictionary<string, string> files, string commitMessage, CancellationToken ct = default)
             => throw new NotSupportedException();
     }
 }

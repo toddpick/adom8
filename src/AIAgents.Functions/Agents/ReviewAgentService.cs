@@ -18,7 +18,7 @@ public sealed class ReviewAgentService : IAgentService
 {
     private readonly IAIClientFactory _aiClientFactory;
     private readonly IAzureDevOpsClient _adoClient;
-    private readonly IGitOperations _gitOps;
+    private readonly IGitHubApiContextService _githubContext;
     private readonly IStoryContextFactory _contextFactory;
     private readonly ITemplateEngine _templateEngine;
     private readonly ICodebaseContextProvider _codebaseContext;
@@ -28,7 +28,7 @@ public sealed class ReviewAgentService : IAgentService
     public ReviewAgentService(
         IAIClientFactory aiClientFactory,
         IAzureDevOpsClient adoClient,
-        IGitOperations gitOps,
+        IGitHubApiContextService githubContext,
         IStoryContextFactory contextFactory,
         ITemplateEngine templateEngine,
         ICodebaseContextProvider codebaseContext,
@@ -37,7 +37,7 @@ public sealed class ReviewAgentService : IAgentService
     {
         _aiClientFactory = aiClientFactory;
         _adoClient = adoClient;
-        _gitOps = gitOps;
+        _githubContext = githubContext;
         _contextFactory = contextFactory;
         _templateEngine = templateEngine;
         _codebaseContext = codebaseContext;
@@ -47,7 +47,6 @@ public sealed class ReviewAgentService : IAgentService
 
     public async Task<AgentResult> ExecuteAsync(AgentTask task, CancellationToken cancellationToken = default)
     {
-        string? repoPath = null;
         try
         {
         _logger.LogInformation("Review agent starting for WI-{WorkItemId}", task.WorkItemId);
@@ -78,9 +77,8 @@ public sealed class ReviewAgentService : IAgentService
 
         var aiClient = _aiClientFactory.GetClientForAgent("Review", workItem.GetModelOverrides());
         var branchName = $"feature/US-{task.WorkItemId}";
-        repoPath = await _gitOps.EnsureBranchAsync(branchName, lightweightCheckout: true, cancellationToken);
 
-        await using var context = _contextFactory.Create(task.WorkItemId, repoPath);
+        await using var context = _contextFactory.Create(task.WorkItemId, string.Empty);
         var state = await context.LoadStateAsync(cancellationToken);
         state.CurrentState = "AI Review";
         state.Agents["Review"] = AgentStatus.InProgress();
@@ -91,35 +89,9 @@ public sealed class ReviewAgentService : IAgentService
 
         // Review ONLY coding artifacts — do NOT include test files or non-code artifacts.
         // This keeps the review focused and avoids sending excessive content to the AI.
-        var allPaths = state.Artifacts.Code.ToList();
-
-        // Fallback: if no code artifacts tracked, detect changed files from git diff.
-        // Filter to only source code files — skip test files, generated docs, configs, etc.
-        if (allPaths.Count == 0)
-        {
-            _logger.LogWarning("No code artifacts found in state for WI-{WorkItemId}, falling back to git diff", task.WorkItemId);
-            var changedFiles = await _gitOps.GetChangedFilesAsync(repoPath, cancellationToken);
-            allPaths = changedFiles
-                .Where(f => (f.EndsWith(".cs", StringComparison.OrdinalIgnoreCase) ||
-                             f.EndsWith(".ts", StringComparison.OrdinalIgnoreCase) ||
-                             f.EndsWith(".js", StringComparison.OrdinalIgnoreCase) ||
-                             f.EndsWith(".html", StringComparison.OrdinalIgnoreCase) ||
-                             f.EndsWith(".css", StringComparison.OrdinalIgnoreCase)) &&
-                            // Exclude test files, generated docs, and pipeline artifacts
-                            !f.Contains("Test", StringComparison.OrdinalIgnoreCase) &&
-                            !f.Contains(".test.", StringComparison.OrdinalIgnoreCase) &&
-                            !f.Contains(".spec.", StringComparison.OrdinalIgnoreCase) &&
-                            !f.EndsWith(".md", StringComparison.OrdinalIgnoreCase) &&
-                            !f.StartsWith(".ado/", StringComparison.OrdinalIgnoreCase))
-                .ToList();
-            _logger.LogInformation("Git diff fallback found {Count} reviewable source files for WI-{WorkItemId}",
-                allPaths.Count, task.WorkItemId);
-        }
-
-        var hydratePaths = allPaths
+        var allPaths = state.Artifacts.Code
             .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToArray();
-        await _gitOps.HydrateWorkingTreeAsync(repoPath, hydratePaths, cancellationToken);
+            .ToList();
 
         _logger.LogInformation("Reviewing {Count} files for WI-{WorkItemId}: {Files}",
             allPaths.Count, task.WorkItemId, string.Join(", ", allPaths.Take(10)));
@@ -131,6 +103,12 @@ public sealed class ReviewAgentService : IAgentService
         var fileContents = new List<string>();
         var totalChars = 0;
         var truncatedFiles = 0;
+
+        // Fetch all code files via GitHub API
+        IReadOnlyDictionary<string, string?> fetchedContents = new Dictionary<string, string?>();
+        if (allPaths.Count > 0)
+            fetchedContents = await _githubContext.GetFileContentsAsync(branchName, allPaths, cancellationToken);
+
         foreach (var path in allPaths)
         {
             if (totalChars >= MaxCodeChars)
@@ -138,8 +116,7 @@ public sealed class ReviewAgentService : IAgentService
                 truncatedFiles++;
                 continue;
             }
-            var content = await _gitOps.ReadFileAsync(repoPath, path, cancellationToken);
-            if (content is null) continue;
+            if (!fetchedContents.TryGetValue(path, out var content) || content is null) continue;
 
             if (content.Length > MaxFileChars)
             {
@@ -235,8 +212,13 @@ Perform a comprehensive code review.";
         var renderedReview = await _templateEngine.RenderAsync("CODE_REVIEW.template.md", templateModel, cancellationToken);
         await context.WriteArtifactAsync("CODE_REVIEW.md", renderedReview, cancellationToken);
 
-        // Commit
-        await _gitOps.CommitAndPushAsync(repoPath,
+        // Commit review artifact via GitHub API
+        await _githubContext.WriteFilesAsync(
+            branchName,
+            new Dictionary<string, string>
+            {
+                [$".ado/stories/US-{workItem.Id}/CODE_REVIEW.md"] = renderedReview
+            },
             $"[AI Review] US-{workItem.Id}: Score {reviewResult.Score}/100 - {reviewResult.Recommendation}",
             cancellationToken);
 
@@ -289,14 +271,6 @@ Perform a comprehensive code review.";
         catch (Exception ex)
         {
             return AgentResult.Fail(ErrorCategory.Code, $"Unexpected error in Review agent for WI-{task.WorkItemId}: {ex.Message}", ex);
-        }
-        finally
-        {
-            if (repoPath is not null)
-            {
-                try { await _gitOps.CleanupRepoAsync(repoPath, cancellationToken); }
-                catch (Exception ex) { _logger.LogWarning(ex, "Failed to clean up repo at {Path}", repoPath); }
-            }
         }
     }
 

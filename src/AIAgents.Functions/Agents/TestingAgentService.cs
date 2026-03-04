@@ -18,7 +18,7 @@ public sealed class TestingAgentService : IAgentService
 {
     private readonly IAIClientFactory _aiClientFactory;
     private readonly IAzureDevOpsClient _adoClient;
-    private readonly IGitOperations _gitOps;
+    private readonly IGitHubApiContextService _githubContext;
     private readonly IStoryContextFactory _contextFactory;
     private readonly ITemplateEngine _templateEngine;
     private readonly ICodebaseContextProvider _codebaseContext;
@@ -28,7 +28,7 @@ public sealed class TestingAgentService : IAgentService
     public TestingAgentService(
         IAIClientFactory aiClientFactory,
         IAzureDevOpsClient adoClient,
-        IGitOperations gitOps,
+        IGitHubApiContextService githubContext,
         IStoryContextFactory contextFactory,
         ITemplateEngine templateEngine,
         ICodebaseContextProvider codebaseContext,
@@ -37,7 +37,7 @@ public sealed class TestingAgentService : IAgentService
     {
         _aiClientFactory = aiClientFactory;
         _adoClient = adoClient;
-        _gitOps = gitOps;
+        _githubContext = githubContext;
         _contextFactory = contextFactory;
         _templateEngine = templateEngine;
         _codebaseContext = codebaseContext;
@@ -47,7 +47,6 @@ public sealed class TestingAgentService : IAgentService
 
     public async Task<AgentResult> ExecuteAsync(AgentTask task, CancellationToken cancellationToken = default)
     {
-        string? repoPath = null;
         try
         {
         _logger.LogInformation("Testing agent starting for WI-{WorkItemId}", task.WorkItemId);
@@ -55,9 +54,8 @@ public sealed class TestingAgentService : IAgentService
         var workItem = await _adoClient.GetWorkItemAsync(task.WorkItemId, cancellationToken);
         var aiClient = _aiClientFactory.GetClientForAgent("Testing", workItem.GetModelOverrides());
         var branchName = $"feature/US-{task.WorkItemId}";
-        repoPath = await _gitOps.EnsureBranchAsync(branchName, cancellationToken);
 
-        await using var context = _contextFactory.Create(task.WorkItemId, repoPath);
+        await using var context = _contextFactory.Create(task.WorkItemId, string.Empty);
         var state = await context.LoadStateAsync(cancellationToken);
         state.CurrentState = "AI Test";
         state.Agents["Testing"] = AgentStatus.InProgress();
@@ -69,14 +67,16 @@ public sealed class TestingAgentService : IAgentService
         // Read the plan and generated code
         var plan = await context.ReadArtifactAsync("PLAN.md", cancellationToken) ?? "";
 
-        // Read all generated code files content
+        // Read all generated code files via GitHub API
         var codeContent = new List<string>();
-        foreach (var codePath in state.Artifacts.Code)
+        if (state.Artifacts.Code.Count > 0)
         {
-            var content = await _gitOps.ReadFileAsync(repoPath, codePath, cancellationToken);
-            if (content is not null)
+            var codeFiles = await _githubContext.GetFileContentsAsync(
+                branchName, state.Artifacts.Code.ToList(), cancellationToken);
+            foreach (var codePath in state.Artifacts.Code)
             {
-                codeContent.Add($"// File: {codePath}\n{content}");
+                if (codeFiles.TryGetValue(codePath, out var content) && content is not null)
+                    codeContent.Add($"// File: {codePath}\n{content}");
             }
         }
 
@@ -117,7 +117,7 @@ Use xUnit and Moq for .NET test projects. Include edge cases and error scenarios
 ## Generated Code
 {allCode}
 
-{await _codebaseContext.LoadRelevantContextAsync(repoPath, workItem.Title, workItem.Description, cancellationToken)}
+{await _codebaseContext.LoadRelevantContextAsync(branchName, workItem.Title, workItem.Description, cancellationToken)}
 
 Generate comprehensive tests for this implementation.";
 
@@ -128,10 +128,11 @@ Generate comprehensive tests for this implementation.";
         // Parse response
         var (testCases, testFiles) = ParseTestResponse(aiResult.Content);
 
-        // Write test files
+        // Collect test files for atomic commit
+        var testFileWrites = new Dictionary<string, string>();
         foreach (var file in testFiles)
         {
-            await _gitOps.WriteFileAsync(repoPath, file.RelativePath, file.Content, cancellationToken);
+            testFileWrites[file.RelativePath] = file.Content;
             state.Artifacts.Tests.Add(file.RelativePath);
             _logger.LogInformation("Generated test: {FilePath}", file.RelativePath);
         }
@@ -155,10 +156,15 @@ Generate comprehensive tests for this implementation.";
         var renderedTestPlan = await _templateEngine.RenderAsync("TEST_PLAN.template.md", templateModel, cancellationToken);
         await context.WriteArtifactAsync("TEST_PLAN.md", renderedTestPlan, cancellationToken);
 
-        // Commit
-        await _gitOps.CommitAndPushAsync(repoPath,
-            $"[AI Testing] US-{workItem.Id}: Generated {testFiles.Count} test file(s), {testCases.Count} test cases",
-            cancellationToken);
+        // Commit test files atomically via GitHub API
+        if (testFileWrites.Count > 0)
+        {
+            await _githubContext.WriteFilesAsync(
+                branchName,
+                testFileWrites,
+                $"[AI Testing] US-{workItem.Id}: Generated {testFiles.Count} test file(s), {testCases.Count} test cases",
+                cancellationToken);
+        }
 
         // Update ADO
         await _adoClient.AddWorkItemCommentAsync(workItem.Id,
@@ -208,14 +214,6 @@ Generate comprehensive tests for this implementation.";
         catch (Exception ex)
         {
             return AgentResult.Fail(ErrorCategory.Code, $"Unexpected error in Testing agent for WI-{task.WorkItemId}: {ex.Message}", ex);
-        }
-        finally
-        {
-            if (repoPath is not null)
-            {
-                try { await _gitOps.CleanupRepoAsync(repoPath, cancellationToken); }
-                catch (Exception ex) { _logger.LogWarning(ex, "Failed to clean up repo at {Path}", repoPath); }
-            }
         }
     }
 

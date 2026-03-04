@@ -6,15 +6,19 @@ using Microsoft.Extensions.Options;
 namespace AIAgents.Core.Services;
 
 /// <summary>
-/// Loads relevant .agent/ documentation for a given work item.
+/// Loads relevant .agent/ documentation for a given work item via GitHub REST API.
 /// Uses keyword matching to select only the feature docs that are relevant,
 /// avoiding loading everything (token limits).
+/// The repositoryPath parameter is treated as the branch name for GitHub API calls.
 /// </summary>
 public sealed class CodebaseContextLoader : ICodebaseContextProvider
 {
-    private readonly IGitOperations _gitOps;
+    private readonly IGitHubApiContextService _githubContext;
     private readonly CodebaseDocumentationOptions _options;
     private readonly ILogger<CodebaseContextLoader> _logger;
+
+    // In-memory cache for the duration of the agent run (branch → path → content)
+    private readonly Dictionary<string, Dictionary<string, string?>> _cache = new(StringComparer.OrdinalIgnoreCase);
 
     // Core files always considered for loading (in priority order)
     private static readonly string[] s_coreFiles =
@@ -37,31 +41,31 @@ public sealed class CodebaseContextLoader : ICodebaseContextProvider
     };
 
     public CodebaseContextLoader(
-        IGitOperations gitOps,
+        IGitHubApiContextService githubContext,
         IOptions<CodebaseDocumentationOptions> options,
         ILogger<CodebaseContextLoader> logger)
     {
-        _gitOps = gitOps;
+        _githubContext = githubContext;
         _options = options.Value;
         _logger = logger;
     }
 
     public async Task<bool> HasCodebaseDocumentationAsync(
-        string repositoryPath,
+        string branch,
         CancellationToken cancellationToken = default)
     {
-        var indexPath = Path.Combine(_options.OutputFolder, "CONTEXT_INDEX.md");
-        var content = await _gitOps.ReadFileAsync(repositoryPath, indexPath, cancellationToken);
+        var indexPath = Path.Combine(_options.OutputFolder, "CONTEXT_INDEX.md").Replace('\\', '/');
+        var content = await GetCachedFileAsync(branch, indexPath, cancellationToken);
         return !string.IsNullOrWhiteSpace(content);
     }
 
     public async Task<string> LoadRelevantContextAsync(
-        string repositoryPath,
+        string branch,
         string workItemTitle,
         string? workItemDescription,
         CancellationToken cancellationToken = default)
     {
-        if (!await HasCodebaseDocumentationAsync(repositoryPath, cancellationToken))
+        if (!await HasCodebaseDocumentationAsync(branch, cancellationToken))
         {
             _logger.LogDebug("No .agent/ documentation found in repository");
             return string.Empty;
@@ -73,8 +77,8 @@ public sealed class CodebaseContextLoader : ICodebaseContextProvider
         // 1. Always load core files
         foreach (var coreFile in s_coreFiles)
         {
-            var path = Path.Combine(_options.OutputFolder, coreFile);
-            var content = await _gitOps.ReadFileAsync(repositoryPath, path, cancellationToken);
+            var path = Path.Combine(_options.OutputFolder, coreFile).Replace('\\', '/');
+            var content = await GetCachedFileAsync(branch, path, cancellationToken);
             if (!string.IsNullOrWhiteSpace(content))
             {
                 sections.Add($"<!-- {coreFile} -->\n{content}");
@@ -87,8 +91,8 @@ public sealed class CodebaseContextLoader : ICodebaseContextProvider
         {
             if (keywords.Any(kw => searchText.Contains(kw, StringComparison.OrdinalIgnoreCase)))
             {
-                var path = Path.Combine(_options.OutputFolder, fileName);
-                var content = await _gitOps.ReadFileAsync(repositoryPath, path, cancellationToken);
+                var path = Path.Combine(_options.OutputFolder, fileName).Replace('\\', '/');
+                var content = await GetCachedFileAsync(branch, path, cancellationToken);
                 if (!string.IsNullOrWhiteSpace(content))
                 {
                     sections.Add($"<!-- {fileName} -->\n{content}");
@@ -98,8 +102,7 @@ public sealed class CodebaseContextLoader : ICodebaseContextProvider
         }
 
         // 3. Load relevant FEATURES/*.md files
-        var featuresDocs = await LoadRelevantFeaturesAsync(
-            repositoryPath, searchText, cancellationToken);
+        var featuresDocs = await LoadRelevantFeaturesAsync(branch, searchText, cancellationToken);
         sections.AddRange(featuresDocs);
 
         if (sections.Count == 0)
@@ -120,32 +123,38 @@ public sealed class CodebaseContextLoader : ICodebaseContextProvider
     }
 
     private async Task<List<string>> LoadRelevantFeaturesAsync(
-        string repositoryPath,
+        string branch,
         string searchText,
         CancellationToken cancellationToken)
     {
         var results = new List<string>();
-        var featuresDir = Path.Combine(_options.OutputFolder, "FEATURES");
-        var allFiles = await _gitOps.ListFilesAsync(repositoryPath, cancellationToken);
+        var featuresDir = Path.Combine(_options.OutputFolder, "FEATURES").Replace('\\', '/');
+
+        IReadOnlyList<string> allFiles;
+        try
+        {
+            allFiles = await _githubContext.GetFileTreeAsync(branch, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Could not get file tree for branch {Branch} to load feature docs", branch);
+            return results;
+        }
 
         var featureFiles = allFiles
-            .Where(f => f.StartsWith(featuresDir.Replace('\\', '/'), StringComparison.OrdinalIgnoreCase) ||
-                        f.StartsWith(featuresDir, StringComparison.OrdinalIgnoreCase))
+            .Where(f => f.StartsWith(featuresDir, StringComparison.OrdinalIgnoreCase))
             .Where(f => f.EndsWith(".md", StringComparison.OrdinalIgnoreCase))
             .ToList();
 
         foreach (var featureFile in featureFiles)
         {
-            // Extract feature name from filename for keyword matching
             var fileName = Path.GetFileNameWithoutExtension(featureFile);
             var featureName = fileName.Replace("-", " ").Replace("_", " ").ToLowerInvariant();
 
-            // Match if the feature name appears in the work item text,
-            // or if any word in the feature name appears in the search text
             var featureWords = featureName.Split(' ', StringSplitOptions.RemoveEmptyEntries);
             if (featureWords.Any(w => w.Length > 3 && searchText.Contains(w, StringComparison.OrdinalIgnoreCase)))
             {
-                var content = await _gitOps.ReadFileAsync(repositoryPath, featureFile, cancellationToken);
+                var content = await GetCachedFileAsync(branch, featureFile, cancellationToken);
                 if (!string.IsNullOrWhiteSpace(content))
                 {
                     results.Add($"<!-- FEATURES/{Path.GetFileName(featureFile)} -->\n{content}");
@@ -155,5 +164,32 @@ public sealed class CodebaseContextLoader : ICodebaseContextProvider
         }
 
         return results;
+    }
+
+    private async Task<string?> GetCachedFileAsync(string branch, string path, CancellationToken cancellationToken)
+    {
+        if (!_cache.TryGetValue(branch, out var branchCache))
+        {
+            branchCache = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+            _cache[branch] = branchCache;
+        }
+
+        if (branchCache.TryGetValue(path, out var cached))
+            return cached;
+
+        string? content;
+        try
+        {
+            var results = await _githubContext.GetFileContentsAsync(branch, new[] { path }, cancellationToken);
+            results.TryGetValue(path, out content);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Could not fetch file {Path} from branch {Branch}", path, branch);
+            content = null;
+        }
+
+        branchCache[path] = content;
+        return content;
     }
 }

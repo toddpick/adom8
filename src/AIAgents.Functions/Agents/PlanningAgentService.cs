@@ -15,6 +15,7 @@ namespace AIAgents.Functions.Agents;
 /// Planning agent: analyzes the story, creates an implementation plan,
 /// and renders it using the PLAN.template.md Scriban template.
 /// Transitions: Story Planning → AI Code (enqueues Coding agent).
+/// Uses GitHub REST API exclusively — no local git clone.
 /// </summary>
 public sealed class PlanningAgentService : IAgentService
 {
@@ -25,7 +26,7 @@ public sealed class PlanningAgentService : IAgentService
 
     private readonly IAIClientFactory _aiClientFactory;
     private readonly IAzureDevOpsClient _adoClient;
-    private readonly IGitOperations _gitOps;
+    private readonly IGitHubApiContextService _githubContext;
     private readonly IStoryContextFactory _contextFactory;
     private readonly ITemplateEngine _templateEngine;
     private readonly ICodebaseContextProvider _codebaseContext;
@@ -35,7 +36,7 @@ public sealed class PlanningAgentService : IAgentService
     public PlanningAgentService(
         IAIClientFactory aiClientFactory,
         IAzureDevOpsClient adoClient,
-        IGitOperations gitOps,
+        IGitHubApiContextService githubContext,
         IStoryContextFactory contextFactory,
         ITemplateEngine templateEngine,
         ICodebaseContextProvider codebaseContext,
@@ -44,7 +45,7 @@ public sealed class PlanningAgentService : IAgentService
     {
         _aiClientFactory = aiClientFactory;
         _adoClient = adoClient;
-        _gitOps = gitOps;
+        _githubContext = githubContext;
         _contextFactory = contextFactory;
         _templateEngine = templateEngine;
         _codebaseContext = codebaseContext;
@@ -54,7 +55,6 @@ public sealed class PlanningAgentService : IAgentService
 
     public async Task<AgentResult> ExecuteAsync(AgentTask task, CancellationToken cancellationToken = default)
     {
-        string? repoPath = null;
         try
         {
         _logger.LogInformation("Planning agent starting for WI-{WorkItemId}", task.WorkItemId);
@@ -65,20 +65,17 @@ public sealed class PlanningAgentService : IAgentService
         // 1b. Resolve AI client with per-story model overrides
         var aiClient = _aiClientFactory.GetClientForAgent("Planning", workItem.GetModelOverrides());
 
-        // 2. Ensure branch and get repo path
+        // 2. Get repository context via GitHub API — no local clone needed
         var branchName = $"feature/US-{task.WorkItemId}";
-        repoPath = await _gitOps.EnsureBranchAsync(branchName, cancellationToken);
-
-        // 2b. Materialize supporting files (images/documents) into the story workspace/repo
-        var supportingArtifacts = await _adoClient.DownloadSupportingArtifactsAsync(task.WorkItemId, repoPath, cancellationToken);
-
-        // 3. Get existing code context
-        var existingFiles = await _gitOps.ListFilesAsync(repoPath, cancellationToken);
+        var existingFiles = await _githubContext.GetFileTreeAsync(branchName, cancellationToken);
         var fileListSummary = string.Join("\n", existingFiles.Take(100));
-        var targetedFileContext = await BuildTargetedFileContextAsync(repoPath, existingFiles, workItem, cancellationToken);
+        var targetedFileContext = await BuildTargetedFileContextAsync(branchName, existingFiles, workItem, cancellationToken);
 
-        // 4. Create story context
-        await using var context = _contextFactory.Create(task.WorkItemId, repoPath);
+        // 2b. Supporting artifacts are tracked in ADO only — no local materialization needed
+        var supportingArtifacts = await _adoClient.DownloadSupportingArtifactsAsync(task.WorkItemId, string.Empty, cancellationToken);
+
+        // 4. Create story context (Table Storage, not local disk)
+        await using var context = _contextFactory.Create(task.WorkItemId, string.Empty);
         var state = await context.LoadStateAsync(cancellationToken);
         state.CurrentState = "Story Planning";
         state.CurrentStage = "Planning";
@@ -172,7 +169,7 @@ If unverified external dependencies are detected, add a warning note in the tech
 
 {targetedFileContext}
 
-{await _codebaseContext.LoadRelevantContextAsync(repoPath, workItem.Title, workItem.Description, cancellationToken)}
+{await _codebaseContext.LoadRelevantContextAsync(branchName, workItem.Title, workItem.Description, cancellationToken)}
 
 Analyze this story and create a comprehensive implementation plan.";
 
@@ -209,9 +206,8 @@ Analyze this story and create a comprehensive implementation plan.";
 
         var renderedPlan = await _templateEngine.RenderAsync("PLAN.template.md", templateModel, cancellationToken);
 
-        // 8. Save artifacts
+        // 8. Save artifacts to Table Storage
         await context.WriteArtifactAsync("PLAN.md", renderedPlan, cancellationToken);
-        await _gitOps.WriteFileAsync(repoPath, $".ado/stories/US-{workItem.Id}/PLAN.md", renderedPlan, cancellationToken);
 
         // 9. Render and save tasks
         var tasksModel = new Dictionary<string, object?>
@@ -226,9 +222,16 @@ Analyze this story and create a comprehensive implementation plan.";
         await context.WriteArtifactAsync("ACCEPTANCE_TRACE.json", JsonSerializer.Serialize(acceptanceTrace, s_artifactJsonOptions), cancellationToken);
         await context.WriteArtifactAsync("INITIALIZATION_BUNDLE.json", JsonSerializer.Serialize(initializationBundle, s_artifactJsonOptions), cancellationToken);
 
-        // 10. Commit and push
-        await _gitOps.CommitAndPushAsync(repoPath,
-            $"[AI Planning] US-{workItem.Id}: {workItem.Title}", cancellationToken);
+        // 10. Commit plan files to GitHub via API (atomic, no local clone)
+        await _githubContext.WriteFilesAsync(
+            branchName,
+            new Dictionary<string, string>
+            {
+                [$".ado/stories/US-{workItem.Id}/PLAN.md"] = renderedPlan,
+                [$".ado/stories/US-{workItem.Id}/TASKS.md"] = renderedTasks
+            },
+            $"[AI Planning] US-{workItem.Id}: {workItem.Title}",
+            cancellationToken);
 
         // 12. Triage gate — check readiness
         var readiness = planResult.Readiness;
@@ -391,14 +394,6 @@ Analyze this story and create a comprehensive implementation plan.";
         {
             return AgentResult.Fail(ErrorCategory.Code, $"Unexpected error in Planning agent for WI-{task.WorkItemId}: {ex.Message}", ex);
         }
-        finally
-        {
-            if (repoPath is not null)
-            {
-                try { await _gitOps.CleanupRepoAsync(repoPath, cancellationToken); }
-                catch (Exception ex) { _logger.LogWarning(ex, "Failed to clean up repo at {Path}", repoPath); }
-            }
-        }
     }
 
     internal static PlanningResult ParsePlanningResult(string aiResponse)
@@ -530,7 +525,7 @@ Analyze this story and create a comprehensive implementation plan.";
     }
 
     private async Task<string> BuildTargetedFileContextAsync(
-        string repoPath,
+        string branchName,
         IReadOnlyList<string> existingFiles,
         StoryWorkItem workItem,
         CancellationToken ct)
@@ -547,6 +542,7 @@ Analyze this story and create a comprehensive implementation plan.";
         }.Where(value => !string.IsNullOrWhiteSpace(value)));
 
         var keywords = GetTargetedKeywords(storyText);
+        var fileContents = await _githubContext.GetFileContentsAsync(branchName, candidates, ct);
         var sb = new StringBuilder();
         sb.AppendLine("## Targeted File Excerpts");
         sb.AppendLine("The following excerpts are from likely-affected files and should be used for implementation analysis.");
@@ -555,8 +551,7 @@ Analyze this story and create a comprehensive implementation plan.";
 
         foreach (var path in candidates)
         {
-            var content = await _gitOps.ReadFileAsync(repoPath, path, ct);
-            if (string.IsNullOrWhiteSpace(content))
+            if (!fileContents.TryGetValue(path, out var content) || string.IsNullOrWhiteSpace(content))
                 continue;
 
             var snippet = ExtractKeywordSnippets(content, keywords, contextLines: 10, maxChars: 3200);

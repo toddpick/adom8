@@ -18,7 +18,7 @@ public sealed class TestingAgentServiceTests
     private readonly Mock<IAIClientFactory> _aiFactoryMock = new();
     private readonly Mock<IAIClient> _aiClientMock = new();
     private readonly Mock<IAzureDevOpsClient> _adoMock = new();
-    private readonly Mock<IGitOperations> _gitMock = new();
+    private readonly Mock<IGitHubApiContextService> _githubContextMock = new();
     private readonly Mock<IStoryContextFactory> _contextFactoryMock = new();
     private readonly Mock<IStoryContext> _contextMock = new();
     private readonly Mock<ITemplateEngine> _templateMock = new();
@@ -36,7 +36,7 @@ public sealed class TestingAgentServiceTests
     private TestingAgentService CreateService()
     {
         return new TestingAgentService(
-            _aiFactoryMock.Object, _adoMock.Object, _gitMock.Object,
+            _aiFactoryMock.Object, _adoMock.Object, _githubContextMock.Object,
             _contextFactoryMock.Object, _templateMock.Object, _codebaseMock.Object,
             NullLogger<TestingAgentService>.Instance, _taskQueueMock.Object);
     }
@@ -48,9 +48,10 @@ public sealed class TestingAgentServiceTests
         state.Artifacts.Code.Add("src/Services/RegistrationService.cs");
 
         _adoMock.Setup(a => a.GetWorkItemAsync(wi.Id, It.IsAny<CancellationToken>())).ReturnsAsync(wi);
-        _gitMock.Setup(g => g.EnsureBranchAsync(It.IsAny<string>(), It.IsAny<CancellationToken>())).ReturnsAsync(@"C:\repos\test");
-        _gitMock.Setup(g => g.ReadFileAsync(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync("public class RegistrationService { }");
+        _githubContextMock.Setup(g => g.GetFileContentsAsync(It.IsAny<string>(), It.IsAny<IReadOnlyList<string>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Dictionary<string, string?> { ["src/Services/RegistrationService.cs"] = "public class RegistrationService { }" });
+        _githubContextMock.Setup(g => g.WriteFilesAsync(It.IsAny<string>(), It.IsAny<IReadOnlyDictionary<string, string>>(), It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .Returns(Task.CompletedTask);
 
         _contextMock.Setup(c => c.LoadStateAsync(It.IsAny<CancellationToken>())).ReturnsAsync(state);
         _contextMock.Setup(c => c.SaveStateAsync(It.IsAny<StoryState>(), It.IsAny<CancellationToken>()))
@@ -86,9 +87,12 @@ public sealed class TestingAgentServiceTests
 
         await service.ExecuteAsync(new AgentTask { WorkItemId = 12345, AgentType = AgentType.Testing });
 
-        // Should write 1 test file
-        _gitMock.Verify(g => g.WriteFileAsync(
-            It.IsAny<string>(), "tests/RegistrationServiceTests.cs", It.IsAny<string>(), It.IsAny<CancellationToken>()),
+        // Should commit test files via GitHub API
+        _githubContextMock.Verify(g => g.WriteFilesAsync(
+            It.IsAny<string>(),
+            It.Is<IReadOnlyDictionary<string, string>>(files => files.ContainsKey("tests/RegistrationServiceTests.cs")),
+            It.IsAny<string>(),
+            It.IsAny<CancellationToken>()),
             Times.Once);
     }
 
