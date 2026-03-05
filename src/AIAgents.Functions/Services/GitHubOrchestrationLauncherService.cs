@@ -48,7 +48,8 @@ public sealed class GitHubOrchestrationLauncherService : IGitHubOrchestrationLau
         IOptions<GitHubOptions> githubOptions,
         IOptions<CopilotOptions> copilotOptions,
         ICopilotDelegationService delegationService,
-        ILogger<GitHubOrchestrationLauncherService> logger)
+        ILogger<GitHubOrchestrationLauncherService> logger,
+        HttpClient? httpClient = null)
     {
         _githubOptions = githubOptions.Value;
         _copilotOptions = copilotOptions.Value;
@@ -62,17 +63,23 @@ public sealed class GitHubOrchestrationLauncherService : IGitHubOrchestrationLau
             ?? Environment.GetEnvironmentVariable("AzureDevOps:Project")
             ?? "(configured Azure DevOps project)";
 
-        _httpClient = new HttpClient
+        _httpClient = httpClient ?? CreateDefaultHttpClient(_githubOptions);
+    }
+
+    private static HttpClient CreateDefaultHttpClient(GitHubOptions githubOptions)
+    {
+        var client = new HttpClient
         {
             BaseAddress = new Uri("https://api.github.com/"),
             Timeout = TimeSpan.FromSeconds(30)
         };
-        _httpClient.DefaultRequestHeaders.Authorization =
-            new AuthenticationHeaderValue("Bearer", _githubOptions.Token);
-        _httpClient.DefaultRequestHeaders.UserAgent.ParseAdd("AIAgents/1.0");
-        _httpClient.DefaultRequestHeaders.Accept.Add(
+        client.DefaultRequestHeaders.Authorization =
+            new AuthenticationHeaderValue("Bearer", githubOptions.Token);
+        client.DefaultRequestHeaders.UserAgent.ParseAdd("AIAgents/1.0");
+        client.DefaultRequestHeaders.Accept.Add(
             new MediaTypeWithQualityHeaderValue("application/vnd.github+json"));
-        _httpClient.DefaultRequestHeaders.Add("X-GitHub-Api-Version", "2022-11-28");
+        client.DefaultRequestHeaders.Add("X-GitHub-Api-Version", "2022-11-28");
+        return client;
     }
 
     public async Task<GitHubOrchestrationKickoffResult> KickoffAsync(
@@ -403,10 +410,9 @@ public sealed class GitHubOrchestrationLauncherService : IGitHubOrchestrationLau
     private async Task PostKickoffCommentAsync(int issueNumber, string branchName, CancellationToken cancellationToken)
     {
         var comment =
-            $"@{_agentAssignee} Start this story now using the full GitHub-agentic path. " +
-            $"Use `{branchName}` as base branch. Read `.agent/ORCHESTRATION_CONTRACT.md` first and follow it exactly. " +
-            "You own Planning through Documentation and MUST keep Azure DevOps synchronized via MCP `set-stage`, `add-comment`, and `stage-event` calls at each stage boundary. " +
-            "When Documentation is complete, signal Deployment stage readiness via MCP and stop. Deployment execution is owned by Azure (Autonomy Level 5 only).";
+            $"@{_agentAssignee} Start coding for this story now. " +
+            $"Use `{branchName}` as the base branch and open a PR back to `{branchName}` when coding is complete. " +
+            "This issue is coding-only; Azure handles pipeline orchestration and ADO stage transitions.";
 
         var payload = new { body = comment };
         var response = await _httpClient.PostAsync(
@@ -451,52 +457,22 @@ public sealed class GitHubOrchestrationLauncherService : IGitHubOrchestrationLau
         WorkItemSupportingArtifacts supportingArtifacts)
     {
         var sb = new StringBuilder();
-        sb.AppendLine("## 🚨 ADO NON-NEGOTIABLES (READ FIRST)");
+        sb.AppendLine("## Coding Assignment");
         sb.AppendLine();
-        sb.AppendLine("1. Use ONLY the `ado` MCP server for Azure DevOps updates.");
-        sb.AppendLine("2. Before any repo/file/code work, post assignment acknowledgement comment (with task session id if available). Show MCP/API response.");
-        sb.AppendLine($"3. Before any repo/file/code work, set `Custom.CurrentAIAgent = \"Planning Agent\"` and add `Entering Planning stage.` on work item `{workItem.Id}` in project `{adoProjectName}`. Show MCP/API response.");
-        sb.AppendLine("4. For every stage, do stage-entry ADO updates first (`CurrentAIAgent` + `Entering [Stage] stage.`), then work.");
-        sb.AppendLine("5. For every completed stage, post ADO completion evidence comment + stage event before moving on.");
-        sb.AppendLine("6. Do NOT change ADO `System.State` during GitHub Planning/Coding/Testing/Review/Documentation progression unless explicitly required by contract.");
+        sb.AppendLine("This issue is for coding work only.");
+        sb.AppendLine("Azure Functions orchestrate Planning, Testing, Review, Documentation, and Deployment.");
+        sb.AppendLine("Do not orchestrate ADO stage transitions from this issue.");
         sb.AppendLine();
-        sb.AppendLine("## 🧾 Preflight ADO Acknowledgement (MUST DO FIRST)");
+        sb.AppendLine("## Instructions");
         sb.AppendLine();
-        sb.AppendLine("Before any repo exploration or code changes, use the `ado` MCP server to add a comment on the ADO work item acknowledging assignment.");
-        sb.AppendLine("Try to extract the GitHub task session id from your task URL (example: `.../tasks/605222de-71a9-4f99-8ee7-f9cceb0b6467`).");
-        sb.AppendLine();
-        sb.AppendLine("Required comment behavior:");
-        sb.AppendLine("- If session id is available: `Thank you for assigning this task to me. I'm Copilot. Task session id: <session-id>`");
-        sb.AppendLine("- If session id is not available: `Thank you for assigning this task to me. I'm Copilot.`");
-        sb.AppendLine("Show the MCP/API response in the issue thread before proceeding.");
-        sb.AppendLine();
-        sb.AppendLine("## ⛔ HARD GATE (MUST DO FIRST)");
-        sb.AppendLine();
-        sb.AppendLine($"Use the `ado` MCP server to post `Custom.CurrentAIAgent = \"Planning Agent\"` and add comment `Entering Planning stage.` on ADO work item `{workItem.Id}` in project `{adoProjectName}`.");
-        sb.AppendLine("Show the MCP/API response in the issue thread and do not proceed until this is confirmed.");
-        sb.AppendLine();
-        sb.AppendLine("## Mission");
-        sb.AppendLine();
-        sb.AppendLine("Run this work item through full GitHub-agent orchestration.");
-        sb.AppendLine("You own stage execution from Planning through Documentation.");
-        sb.AppendLine("Azure Functions are launcher/observer only until Deployment.");
-        sb.AppendLine();
-        sb.AppendLine("## Required Protocol");
-        sb.AppendLine();
-        sb.AppendLine("1. Read `.agent/ORCHESTRATION_CONTRACT.md` first and follow it as authoritative protocol.");
-        sb.AppendLine("2. Keep Azure DevOps synchronized after every stage using MCP `set-stage`, `add-comment`, and `stage-event`.");
-        sb.AppendLine("3. Execute stages in strict order: Planning → Coding → Testing → Review → Documentation.");
-        sb.AppendLine("4. Do not perform deployment. Signal Deployment readiness via MCP when Documentation completes.");
-        sb.AppendLine("5. Treat `AI Minimum Review Score` as the Planning readiness gate and route to Needs Revision when below threshold.");
-        sb.AppendLine($"6. During Planning you MUST create/update `.ado/stories/US-{workItem.Id}/PLAN.md` and `.ado/stories/US-{workItem.Id}/TASKS.md` in the branch before moving to Coding.");
-        sb.AppendLine("7. Stage-entry ADO gate is mandatory: before any work, set `Custom.CurrentAIAgent` for that stage and add comment `Entering [Stage] stage.`.");
-        sb.AppendLine("8. Do not read files, explore repo, or write code until stage-entry ADO updates succeed. If MCP update fails, stop and report failure.");
+        sb.AppendLine("1. Use the provided branch as base and target your PR back to that branch.");
+        sb.AppendLine("2. Implement the requested code changes according to the plan and acceptance criteria.");
+        sb.AppendLine("3. Keep changes focused and minimal; preserve existing coding style.");
+        sb.AppendLine("4. Mark PR Ready for Review when coding is complete.");
         sb.AppendLine();
         sb.AppendLine($"> **ADO Work Item:** US-{workItem.Id}");
         sb.AppendLine($"> **Title:** {workItem.Title}");
         sb.AppendLine($"> **Assigned Agent:** @{agentAssignee}");
-        sb.AppendLine($"> **AI Autonomy Level:** {workItem.AutonomyLevel}");
-        sb.AppendLine($"> **AI Minimum Review Score:** {workItem.MinimumReviewScore}");
         sb.AppendLine($"> **Base Branch:** `{branchName}`");
         sb.AppendLine();
 
@@ -549,19 +525,10 @@ public sealed class GitHubOrchestrationLauncherService : IGitHubOrchestrationLau
             sb.AppendLine();
         }
 
-        sb.AppendLine("## Planning Artifacts (Required)");
-        sb.AppendLine();
-        sb.AppendLine("Before signaling Planning completion, create or update these files in the branch:");
-        sb.AppendLine($"- `.ado/stories/US-{workItem.Id}/PLAN.md`");
-        sb.AppendLine($"- `.ado/stories/US-{workItem.Id}/TASKS.md`");
-        sb.AppendLine("These artifacts must reflect the latest readiness outcome and implementation plan.");
-        sb.AppendLine();
-
         sb.AppendLine("## Completion");
         sb.AppendLine();
-        sb.AppendLine("- Keep PR ready for review by end of Documentation stage.");
-        sb.AppendLine("- Ensure all ADO stage comments/events are present with evidence.");
-        sb.AppendLine("- Signal Deployment stage via MCP and stop.");
+        sb.AppendLine("- Keep PR ready for review when coding is complete.");
+        sb.AppendLine("- Azure pipeline will continue with Testing/Review/Documentation/Deployment.");
         return sb.ToString();
     }
 

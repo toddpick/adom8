@@ -78,6 +78,54 @@ public sealed class AIClientTests
         """;
     }
 
+    private static string ResponsesJson(
+        string content = "Hello from responses",
+        int inputTokens = 120,
+        int outputTokens = 60,
+        string id = "resp_test_123")
+    {
+        return $$"""
+        {
+            "id": "{{id}}",
+            "object": "response",
+            "output": [
+                {
+                    "type": "message",
+                    "role": "assistant",
+                    "content": [
+                        { "type": "output_text", "text": "{{content}}" }
+                    ]
+                }
+            ],
+            "usage": {
+                "input_tokens": {{inputTokens}},
+                "output_tokens": {{outputTokens}}
+            }
+        }
+        """;
+    }
+
+    private static string ResponsesJsonWithDirectOutputText(
+        string content = "Direct output text",
+        int inputTokens = 50,
+        int outputTokens = 20,
+        string id = "resp_direct_123")
+    {
+        return $$"""
+        {
+            "id": "{{id}}",
+            "object": "response",
+            "output": [
+                { "type": "output_text", "text": "{{content}}" }
+            ],
+            "usage": {
+                "input_tokens": {{inputTokens}},
+                "output_tokens": {{outputTokens}}
+            }
+        }
+        """;
+    }
+
     [Fact]
     public async Task CompleteAsync_ValidResponse_ReturnsContentAndUsage()
     {
@@ -313,5 +361,137 @@ public sealed class AIClientTests
 
         Assert.Contains("api.openai.com", capturedRequest!.RequestUri!.ToString());
         Assert.Contains("/v1/chat/completions", capturedRequest.RequestUri.ToString());
+    }
+
+    [Fact]
+    public async Task CompleteAsync_OpenAIPremiumModel_UsesResponsesApiEndpoint()
+    {
+        var options = new AIOptions
+        {
+            Provider = "OpenAI",
+            Model = "gpt-5",
+            ApiKey = "sk-test",
+            Endpoint = "https://api.openai.com",
+            MaxTokens = 4096,
+            Temperature = 0.3
+        };
+
+        HttpRequestMessage? capturedRequest = null;
+        var handlerMock = new Mock<HttpMessageHandler>(MockBehavior.Strict);
+        handlerMock
+            .Protected()
+            .Setup<Task<HttpResponseMessage>>(
+                "SendAsync",
+                ItExpr.IsAny<HttpRequestMessage>(),
+                ItExpr.IsAny<CancellationToken>())
+            .Callback<HttpRequestMessage, CancellationToken>((req, _) => capturedRequest = req)
+            .ReturnsAsync(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(ResponsesJson("Premium OK"))
+            });
+
+        var httpClient = new HttpClient(handlerMock.Object);
+        var factoryMock = new Mock<IHttpClientFactory>();
+        factoryMock.Setup(f => f.CreateClient("AIClient")).Returns(httpClient);
+
+        var client = new AIClient(factoryMock.Object, options, NullLogger<AIClient>.Instance);
+        var result = await client.CompleteAsync("system", "user");
+
+        Assert.Equal("Premium OK", result.Content);
+        Assert.NotNull(capturedRequest);
+        Assert.Contains("/v1/responses", capturedRequest!.RequestUri!.ToString());
+    }
+
+    [Fact]
+    public async Task CompleteAsync_OpenAIPremiumModel_ParsesResponsesUsage()
+    {
+        var options = new AIOptions
+        {
+            Provider = "OpenAI",
+            Model = "gpt-5",
+            ApiKey = "sk-test",
+            Endpoint = "https://api.openai.com",
+            MaxTokens = 4096,
+            Temperature = 0.3
+        };
+
+        var (client, _) = CreateClient(
+            options: options,
+            responseBody: ResponsesJson("Usage check", 321, 123));
+
+        var result = await client.CompleteAsync("system", "user");
+
+        Assert.Equal("Usage check", result.Content);
+        Assert.NotNull(result.Usage);
+        Assert.Equal(321, result.Usage!.InputTokens);
+        Assert.Equal(123, result.Usage.OutputTokens);
+        Assert.Equal(444, result.Usage.TotalTokens);
+        Assert.Equal("gpt-5", result.Usage.Model);
+    }
+
+    [Fact]
+    public async Task CompleteAsync_OpenAIPremiumModel_ClampsMaxOutputTokensToMinimum()
+    {
+        var options = new AIOptions
+        {
+            Provider = "OpenAI",
+            Model = "gpt-5",
+            ApiKey = "sk-test",
+            Endpoint = "https://api.openai.com",
+            MaxTokens = 8,
+            Temperature = 0.3
+        };
+
+        string? capturedBody = null;
+        var handlerMock = new Mock<HttpMessageHandler>(MockBehavior.Strict);
+        handlerMock
+            .Protected()
+            .Setup<Task<HttpResponseMessage>>(
+                "SendAsync",
+                ItExpr.IsAny<HttpRequestMessage>(),
+                ItExpr.IsAny<CancellationToken>())
+            .Callback<HttpRequestMessage, CancellationToken>(async (req, _) =>
+            {
+                capturedBody = await req.Content!.ReadAsStringAsync();
+            })
+            .ReturnsAsync(new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent(ResponsesJson("Clamp check"))
+            });
+
+        var httpClient = new HttpClient(handlerMock.Object);
+        var factoryMock = new Mock<IHttpClientFactory>();
+        factoryMock.Setup(f => f.CreateClient("AIClient")).Returns(httpClient);
+
+        var client = new AIClient(factoryMock.Object, options, NullLogger<AIClient>.Instance);
+        await client.CompleteAsync("system", "user", new Interfaces.AICompletionOptions { MaxTokens = 5 });
+
+        Assert.NotNull(capturedBody);
+        Assert.Contains("\"max_output_tokens\":16", capturedBody!);
+    }
+
+    [Fact]
+    public async Task CompleteAsync_OpenAIPremiumModel_ParsesDirectOutputTextBlocks()
+    {
+        var options = new AIOptions
+        {
+            Provider = "OpenAI",
+            Model = "gpt-5",
+            ApiKey = "sk-test",
+            Endpoint = "https://api.openai.com",
+            MaxTokens = 4096,
+            Temperature = 0.3
+        };
+
+        var (client, _) = CreateClient(
+            options: options,
+            responseBody: ResponsesJsonWithDirectOutputText("Direct OK", 44, 22));
+
+        var result = await client.CompleteAsync("system", "user");
+
+        Assert.Equal("Direct OK", result.Content);
+        Assert.NotNull(result.Usage);
+        Assert.Equal(44, result.Usage!.InputTokens);
+        Assert.Equal(22, result.Usage.OutputTokens);
     }
 }

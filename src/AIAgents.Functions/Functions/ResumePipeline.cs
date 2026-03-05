@@ -21,20 +21,20 @@ public sealed class ResumePipeline
     private readonly ILogger<ResumePipeline> _logger;
     private readonly IActivityLogger _activityLogger;
     private readonly IAgentTaskQueue _taskQueue;
-    private readonly IGitOperations _gitOps;
+    private readonly IGitHubApiContextService _githubContext;
     private readonly IAzureDevOpsClient _adoClient;
 
     public ResumePipeline(
         ILogger<ResumePipeline> logger,
         IActivityLogger activityLogger,
         IAgentTaskQueue taskQueue,
-        IGitOperations gitOps,
+        IGitHubApiContextService githubContext,
         IAzureDevOpsClient adoClient)
     {
         _logger = logger;
         _activityLogger = activityLogger;
         _taskQueue = taskQueue;
-        _gitOps = gitOps;
+        _githubContext = githubContext;
         _adoClient = adoClient;
     }
 
@@ -82,10 +82,10 @@ public sealed class ResumePipeline
             workItemId,
             resumeTarget.Stage);
 
-        // Verify the branch exists by attempting to ensure it
+        // Verify the branch exists via GitHub API — no local clone needed
         try
         {
-            await _gitOps.EnsureBranchAsync(branchName, cancellationToken);
+            await _githubContext.GetFileTreeAsync(branchName, cancellationToken);
         }
         catch (Exception ex)
         {

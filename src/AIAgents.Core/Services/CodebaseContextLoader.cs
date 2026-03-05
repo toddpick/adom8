@@ -23,7 +23,6 @@ public sealed class CodebaseContextLoader : ICodebaseContextProvider
     // Core files always considered for loading (in priority order)
     private static readonly string[] s_coreFiles =
     {
-        "ORCHESTRATION_CONTRACT.md",
         "CONTEXT_INDEX.md",
         "CODING_STANDARDS.md",
         "TECH_STACK.md"

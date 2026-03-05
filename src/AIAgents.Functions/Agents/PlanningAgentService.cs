@@ -2,12 +2,14 @@ using System.Net;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using AIAgents.Core.Configuration;
 using AIAgents.Core.Constants;
 using AIAgents.Core.Interfaces;
 using AIAgents.Core.Models;
 using AIAgents.Functions.Models;
 using AIAgents.Functions.Services;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 namespace AIAgents.Functions.Agents;
 
@@ -32,6 +34,8 @@ public sealed class PlanningAgentService : IAgentService
     private readonly ICodebaseContextProvider _codebaseContext;
     private readonly ILogger<PlanningAgentService> _logger;
     private readonly IAgentTaskQueue _taskQueue;
+    private readonly GitHubOptions? _githubOptions;
+    private readonly HttpClient? _gitHubHttpClient;
 
     public PlanningAgentService(
         IAIClientFactory aiClientFactory,
@@ -41,7 +45,9 @@ public sealed class PlanningAgentService : IAgentService
         ITemplateEngine templateEngine,
         ICodebaseContextProvider codebaseContext,
         ILogger<PlanningAgentService> logger,
-        IAgentTaskQueue taskQueue)
+        IAgentTaskQueue taskQueue,
+        IOptions<GitHubOptions>? githubOptions = null,
+        IHttpClientFactory? httpClientFactory = null)
     {
         _aiClientFactory = aiClientFactory;
         _adoClient = adoClient;
@@ -51,6 +57,8 @@ public sealed class PlanningAgentService : IAgentService
         _codebaseContext = codebaseContext;
         _logger = logger;
         _taskQueue = taskQueue;
+        _githubOptions = githubOptions?.Value;
+        _gitHubHttpClient = httpClientFactory?.CreateClient("GitHub");
     }
 
     public async Task<AgentResult> ExecuteAsync(AgentTask task, CancellationToken cancellationToken = default)
@@ -67,6 +75,7 @@ public sealed class PlanningAgentService : IAgentService
 
         // 2. Get repository context via GitHub API — no local clone needed
         var branchName = $"feature/US-{task.WorkItemId}";
+        await EnsureBranchExistsAsync(branchName, cancellationToken);
         var existingFiles = await _githubContext.GetFileTreeAsync(branchName, cancellationToken);
         var fileListSummary = string.Join("\n", existingFiles.Take(100));
         var targetedFileContext = await BuildTargetedFileContextAsync(branchName, existingFiles, workItem, cancellationToken);
@@ -394,6 +403,86 @@ Analyze this story and create a comprehensive implementation plan.";
         {
             return AgentResult.Fail(ErrorCategory.Code, $"Unexpected error in Planning agent for WI-{task.WorkItemId}: {ex.Message}", ex);
         }
+    }
+
+    private async Task EnsureBranchExistsAsync(string branchName, CancellationToken cancellationToken)
+    {
+        if (_gitHubHttpClient is null || _githubOptions is null)
+        {
+            _logger.LogDebug("Skipping branch existence check for {BranchName}: GitHub client/options not available", branchName);
+            return;
+        }
+
+        var encodedBranch = Uri.EscapeDataString(branchName);
+        var branchRefResponse = await _gitHubHttpClient.GetAsync(
+            $"repos/{_githubOptions.Owner}/{_githubOptions.Repo}/git/ref/heads/{encodedBranch}",
+            cancellationToken);
+
+        if (branchRefResponse.IsSuccessStatusCode)
+        {
+            return;
+        }
+
+        if (branchRefResponse.StatusCode != HttpStatusCode.NotFound)
+        {
+            var body = await branchRefResponse.Content.ReadAsStringAsync(cancellationToken);
+            throw new HttpRequestException(
+                $"Failed to verify feature branch '{branchName}' existence: {(int)branchRefResponse.StatusCode} {branchRefResponse.StatusCode}. {body}",
+                null,
+                branchRefResponse.StatusCode);
+        }
+
+        var baseBranch = string.IsNullOrWhiteSpace(_githubOptions.BaseBranch)
+            ? "main"
+            : _githubOptions.BaseBranch;
+
+        var baseRefResponse = await _gitHubHttpClient.GetAsync(
+            $"repos/{_githubOptions.Owner}/{_githubOptions.Repo}/git/ref/heads/{Uri.EscapeDataString(baseBranch)}",
+            cancellationToken);
+
+        if (!baseRefResponse.IsSuccessStatusCode)
+        {
+            var baseBody = await baseRefResponse.Content.ReadAsStringAsync(cancellationToken);
+            throw new HttpRequestException(
+                $"Failed to resolve base branch '{baseBranch}' while creating '{branchName}': {(int)baseRefResponse.StatusCode} {baseRefResponse.StatusCode}. {baseBody}",
+                null,
+                baseRefResponse.StatusCode);
+        }
+
+        var baseRefContent = await baseRefResponse.Content.ReadAsStringAsync(cancellationToken);
+        using var baseRefDoc = JsonDocument.Parse(baseRefContent);
+        var baseSha = baseRefDoc.RootElement
+            .GetProperty("object")
+            .GetProperty("sha")
+            .GetString();
+
+        if (string.IsNullOrWhiteSpace(baseSha))
+        {
+            throw new InvalidOperationException($"Could not resolve commit SHA for base branch '{baseBranch}'.");
+        }
+
+        var createPayload = JsonSerializer.Serialize(new
+        {
+            @ref = $"refs/heads/{branchName}",
+            sha = baseSha
+        });
+
+        var createResponse = await _gitHubHttpClient.PostAsync(
+            $"repos/{_githubOptions.Owner}/{_githubOptions.Repo}/git/refs",
+            new StringContent(createPayload, Encoding.UTF8, "application/json"),
+            cancellationToken);
+
+        if (createResponse.IsSuccessStatusCode || createResponse.StatusCode == HttpStatusCode.UnprocessableEntity)
+        {
+            _logger.LogInformation("Ensured feature branch {BranchName} exists (base: {BaseBranch})", branchName, baseBranch);
+            return;
+        }
+
+        var createBody = await createResponse.Content.ReadAsStringAsync(cancellationToken);
+        throw new HttpRequestException(
+            $"Failed to create branch '{branchName}' from '{baseBranch}': {(int)createResponse.StatusCode} {createResponse.StatusCode}. {createBody}",
+            null,
+            createResponse.StatusCode);
     }
 
     internal static PlanningResult ParsePlanningResult(string aiResponse)

@@ -7,6 +7,8 @@ using Microsoft.Azure.Functions.Worker;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 var host = new HostBuilder()
     .ConfigureFunctionsWebApplication()
@@ -54,6 +56,22 @@ var host = new HostBuilder()
             options.CircuitBreaker.BreakDuration = TimeSpan.FromSeconds(30);
         });
 
+        // Named HTTP client for GitHub REST API calls — shared by all GitHub-facing services.
+        // Uses IHttpClientFactory for proper socket management and handler rotation.
+        services.AddHttpClient("GitHub")
+            .ConfigureHttpClient((sp, client) =>
+            {
+                var ghOpts = sp.GetRequiredService<IOptions<GitHubOptions>>().Value;
+                client.BaseAddress = new Uri("https://api.github.com/");
+                client.Timeout = TimeSpan.FromSeconds(90);
+                client.DefaultRequestHeaders.Authorization =
+                    new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", ghOpts.Token);
+                client.DefaultRequestHeaders.UserAgent.ParseAdd("AIAgents/1.0");
+                client.DefaultRequestHeaders.Accept.Add(
+                    new System.Net.Http.Headers.MediaTypeWithQualityHeaderValue("application/vnd.github+json"));
+                client.DefaultRequestHeaders.Add("X-GitHub-Api-Version", "2022-11-28");
+            });
+
         // Core services
         services.AddSingleton<IAIClient, AIClient>();
         services.AddSingleton<IAIClientFactory, AIClientFactory>();
@@ -66,9 +84,22 @@ var host = new HostBuilder()
         var gitProvider = configuration[$"{GitOptions.SectionName}:Provider"] ?? "GitHub";
         if (gitProvider.Equals("GitHub", StringComparison.OrdinalIgnoreCase))
         {
-            services.AddSingleton<IRepositoryProvider, GitHubRepositoryProvider>();
-            services.AddSingleton<IRepositorySizingService, GitHubRepositorySizingService>();
-            services.AddSingleton<ICodebaseOnboardingService, GitHubCodebaseOnboardingService>();
+            services.AddSingleton<IRepositoryProvider>(sp =>
+                new GitHubRepositoryProvider(
+                    sp.GetRequiredService<IOptions<GitHubOptions>>(),
+                    sp.GetRequiredService<ILogger<GitHubRepositoryProvider>>(),
+                    sp.GetRequiredService<IHttpClientFactory>().CreateClient("GitHub")));
+            services.AddSingleton<IRepositorySizingService>(sp =>
+                new GitHubRepositorySizingService(
+                    sp.GetRequiredService<IOptions<GitHubOptions>>(),
+                    sp.GetRequiredService<IOptions<RepositoryCapacityOptions>>(),
+                    sp.GetRequiredService<ILogger<GitHubRepositorySizingService>>(),
+                    sp.GetRequiredService<IHttpClientFactory>().CreateClient("GitHub")));
+            services.AddSingleton<ICodebaseOnboardingService>(sp =>
+                new GitHubCodebaseOnboardingService(
+                    sp.GetRequiredService<IOptions<GitHubOptions>>(),
+                    sp.GetRequiredService<IOptions<CodebaseDocumentationOptions>>(),
+                    sp.GetRequiredService<ILogger<GitHubCodebaseOnboardingService>>()));
         }
         else
         {
@@ -85,7 +116,11 @@ var host = new HostBuilder()
 
         // GitHub API context service — provides file tree, content, and write operations
         // without cloning the repository to local disk.
-        services.AddSingleton<IGitHubApiContextService, GitHubApiContextService>();
+        services.AddSingleton<IGitHubApiContextService>(sp =>
+            new GitHubApiContextService(
+                sp.GetRequiredService<IOptions<GitHubOptions>>(),
+                sp.GetRequiredService<ILogger<GitHubApiContextService>>(),
+                sp.GetRequiredService<IHttpClientFactory>().CreateClient("GitHub")));
 
         // Codebase context provider (loads .agent/ docs for AI prompts)
         services.AddSingleton<ICodebaseContextProvider, CodebaseContextLoader>();
@@ -95,7 +130,13 @@ var host = new HostBuilder()
 
         // Copilot delegation tracking (Azure Table Storage)
         services.AddSingleton<ICopilotDelegationService, TableStorageCopilotDelegationService>();
-        services.AddSingleton<IGitHubOrchestrationLauncherService, GitHubOrchestrationLauncherService>();
+        services.AddSingleton<IGitHubOrchestrationLauncherService>(sp =>
+            new GitHubOrchestrationLauncherService(
+                sp.GetRequiredService<IOptions<GitHubOptions>>(),
+                sp.GetRequiredService<IOptions<CopilotOptions>>(),
+                sp.GetRequiredService<ICopilotDelegationService>(),
+                sp.GetRequiredService<ILogger<GitHubOrchestrationLauncherService>>(),
+                sp.GetRequiredService<IHttpClientFactory>().CreateClient("GitHub")));
 
         // SaaS Mode — optional real-time callback reporting to adom8.dev dashboard
         // No-op when SaaS:Enabled is false (default for fully standalone deployments)

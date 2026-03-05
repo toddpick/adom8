@@ -101,7 +101,10 @@ public sealed class CodebaseDocumentationAgentService : IAgentService
         }
 
         // Step 1: Clone/open repo on main branch
-        await LogProgress(task.WorkItemId, "Cloning repository...", cancellationToken);
+        // LEGACY FALLBACK PATH: This code path triggers a full local clone via GitOperations.
+        // It only runs when ApiOnlyInitializationEnabled = false (default is true).
+        // TODO: Remove this fallback once API-only mode is validated in production.
+        await LogProgress(task.WorkItemId, "Cloning repository (legacy fallback — consider enabling ApiOnlyInitializationEnabled)...", cancellationToken);
         var repoPath = await _gitOps.EnsureBranchAsync("main", cancellationToken);
 
         // Check for existing metadata (incremental analysis)

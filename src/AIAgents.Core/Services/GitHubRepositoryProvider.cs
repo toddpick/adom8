@@ -24,22 +24,29 @@ public sealed class GitHubRepositoryProvider : IRepositoryProvider
 
     public GitHubRepositoryProvider(
         IOptions<GitHubOptions> options,
-        ILogger<GitHubRepositoryProvider> logger)
+        ILogger<GitHubRepositoryProvider> logger,
+        HttpClient? httpClient = null)
     {
         _options = options.Value;
         _logger = logger;
 
-        _httpClient = new HttpClient
+        _httpClient = httpClient ?? CreateDefaultHttpClient(_options);
+    }
+
+    private static HttpClient CreateDefaultHttpClient(GitHubOptions options)
+    {
+        var client = new HttpClient
         {
             BaseAddress = new Uri("https://api.github.com/"),
             Timeout = TimeSpan.FromSeconds(60)
         };
-        _httpClient.DefaultRequestHeaders.Authorization =
-            new AuthenticationHeaderValue("Bearer", _options.Token);
-        _httpClient.DefaultRequestHeaders.UserAgent.ParseAdd("AIAgents/1.0");
-        _httpClient.DefaultRequestHeaders.Accept.Add(
+        client.DefaultRequestHeaders.Authorization =
+            new AuthenticationHeaderValue("Bearer", options.Token);
+        client.DefaultRequestHeaders.UserAgent.ParseAdd("AIAgents/1.0");
+        client.DefaultRequestHeaders.Accept.Add(
             new MediaTypeWithQualityHeaderValue("application/vnd.github+json"));
-        _httpClient.DefaultRequestHeaders.Add("X-GitHub-Api-Version", "2022-11-28");
+        client.DefaultRequestHeaders.Add("X-GitHub-Api-Version", "2022-11-28");
+        return client;
     }
 
     public async Task<int> CreatePullRequestAsync(

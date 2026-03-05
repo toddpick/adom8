@@ -21,23 +21,30 @@ public sealed class GitHubRepositorySizingService : IRepositorySizingService
     public GitHubRepositorySizingService(
         IOptions<GitHubOptions> gitHubOptions,
         IOptions<RepositoryCapacityOptions> options,
-        ILogger<GitHubRepositorySizingService> logger)
+        ILogger<GitHubRepositorySizingService> logger,
+        HttpClient? httpClient = null)
     {
         _gitHub = gitHubOptions.Value;
         _options = options.Value;
         _logger = logger;
 
-        _httpClient = new HttpClient
+        _httpClient = httpClient ?? CreateDefaultHttpClient(_gitHub);
+    }
+
+    private static HttpClient CreateDefaultHttpClient(GitHubOptions gitHub)
+    {
+        var client = new HttpClient
         {
             BaseAddress = new Uri("https://api.github.com/"),
             Timeout = TimeSpan.FromSeconds(60)
         };
-        _httpClient.DefaultRequestHeaders.Authorization =
-            new AuthenticationHeaderValue("Bearer", _gitHub.Token);
-        _httpClient.DefaultRequestHeaders.UserAgent.ParseAdd("AIAgents/1.0");
-        _httpClient.DefaultRequestHeaders.Accept.Add(
+        client.DefaultRequestHeaders.Authorization =
+            new AuthenticationHeaderValue("Bearer", gitHub.Token);
+        client.DefaultRequestHeaders.UserAgent.ParseAdd("AIAgents/1.0");
+        client.DefaultRequestHeaders.Accept.Add(
             new MediaTypeWithQualityHeaderValue("application/vnd.github+json"));
-        _httpClient.DefaultRequestHeaders.Add("X-GitHub-Api-Version", "2022-11-28");
+        client.DefaultRequestHeaders.Add("X-GitHub-Api-Version", "2022-11-28");
+        return client;
     }
 
     public async Task<RepositorySizingResult> EvaluateAsync(CancellationToken cancellationToken = default)

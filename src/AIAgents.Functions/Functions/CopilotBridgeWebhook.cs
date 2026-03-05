@@ -25,7 +25,7 @@ namespace AIAgents.Functions.Functions;
 /// 3. Waits for non-[WIP] title and at least one changed file before treating PR as complete
 /// 4. Matches the PR to a pending Copilot delegation by US-{id} in title/body or branch name
 /// 5. Reconciles files from Copilot's PR branch onto the pipeline branch
-/// 6. Resumes the pipeline by enqueuing the Review agent
+/// 6. Resumes the Azure pipeline by enqueuing the next local stage (Testing by default)
 /// 
 /// The CopilotTimeoutChecker timer serves as a safety-net fallback if the webhook
 /// is not triggered (e.g., Copilot leaves the PR as draft indefinitely).
@@ -39,7 +39,6 @@ public sealed class CopilotBridgeWebhook
     private readonly CopilotOptions _copilotOptions;
     private readonly GitHubOptions _githubOptions;
     private readonly ICopilotDelegationService _delegationService;
-    private readonly IGitOperations _gitOps;
     private readonly IStoryContextFactory _contextFactory;
     private readonly IAzureDevOpsClient _adoClient;
     private readonly IAgentTaskQueue _taskQueue;
@@ -50,7 +49,6 @@ public sealed class CopilotBridgeWebhook
         IOptions<CopilotOptions> copilotOptions,
         IOptions<GitHubOptions> githubOptions,
         ICopilotDelegationService delegationService,
-        IGitOperations gitOps,
         IStoryContextFactory contextFactory,
         IAzureDevOpsClient adoClient,
         IAgentTaskQueue taskQueue,
@@ -60,7 +58,6 @@ public sealed class CopilotBridgeWebhook
         _copilotOptions = copilotOptions.Value;
         _githubOptions = githubOptions.Value;
         _delegationService = delegationService;
-        _gitOps = gitOps;
         _contextFactory = contextFactory;
         _adoClient = adoClient;
         _taskQueue = taskQueue;
@@ -147,7 +144,7 @@ public sealed class CopilotBridgeWebhook
         if (!isReady)
         {
             _logger.LogInformation(
-                "PR #{PrNumber} is not ready — waiting for update action, non-[WIP] title, and non-draft state",
+                "PR #{PrNumber} is not ready — waiting for update action and non-[WIP] title",
                 prNumber);
             var waitResponse = req.CreateResponse(HttpStatusCode.OK);
             await waitResponse.WriteStringAsync(
@@ -329,12 +326,16 @@ public sealed class CopilotBridgeWebhook
                 workItemId);
         }
 
-        // Copilot path: skip local Testing/Review/Documentation and move directly to Deployment.
+        // Copilot is coding-only. Azure remains orchestrator for downstream stages.
+        // InitializeCodebase is a special path that still proceeds directly to Deployment.
+        var nextAgentType = isInitializeCodebaseStory ? AgentType.Deployment : AgentType.Testing;
+        var nextAgentValue = nextAgentType == AgentType.Deployment
+            ? AIPipelineNames.CurrentAgentValues.Deployment
+            : AIPipelineNames.CurrentAgentValues.Testing;
+
         var currentAgentUpdated = false;
         try
         {
-            var nextAgentValue = AIPipelineNames.CurrentAgentValues.Deployment;
-
             await _adoClient.UpdateWorkItemFieldAsync(workItemId, CustomFieldNames.Paths.CurrentAIAgent, nextAgentValue, cancellationToken);
             currentAgentUpdated = true;
         }
@@ -342,19 +343,6 @@ public sealed class CopilotBridgeWebhook
         {
             _logger.LogWarning(ex,
                 "Failed to update Current AI Agent for WI-{WorkItemId} during Copilot reconciliation",
-                workItemId);
-        }
-
-        try
-        {
-            await _activityLogger.LogAsync("Testing", workItemId,
-                "Local Testing skipped — GitHub orchestration path will own testing/review/documentation updates",
-                "info", cancellationToken);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex,
-                "Non-critical activity log failed for Testing skip note on WI-{WorkItemId}",
                 workItemId);
         }
 
@@ -367,8 +355,8 @@ public sealed class CopilotBridgeWebhook
                 $"PR: #{prNumber} | Files: {metrics.FilesChanged} | +{metrics.LinesAdded}/-{metrics.LinesDeleted} lines<br/>" +
                 $"Duration: {metrics.DurationMinutes:F1} minutes | Commits: {metrics.CommitCount}<br/>" +
                 (isInitializeCodebaseStory
-                    ? "Testing skipped (validated by Copilot session) → handing off to Deployment agent"
-                    : "Testing skipped (validated by Copilot session) → handing off to Deployment agent"),
+                    ? "Initialize Codebase flow → handing off to Deployment agent"
+                    : "Coding complete → Azure pipeline resumed at Testing agent"),
                 cancellationToken);
             completionCommentAdded = true;
         }
@@ -436,7 +424,7 @@ public sealed class CopilotBridgeWebhook
                         $"⚠️ <b>Copilot completion checkpoint enforcement blocked handoff</b><br/>" +
                         $"PR: #{prNumber}<br/>" +
                         $"Missing required updates: {missingLabel}<br/>" +
-                        $"Pipeline did not enqueue Deployment.",
+                        $"Pipeline did not enqueue {nextAgentType}.",
                         cancellationToken);
                 }
                 catch (Exception ex)
@@ -468,6 +456,16 @@ public sealed class CopilotBridgeWebhook
             }
         }
 
+        await _taskQueue.EnqueueAsync(new AgentTask
+        {
+            WorkItemId = workItemId,
+            AgentType = nextAgentType,
+            CorrelationId = delegation.CorrelationId,
+            TriggerSource = nameof(CopilotBridgeWebhook),
+            ResumeFromStage = AIPipelineNames.ProcessingState,
+            HandoffNote = $"Copilot coding completed via PR #{prNumber}; resumed at {nextAgentType}."
+        }, cancellationToken);
+
         // Log 1 token as a marker for "1 premium credit" — Copilot agent sessions
         // cost 1 GitHub premium request regardless of output size.
         var tokensForLog = 1;
@@ -481,7 +479,7 @@ public sealed class CopilotBridgeWebhook
         try
         {
             await _activityLogger.LogAsync("Coding", workItemId,
-                $"Copilot coding agent completed successfully — {metrics.FilesChanged} files, +{metrics.LinesAdded}/-{metrics.LinesDeleted} lines, {metrics.DurationMinutes:F1}m, {metrics.CommitCount} commits. Awaiting MCP stage signal for Deployment handoff. (1 premium credit)",
+                $"Copilot coding agent completed successfully — {metrics.FilesChanged} files, +{metrics.LinesAdded}/-{metrics.LinesDeleted} lines, {metrics.DurationMinutes:F1}m, {metrics.CommitCount} commits. Enqueued {nextAgentType} in Azure pipeline. (1 premium credit)",
                 tokensForLog, costForLog, "info", cancellationToken);
         }
         catch (Exception ex)
@@ -492,8 +490,8 @@ public sealed class CopilotBridgeWebhook
         }
 
         _logger.LogInformation(
-            "Copilot bridge reconciled PR #{PrNumber} for WI-{WorkItemId} — {Files} files, awaiting MCP Deployment signal",
-            prNumber, workItemId, reconciledFiles.Count);
+            "Copilot bridge reconciled PR #{PrNumber} for WI-{WorkItemId} — {Files} files, enqueued {NextAgent}",
+            prNumber, workItemId, reconciledFiles.Count, nextAgentType);
     }
 
     /// <summary>
@@ -514,11 +512,6 @@ public sealed class CopilotBridgeWebhook
         }
 
         if (string.Equals(action, "opened", StringComparison.OrdinalIgnoreCase))
-        {
-            return false;
-        }
-
-        if (isDraft)
         {
             return false;
         }

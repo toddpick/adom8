@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
@@ -22,20 +23,27 @@ public sealed class GitHubApiContextService : IGitHubApiContextService
 
     public GitHubApiContextService(
         IOptions<GitHubOptions> gitHubOptions,
-        ILogger<GitHubApiContextService> logger)
+        ILogger<GitHubApiContextService> logger,
+        HttpClient? httpClient = null)
     {
         _gitHub = gitHubOptions.Value;
         _logger = logger;
 
-        _httpClient = new HttpClient
+        _httpClient = httpClient ?? CreateDefaultHttpClient(_gitHub);
+    }
+
+    private static HttpClient CreateDefaultHttpClient(GitHubOptions gitHub)
+    {
+        var client = new HttpClient
         {
             BaseAddress = new Uri("https://api.github.com/"),
             Timeout = TimeSpan.FromSeconds(90)
         };
-        _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", _gitHub.Token);
-        _httpClient.DefaultRequestHeaders.UserAgent.ParseAdd("AIAgents/1.0");
-        _httpClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/vnd.github+json"));
-        _httpClient.DefaultRequestHeaders.Add("X-GitHub-Api-Version", "2022-11-28");
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", gitHub.Token);
+        client.DefaultRequestHeaders.UserAgent.ParseAdd("AIAgents/1.0");
+        client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/vnd.github+json"));
+        client.DefaultRequestHeaders.Add("X-GitHub-Api-Version", "2022-11-28");
+        return client;
     }
 
     /// <inheritdoc/>
@@ -71,11 +79,24 @@ public sealed class GitHubApiContextService : IGitHubApiContextService
         IReadOnlyList<string> paths,
         CancellationToken ct = default)
     {
-        var result = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
-        foreach (var path in paths)
+        var result = new ConcurrentDictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+
+        // Fetch files in parallel with bounded concurrency to respect GitHub rate limits
+        using var semaphore = new SemaphoreSlim(5, 5);
+        var tasks = paths.Select(async path =>
         {
-            result[path] = await TryGetFileContentAsync(path, branch, ct);
-        }
+            await semaphore.WaitAsync(ct);
+            try
+            {
+                result[path] = await TryGetFileContentAsync(path, branch, ct);
+            }
+            finally
+            {
+                semaphore.Release();
+            }
+        });
+
+        await Task.WhenAll(tasks);
         return result;
     }
 

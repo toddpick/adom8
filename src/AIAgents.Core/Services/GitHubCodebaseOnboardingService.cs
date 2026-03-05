@@ -99,11 +99,9 @@ public sealed class GitHubCodebaseOnboardingService : ICodebaseOnboardingService
         };
 
         var initializationBundle = BuildInitializationBundleArtifact(metadata, defaultBranch, headSha, includeGitHistory, incremental);
-        var orchestrationContract = BuildOrchestrationContractMarkdown();
 
         var artifacts = new Dictionary<string, string>
         {
-            [".agent/ORCHESTRATION_CONTRACT.md"] = orchestrationContract,
             [".agent/CODEBASE_CONTEXT.md"] = contextMarkdown,
             [".agent/FILE_MAP.json"] = JsonSerializer.Serialize(fileMap, JsonOptions),
             [".agent/FEATURE_INDEX.json"] = JsonSerializer.Serialize(featureIndex, JsonOptions),

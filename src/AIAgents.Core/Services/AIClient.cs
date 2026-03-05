@@ -50,12 +50,40 @@ public sealed class AIClient : IAIClient
     private bool IsClaude => _options.Provider.Equals("Claude", StringComparison.OrdinalIgnoreCase)
                           || _options.Provider.Equals("Anthropic", StringComparison.OrdinalIgnoreCase);
 
+    private bool IsOpenAIResponsesModel
+    {
+        get
+        {
+            if (!_options.Provider.Equals("OpenAI", StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            if (string.IsNullOrWhiteSpace(_options.Model))
+            {
+                return false;
+            }
+
+            var model = _options.Model.Trim().ToLowerInvariant();
+            return model.StartsWith("gpt-5")
+                || model.StartsWith("codex")
+                || model.StartsWith("o1")
+                || model.StartsWith("o3")
+                || model.StartsWith("o4");
+        }
+    }
+
     public async Task<AICompletionResult> CompleteAsync(
         string systemPrompt,
         string userPrompt,
         AICompletionOptions? options = null,
         CancellationToken cancellationToken = default)
     {
+        if (IsOpenAIResponsesModel)
+        {
+            return await CompleteWithOpenAIResponsesApiAsync(systemPrompt, userPrompt, options, cancellationToken);
+        }
+
         var client = _httpClientFactory.CreateClient("AIClient");
 
         _logger.LogDebug(
@@ -118,6 +146,59 @@ public sealed class AIClient : IAIClient
         };
     }
 
+    private async Task<AICompletionResult> CompleteWithOpenAIResponsesApiAsync(
+        string systemPrompt,
+        string userPrompt,
+        AICompletionOptions? options,
+        CancellationToken cancellationToken)
+    {
+        var client = _httpClientFactory.CreateClient("AIClient");
+
+        _logger.LogDebug(
+            "Sending responses API request to {Provider} model {Model}, max_output_tokens={MaxTokens}",
+            _options.Provider, _options.Model, options?.MaxTokens ?? _options.MaxTokens);
+
+        var request = new HttpRequestMessage(HttpMethod.Post, BuildFullUrl());
+        ConfigureAuth(request);
+
+        var requestBody = BuildOpenAIResponsesRequestBody(systemPrompt, userPrompt, options);
+        request.Content = new StringContent(
+            JsonSerializer.Serialize(requestBody, _jsonOptions),
+            Encoding.UTF8,
+            "application/json");
+
+        var response = await client.SendAsync(request, cancellationToken);
+
+        if (!response.IsSuccessStatusCode)
+        {
+            var errorBody = await response.Content.ReadAsStringAsync(cancellationToken);
+            _logger.LogError(
+                "AI Responses API request failed ({StatusCode}): URL={Url}, Provider={Provider}, Model={Model}, Body={Body}",
+                response.StatusCode, request.RequestUri, _options.Provider, _options.Model, errorBody);
+            throw new HttpRequestException(
+                $"AI API request failed ({(int)response.StatusCode} {response.StatusCode}) at URL '{request.RequestUri}' for provider '{_options.Provider}' model '{_options.Model}'. Response: {errorBody}",
+                null,
+                response.StatusCode);
+        }
+
+        var responseJson = await response.Content.ReadAsStringAsync(cancellationToken);
+        var (content, usage) = ParseOpenAIResponsesResponse(responseJson);
+
+        if (string.IsNullOrWhiteSpace(content))
+        {
+            _logger.LogWarning("AI responses API completion returned empty content");
+            throw new InvalidOperationException("AI completion returned empty content.");
+        }
+
+        _logger.LogDebug("Responses API completion received: {CharCount} characters", content.Length);
+
+        return new AICompletionResult
+        {
+            Content = content,
+            Usage = usage
+        };
+    }
+
     // ──────────── Agentic Tool-Use Loop ────────────
 
     public async Task<AgenticResult> CompleteWithToolsAsync(
@@ -129,9 +210,134 @@ public sealed class AIClient : IAIClient
         CancellationToken cancellationToken = default)
     {
         options ??= new AgenticOptions();
+        if (IsOpenAIResponsesModel)
+        {
+            return await OpenAIResponsesAgenticLoopAsync(systemPrompt, userPrompt, tools, toolExecutor, options, cancellationToken);
+        }
+
         return IsClaude
             ? await ClaudeAgenticLoopAsync(systemPrompt, userPrompt, tools, toolExecutor, options, cancellationToken)
             : await OpenAIAgenticLoopAsync(systemPrompt, userPrompt, tools, toolExecutor, options, cancellationToken);
+    }
+
+    private async Task<AgenticResult> OpenAIResponsesAgenticLoopAsync(
+        string systemPrompt, string userPrompt,
+        IReadOnlyList<ToolDefinition> tools,
+        Func<ToolCall, CancellationToken, Task<string>> toolExecutor,
+        AgenticOptions options, CancellationToken cancellationToken)
+    {
+        var client = _httpClientFactory.CreateClient("AIClient");
+        var url = BuildFullUrl();
+
+        var responseTools = tools.Select(t => new
+        {
+            type = "function",
+            name = t.Name,
+            description = t.Description,
+            parameters = t.InputSchema
+        }).ToArray();
+
+        int totalInputTokens = 0, totalOutputTokens = 0;
+        decimal totalCost = 0m;
+        var toolCallLog = new List<ToolCallLog>();
+        string? finalResponse = null;
+        bool completedNaturally = false;
+        int round = 0;
+        string? previousResponseId = null;
+        List<object>? nextInput = null;
+
+        for (round = 1; round <= options.MaxRounds; round++)
+        {
+            _logger.LogInformation("OpenAI Responses agentic round {Round}/{MaxRounds}", round, options.MaxRounds);
+
+            object requestBody;
+            if (previousResponseId is null)
+            {
+                requestBody = new
+                {
+                    model = _options.Model,
+                    input = new object[]
+                    {
+                        new { role = "system", content = new object[] { new { type = "input_text", text = systemPrompt } } },
+                        new { role = "user", content = new object[] { new { type = "input_text", text = userPrompt } } }
+                    },
+                    tools = responseTools,
+                    tool_choice = "auto",
+                    max_output_tokens = NormalizeResponsesMaxOutputTokens(options.MaxTokens)
+                };
+            }
+            else
+            {
+                requestBody = new
+                {
+                    model = _options.Model,
+                    previous_response_id = previousResponseId,
+                    input = nextInput,
+                    tools = responseTools,
+                    tool_choice = "auto",
+                    max_output_tokens = NormalizeResponsesMaxOutputTokens(options.MaxTokens)
+                };
+            }
+
+            var request = new HttpRequestMessage(HttpMethod.Post, url);
+            ConfigureAuth(request);
+            request.Content = new StringContent(
+                JsonSerializer.Serialize(requestBody, _jsonOptions),
+                Encoding.UTF8,
+                "application/json");
+
+            var response = await client.SendAsync(request, cancellationToken);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                var errorBody = await response.Content.ReadAsStringAsync(cancellationToken);
+                _logger.LogError("Responses agentic round {Round} failed ({StatusCode}): {Body}",
+                    round, response.StatusCode, errorBody);
+                response.EnsureSuccessStatusCode();
+            }
+
+            var responseJson = await response.Content.ReadAsStringAsync(cancellationToken);
+            using var doc = JsonDocument.Parse(responseJson);
+            var root = doc.RootElement;
+
+            previousResponseId = root.TryGetProperty("id", out var idEl) ? idEl.GetString() : previousResponseId;
+
+            if (root.TryGetProperty("usage", out var usage))
+            {
+                var inTok = usage.TryGetProperty("input_tokens", out var it) ? it.GetInt32() : 0;
+                var outTok = usage.TryGetProperty("output_tokens", out var ot) ? ot.GetInt32() : 0;
+                totalInputTokens += inTok;
+                totalOutputTokens += outTok;
+                totalCost += TokenCostCalculator.Calculate(_options.Model, inTok, outTok);
+            }
+
+            var (textParts, functionCalls) = ParseOpenAIResponsesOutput(root);
+
+            _logger.LogInformation("Responses round {Round}: text_parts={TextCount}, function_calls={FunctionCalls}",
+                round, textParts.Count, functionCalls.Count);
+
+            if (functionCalls.Count > 0)
+            {
+                var toolCalls = functionCalls.Select(fc => (fc.callId, fc.name, fc.argumentsJson)).ToList();
+                var toolResults = await ExecuteToolCallsAsync(toolCalls, toolExecutor, toolCallLog, round, cancellationToken);
+
+                nextInput = toolResults.Select(tr => (object)new
+                {
+                    type = "function_call_output",
+                    call_id = tr.id,
+                    output = tr.result
+                }).ToList();
+
+                continue;
+            }
+
+            finalResponse = string.Join("\n", textParts.Where(p => !string.IsNullOrWhiteSpace(p)));
+            completedNaturally = !string.IsNullOrWhiteSpace(finalResponse);
+            LogAgenticCompletion(round, completedNaturally ? "completed" : "no_output", toolCallLog.Count, totalInputTokens + totalOutputTokens);
+            break;
+        }
+
+        return BuildAgenticResult(finalResponse, round, completedNaturally, toolCallLog, totalInputTokens, totalOutputTokens, totalCost);
     }
 
     // ──────── Claude Agentic Loop (Anthropic Messages API) ────────
@@ -531,6 +737,26 @@ public sealed class AIClient : IAIClient
         };
     }
 
+    private object BuildOpenAIResponsesRequestBody(string systemPrompt, string userPrompt, AICompletionOptions? options)
+    {
+        return new
+        {
+            model = _options.Model,
+            input = new object[]
+            {
+                new { role = "system", content = new object[] { new { type = "input_text", text = systemPrompt } } },
+                new { role = "user", content = new object[] { new { type = "input_text", text = userPrompt } } }
+            },
+            max_output_tokens = NormalizeResponsesMaxOutputTokens(options?.MaxTokens)
+        };
+    }
+
+    private int NormalizeResponsesMaxOutputTokens(int? requestedMaxTokens)
+    {
+        var maxTokens = requestedMaxTokens ?? _options.MaxTokens;
+        return Math.Max(16, maxTokens);
+    }
+
     private object BuildClaudeRequestBody(string systemPrompt, string userPrompt, AICompletionOptions? options)
     {
         // Anthropic Messages API: system is a top-level field, not a message role
@@ -631,6 +857,164 @@ public sealed class AIClient : IAIClient
         return (content, usage);
     }
 
+    private (string? content, TokenUsageData? usage) ParseOpenAIResponsesResponse(string responseJson)
+    {
+        using var doc = JsonDocument.Parse(responseJson);
+        var root = doc.RootElement;
+
+        var textParts = new List<string>();
+
+        if (root.TryGetProperty("output_text", out var outputTextEl))
+        {
+            if (outputTextEl.ValueKind == JsonValueKind.String)
+            {
+                var outputText = outputTextEl.GetString();
+                if (!string.IsNullOrWhiteSpace(outputText))
+                {
+                    textParts.Add(outputText);
+                }
+            }
+            else if (outputTextEl.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var item in outputTextEl.EnumerateArray())
+                {
+                    if (item.ValueKind == JsonValueKind.String)
+                    {
+                        var text = item.GetString();
+                        if (!string.IsNullOrWhiteSpace(text))
+                        {
+                            textParts.Add(text);
+                        }
+                    }
+                }
+            }
+        }
+
+        if (root.TryGetProperty("output", out var outputEl) && outputEl.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var item in outputEl.EnumerateArray())
+            {
+                var type = item.TryGetProperty("type", out var typeEl) ? typeEl.GetString() : null;
+                if (string.Equals(type, "output_text", StringComparison.OrdinalIgnoreCase)
+                    && item.TryGetProperty("text", out var directTextEl)
+                    && directTextEl.ValueKind == JsonValueKind.String)
+                {
+                    var directText = directTextEl.GetString();
+                    if (!string.IsNullOrWhiteSpace(directText))
+                    {
+                        textParts.Add(directText);
+                    }
+                }
+
+                if (!string.Equals(type, "message", StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                if (item.TryGetProperty("content", out var contentEl) && contentEl.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (var block in contentEl.EnumerateArray())
+                    {
+                        var blockType = block.TryGetProperty("type", out var bt) ? bt.GetString() : null;
+                        if (string.Equals(blockType, "output_text", StringComparison.OrdinalIgnoreCase)
+                            && block.TryGetProperty("text", out var textEl)
+                            && textEl.ValueKind == JsonValueKind.String)
+                        {
+                            textParts.Add(textEl.GetString() ?? string.Empty);
+                        }
+                    }
+                }
+            }
+        }
+
+        TokenUsageData? usage = null;
+        if (root.TryGetProperty("usage", out var usageEl))
+        {
+            var inputTokens = usageEl.TryGetProperty("input_tokens", out var inTok) ? inTok.GetInt32() : 0;
+            var outputTokens = usageEl.TryGetProperty("output_tokens", out var outTok) ? outTok.GetInt32() : 0;
+            var totalTokens = inputTokens + outputTokens;
+            usage = new TokenUsageData
+            {
+                InputTokens = inputTokens,
+                OutputTokens = outputTokens,
+                TotalTokens = totalTokens,
+                EstimatedCost = TokenCostCalculator.Calculate(_options.Model, inputTokens, outputTokens),
+                Model = _options.Model
+            };
+        }
+
+        return (string.Join("\n", textParts.Where(t => !string.IsNullOrWhiteSpace(t))), usage);
+    }
+
+    private static (List<string> textParts, List<(string callId, string name, JsonElement argumentsJson)> functionCalls)
+        ParseOpenAIResponsesOutput(JsonElement root)
+    {
+        var textParts = new List<string>();
+        var functionCalls = new List<(string callId, string name, JsonElement argumentsJson)>();
+
+        if (!root.TryGetProperty("output", out var outputEl) || outputEl.ValueKind != JsonValueKind.Array)
+        {
+            return (textParts, functionCalls);
+        }
+
+        foreach (var item in outputEl.EnumerateArray())
+        {
+            var type = item.TryGetProperty("type", out var typeEl) ? typeEl.GetString() : null;
+
+            if ((string.Equals(type, "output_text", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(type, "text", StringComparison.OrdinalIgnoreCase))
+                && item.TryGetProperty("text", out var directTextEl)
+                && directTextEl.ValueKind == JsonValueKind.String)
+            {
+                var directText = directTextEl.GetString();
+                if (!string.IsNullOrWhiteSpace(directText))
+                {
+                    textParts.Add(directText);
+                }
+
+                continue;
+            }
+
+            if (string.Equals(type, "message", StringComparison.OrdinalIgnoreCase))
+            {
+                if (item.TryGetProperty("content", out var contentEl) && contentEl.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (var block in contentEl.EnumerateArray())
+                    {
+                        var blockType = block.TryGetProperty("type", out var bt) ? bt.GetString() : null;
+                        if (string.Equals(blockType, "output_text", StringComparison.OrdinalIgnoreCase)
+                            && block.TryGetProperty("text", out var textEl)
+                            && textEl.ValueKind == JsonValueKind.String)
+                        {
+                            textParts.Add(textEl.GetString() ?? string.Empty);
+                        }
+                    }
+                }
+
+                continue;
+            }
+
+            if (string.Equals(type, "function_call", StringComparison.OrdinalIgnoreCase))
+            {
+                var callId = item.TryGetProperty("call_id", out var callIdEl) ? callIdEl.GetString() : null;
+                var name = item.TryGetProperty("name", out var nameEl) ? nameEl.GetString() : null;
+                var argsString = item.TryGetProperty("arguments", out var argsEl) && argsEl.ValueKind == JsonValueKind.String
+                    ? argsEl.GetString()
+                    : "{}";
+
+                if (string.IsNullOrWhiteSpace(callId) || string.IsNullOrWhiteSpace(name))
+                {
+                    continue;
+                }
+
+                using var argsDoc = JsonDocument.Parse(string.IsNullOrWhiteSpace(argsString) ? "{}" : argsString);
+                functionCalls.Add((callId!, name!, argsDoc.RootElement.Clone()));
+            }
+        }
+
+        return (textParts, functionCalls);
+    }
+
     // ──────────── URL & Auth ────────────
 
     /// <summary>
@@ -654,6 +1038,7 @@ public sealed class AIClient : IAIClient
         {
             "AZUREOPENAI" => $"/openai/deployments/{_options.Model}/chat/completions?api-version=2024-08-01-preview",
             "GOOGLE" => "/chat/completions",  // Google's OpenAI-compatible endpoint already includes /v1beta/openai
+            "OPENAI" when IsOpenAIResponsesModel => "/v1/responses",
             _ => "/v1/chat/completions"  // OpenAI, OpenRouter, LiteLLM, etc.
         };
 

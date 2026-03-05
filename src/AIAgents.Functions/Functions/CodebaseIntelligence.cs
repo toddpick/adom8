@@ -311,17 +311,6 @@ This documentation will be used by all subsequent AI agents to understand the co
 
 <h4>Core Documentation Files</h4>
 <ol>
-<li><strong>ORCHESTRATION_CONTRACT.md</strong> — Canonical runbook for how GitHub coding agent executes every user story and updates Azure DevOps via MCP.
-Must include:
-<ul>
-<li>Stage order: Planning → Coding → Testing → Review → Documentation → Deployment.</li>
-<li>Required MCP calls at each stage transition (set stage, add comment, stage event).</li>
-<li>Transition rules and allowed next states, including failure/retry handling and idempotency key usage.</li>
-<li>Evidence requirements per stage (e.g., plan summary, PR link, test results, review outcome, deployment result).</li>
-<li>Rule that this file is authoritative for all future story processing unless explicitly superseded by repository owner.</li>
-</ul>
-</li>
-
 <li><strong>CONTEXT_INDEX.md</strong> — Master overview of the project: purpose, high-level architecture, directory structure, 
 key entry points, main features, quick reference for common tasks. This is the first file AI agents read.</li>
 
@@ -400,7 +389,6 @@ based on the ACTUAL code — not generic templates.</li>
 <h3>Important Guidelines</h3>
 <ul>
 <li>All documentation must reference ACTUAL file paths and code patterns from this specific repository.</li>
-<li><code>ORCHESTRATION_CONTRACT.md</code> must define exactly when the GitHub agent must call MCP to keep Azure DevOps in sync after each stage completion.</li>
 <li>Include Mermaid diagrams in ARCHITECTURE.md and feature docs showing real component relationships.</li>
 <li>CODING_STANDARDS.md must be extracted from observed patterns, not generic guidelines.</li>
 <li>COMMON_PATTERNS.md must include real file paths for "how to add X" guides.</li>
@@ -411,7 +399,6 @@ based on the ACTUAL code — not generic templates.</li>
 <h3>Acceptance Criteria</h3>
 <ul>
 <li>[ ] .agent/ folder exists at repository root with all core documentation files</li>
-<li>[ ] .agent/ORCHESTRATION_CONTRACT.md exists and defines stage order + MCP update protocol</li>
 <li>[ ] CONTEXT_INDEX.md provides accurate project overview with real structure</li>
 <li>[ ] ARCHITECTURE.md contains at least one Mermaid diagram of system architecture</li>
 <li>[ ] CODING_STANDARDS.md reflects actual code conventions (not generic)</li>
@@ -429,7 +416,6 @@ based on the ACTUAL code — not generic templates.</li>
 <ol>
     <li>A <code>.agent/</code> folder exists at repository root with at least:
         <ul>
-            <li><code>ORCHESTRATION_CONTRACT.md</code></li>
             <li><code>CONTEXT_INDEX.md</code></li>
             <li><code>TECH_STACK.md</code></li>
             <li><code>ARCHITECTURE.md</code></li>
@@ -439,7 +425,6 @@ based on the ACTUAL code — not generic templates.</li>
             <li><code>DEPLOYMENT.md</code></li>
         </ul>
     </li>
-    <li><code>.agent/ORCHESTRATION_CONTRACT.md</code> documents the required stage sequence and MCP stage update/comment/event calls for future user stories.</li>
     <li><code>.agent/metadata.json</code> is generated and includes scan summary fields (files analyzed, languages detected, last analysis timestamp).</li>
     <li>Documentation reflects the current repository content and provides concrete file paths/patterns for future AI agents.</li>
     <li>Pipeline records successful codebase onboarding completion in activity/status.</li>

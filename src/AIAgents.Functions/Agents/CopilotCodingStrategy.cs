@@ -39,7 +39,8 @@ public sealed class CopilotCodingStrategy : ICodingStrategy
         IOptions<CopilotOptions> copilotOptions,
         ICopilotDelegationService delegationService,
         ILogger logger,
-        string? agentOverride = null)
+        string? agentOverride = null,
+        HttpClient? httpClient = null)
     {
         _githubOptions = githubOptions.Value;
         _copilotOptions = copilotOptions.Value;
@@ -48,17 +49,23 @@ public sealed class CopilotCodingStrategy : ICodingStrategy
         _agentAssignee = agentOverride ?? _copilotOptions.Model ?? "copilot";
         _additionalAssignees = ParseAdditionalAssignees(_copilotOptions.AdditionalAssignees);
 
-        _httpClient = new HttpClient
+        _httpClient = httpClient ?? CreateDefaultHttpClient(_githubOptions);
+    }
+
+    private static HttpClient CreateDefaultHttpClient(GitHubOptions githubOptions)
+    {
+        var client = new HttpClient
         {
             BaseAddress = new Uri("https://api.github.com/"),
             Timeout = TimeSpan.FromSeconds(30)
         };
-        _httpClient.DefaultRequestHeaders.Authorization =
-            new AuthenticationHeaderValue("Bearer", _githubOptions.Token);
-        _httpClient.DefaultRequestHeaders.UserAgent.ParseAdd("AIAgents/1.0");
-        _httpClient.DefaultRequestHeaders.Accept.Add(
+        client.DefaultRequestHeaders.Authorization =
+            new AuthenticationHeaderValue("Bearer", githubOptions.Token);
+        client.DefaultRequestHeaders.UserAgent.ParseAdd("AIAgents/1.0");
+        client.DefaultRequestHeaders.Accept.Add(
             new MediaTypeWithQualityHeaderValue("application/vnd.github+json"));
-        _httpClient.DefaultRequestHeaders.Add("X-GitHub-Api-Version", "2022-11-28");
+        client.DefaultRequestHeaders.Add("X-GitHub-Api-Version", "2022-11-28");
+        return client;
     }
 
     public async Task<CodingResult> ExecuteAsync(CodingContext context, CancellationToken cancellationToken = default)
@@ -586,8 +593,7 @@ public sealed class CopilotCodingStrategy : ICodingStrategy
         var kickoffComment =
             $"@{kickoffAgent} Please start this implementation now. " +
             $"Use `{context.BranchName}` as the base branch and open a PR back to `{context.BranchName}` when complete. " +
-            "Before making changes, read `.agent/ORCHESTRATION_CONTRACT.md` and follow it as the authoritative stage protocol. " +
-            "Complete Planning through Documentation, then mark the PR Ready for Review and signal Deployment via MCP stage update.";
+            "This is coding-only delegation. Do not orchestrate Planning/Testing/Review/Documentation/Deployment stages from GitHub; Azure handles pipeline orchestration.";
 
         var payload = new { body = kickoffComment };
         var content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
@@ -632,19 +638,15 @@ public sealed class CopilotCodingStrategy : ICodingStrategy
         }
         sb.AppendLine("Create your working branch from this base and target your PR back to it.");
         sb.AppendLine();
-        sb.AppendLine("1. Read `.agent/ORCHESTRATION_CONTRACT.md` FIRST. This file is authoritative for stage orchestration and Azure DevOps MCP updates.");
-        sb.AppendLine("2. Read any other relevant `.agent/*` files needed for this story before implementing.");
-        sb.AppendLine("3. Operate as orchestrator through Planning → Coding → Testing → Review → Documentation. Deployment is handled by Azure after you signal Deployment stage readiness.");
-        sb.AppendLine("4. When implementation and documentation are complete, ensure the PR is marked Ready for Review (not draft).");
-        sb.AppendLine("5. Compute Story Readiness Score and compare it against the minimum score below. If readiness score is below minimum, move the story to Needs Revision per orchestration contract. If score meets/exceeds minimum and Autonomy Level > 1, continue to Coding.");
-        sb.AppendLine("6. Priority order is strict: Job #1 keep Azure DevOps board/fields/state accurate and current; Job #2 perform planning/coding work.");
-        sb.AppendLine("7. No task is complete until you set ADO fields/state and add completion comment, then re-read and print final values.");
+        sb.AppendLine("1. Read relevant `.agent/*` files needed for this story before implementing.");
+        sb.AppendLine("2. This assignment is coding-only. Azure orchestrates Planning/Testing/Review/Documentation/Deployment.");
+        sb.AppendLine("3. Implement code changes and tests needed for this story on the specified branch.");
+        sb.AppendLine("4. Keep the PR in draft while coding. When coding is complete, remove [WIP] from the PR title — this signals the pipeline to continue.");
+        sb.AppendLine("5. Do not perform Azure DevOps stage orchestration from this issue.");
         sb.AppendLine();
         sb.AppendLine($"> **ADO Work Item:** US-{context.WorkItemId}");
         sb.AppendLine($"> **Title:** {context.WorkItem.Title}");
         sb.AppendLine($"> **AI Autonomy Level:** {context.WorkItem.AutonomyLevel}");
-        sb.AppendLine("> **Autonomy Normalization:** Treat either numeric or text labels as equivalent (1/Plan Only, 2/Code Only, 3/Review & Pause, 4/Auto-Merge, 5/Full Autonomy).");
-        sb.AppendLine($"> **AI Minimum Review Score:** {context.WorkItem.MinimumReviewScore}");
         if (!string.IsNullOrWhiteSpace(agentName))
         {
             sb.AppendLine($"> **Assigned Agent:** @{agentName}");
@@ -732,8 +734,8 @@ public sealed class CopilotCodingStrategy : ICodingStrategy
         sb.AppendLine("- Match existing code style and conventions");
         sb.AppendLine("- Do NOT modify test files, CI/CD workflows, or infrastructure (Terraform)");
         sb.AppendLine("- Ensure correct syntax, imports, and compilation");
-        sb.AppendLine("- Keep the PR in draft while implementing, then mark Ready for Review when Documentation stage is complete");
-        sb.AppendLine("- Do NOT perform deployment directly; signal Deployment stage readiness via MCP and hand off to Azure Deployment agent");
+        sb.AppendLine("- Keep the PR in draft while implementing. When done, remove [WIP] from the PR title to signal completion.");
+        sb.AppendLine("- Do NOT orchestrate ADO stage transitions from this issue; Azure pipeline will continue after coding handoff");
         sb.AppendLine($"- Target branch for your PR: `{context.BranchName}`");
 
         return sb.ToString();

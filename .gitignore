@@ -69,6 +69,7 @@ desktop.ini
 publish/
 publish.zip
 deploy.zip
+publish_deploy/
 
 # Artifacts
 .artifacts/

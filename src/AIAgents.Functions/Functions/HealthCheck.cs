@@ -203,11 +203,12 @@ public sealed class HealthCheck
                 return new ComponentCheck { Status = "degraded", Message = "AI API key not configured" };
             }
 
-            // Send a minimal test request with very low max_tokens to minimize cost
+            // Send a minimal test request with low max_tokens to minimize cost while
+            // still allowing reasoning-capable models (e.g., GPT-5 family) to return text.
             using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
             cts.CancelAfter(TimeSpan.FromSeconds(10));
 
-            await _aiClient.CompleteAsync("Reply with OK", "test", new AICompletionOptions { MaxTokens = 5 }, cts.Token);
+            await _aiClient.CompleteAsync("Reply only with OK", "test", new AICompletionOptions { MaxTokens = 64 }, cts.Token);
             sw.Stop();
 
             var status = sw.ElapsedMilliseconds > 8000 ? "degraded" : "healthy";
@@ -219,6 +220,13 @@ public sealed class HealthCheck
         {
             sw.Stop();
             return new ComponentCheck { Status = "degraded", ResponseTime = sw.ElapsedMilliseconds, Message = "Request timed out (10s)" };
+        }
+        catch (InvalidOperationException ex) when (ex.Message.Contains("empty content", StringComparison.OrdinalIgnoreCase))
+        {
+            sw.Stop();
+            var status = sw.ElapsedMilliseconds > 8000 ? "degraded" : "healthy";
+            var message = "AI API reachable (empty probe response)";
+            return new ComponentCheck { Status = status, ResponseTime = sw.ElapsedMilliseconds, Message = message };
         }
         catch (Exception ex)
         {

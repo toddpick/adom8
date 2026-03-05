@@ -259,8 +259,21 @@ public sealed class AzureDevOpsClient : IAzureDevOpsClient, IDisposable
             return new WorkItemSupportingArtifacts();
         }
 
-        var outputDir = Path.Combine(repositoryPath, ".ado", "stories", $"US-{workItemId}", "documents");
+        var hasRepositoryPath = !string.IsNullOrWhiteSpace(repositoryPath);
+        var materializationRoot = hasRepositoryPath
+            ? repositoryPath
+            : Path.Combine(Path.GetTempPath(), "adom8-supporting-artifacts");
+
+        var outputDir = Path.Combine(materializationRoot, ".ado", "stories", $"US-{workItemId}", "documents");
         Directory.CreateDirectory(outputDir);
+
+        if (!hasRepositoryPath)
+        {
+            _logger.LogInformation(
+                "No repository path provided for WI-{WorkItemId}; materializing supporting artifacts under temp root '{MaterializationRoot}'",
+                workItemId,
+                materializationRoot);
+        }
 
         var imagePaths = new List<string>();
         var documentPaths = new List<string>();
@@ -290,7 +303,7 @@ public sealed class AzureDevOpsClient : IAzureDevOpsClient, IDisposable
                 var fullPath = GetUniquePath(Path.Combine(outputDir, fileName));
                 await File.WriteAllBytesAsync(fullPath, bytes, cancellationToken);
 
-                var relativePath = Path.GetRelativePath(repositoryPath, fullPath).Replace('\\', '/');
+                var relativePath = Path.GetRelativePath(materializationRoot, fullPath).Replace('\\', '/');
                 allPaths.Add(relativePath);
 
                 if (attachment.IsImage)
@@ -316,7 +329,7 @@ public sealed class AzureDevOpsClient : IAzureDevOpsClient, IDisposable
 
         return new WorkItemSupportingArtifacts
         {
-            StoryDocumentsFolder = Path.GetRelativePath(repositoryPath, outputDir).Replace('\\', '/'),
+            StoryDocumentsFolder = Path.GetRelativePath(materializationRoot, outputDir).Replace('\\', '/'),
             ImagePaths = imagePaths,
             DocumentPaths = documentPaths,
             AllPaths = allPaths

@@ -43,6 +43,7 @@ public sealed class CodingAgentService : IAgentService
     private readonly ICopilotDelegationService _delegationService;
     private readonly IOptions<GitHubOptions> _githubOptions;
     private readonly IOptions<CopilotOptions> _copilotOptionsAccessor;
+    private readonly IHttpClientFactory? _httpClientFactory;
 
     public CodingAgentService(
         IAIClientFactory aiClientFactory,
@@ -55,7 +56,8 @@ public sealed class CodingAgentService : IAgentService
         IActivityLogger activityLogger,
         IOptions<CopilotOptions> copilotOptions,
         ICopilotDelegationService delegationService,
-        IOptions<GitHubOptions> githubOptions)
+        IOptions<GitHubOptions> githubOptions,
+        IHttpClientFactory? httpClientFactory = null)
     {
         _aiClientFactory = aiClientFactory;
         _adoClient = adoClient;
@@ -69,6 +71,7 @@ public sealed class CodingAgentService : IAgentService
         _copilotOptionsAccessor = copilotOptions;
         _delegationService = delegationService;
         _githubOptions = githubOptions;
+        _httpClientFactory = httpClientFactory;
     }
 
     public async Task<AgentResult> ExecuteAsync(AgentTask task, CancellationToken cancellationToken = default)
@@ -418,7 +421,8 @@ public sealed class CodingAgentService : IAgentService
         new(_aiClientFactory, _githubContext, _codebaseContext, _logger);
 
     private CopilotCodingStrategy CreateCopilotStrategy(string? agentOverride = null) =>
-        new(_githubOptions, _copilotOptionsAccessor, _delegationService, _logger, agentOverride);
+        new(_githubOptions, _copilotOptionsAccessor, _delegationService, _logger, agentOverride,
+            _httpClientFactory?.CreateClient("GitHub"));
 
     private bool IsNoCloneDelegationPath(StoryWorkItem workItem, ICodingStrategy strategy)
     {

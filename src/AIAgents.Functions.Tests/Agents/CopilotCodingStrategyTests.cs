@@ -165,7 +165,7 @@ public sealed class CopilotCodingStrategyTests
         Assert.Contains("Follow the implementation plan", body);
         Assert.Contains("Match existing code style", body);
         Assert.Contains("Ensure correct syntax", body);
-        Assert.Contains("Do NOT perform deployment directly", body);
+        Assert.Contains("Do NOT orchestrate ADO stage transitions", body);
         Assert.Contains("Ready for Review", body);
     }
 
@@ -175,8 +175,8 @@ public sealed class CopilotCodingStrategyTests
         var context = CreateContext();
         var body = CopilotCodingStrategy.BuildIssueBody(context);
 
-        Assert.Contains("Job #1 keep Azure DevOps board/fields/state accurate and current", body);
-        Assert.Contains("No task is complete until you set ADO fields/state and add completion comment, then re-read and print final values", body);
+        Assert.Contains("coding-only", body);
+        Assert.Contains("Azure orchestrates Planning/Testing/Review/Documentation/Deployment", body);
     }
 
     [Fact]
@@ -185,8 +185,8 @@ public sealed class CopilotCodingStrategyTests
         var context = CreateContext();
         var body = CopilotCodingStrategy.BuildIssueBody(context);
 
-        Assert.Contains(".agent/ORCHESTRATION_CONTRACT.md", body);
-        Assert.Contains("Planning → Coding → Testing → Review → Documentation", body);
+        Assert.DoesNotContain(".agent/ORCHESTRATION_CONTRACT.md", body);
+        Assert.Contains("This assignment is coding-only", body);
     }
 
     [Fact]
@@ -195,7 +195,7 @@ public sealed class CopilotCodingStrategyTests
         var context = CreateContext();
         var body = CopilotCodingStrategy.BuildIssueBody(context);
 
-        Assert.Contains($"AI Minimum Review Score:** {context.WorkItem.MinimumReviewScore}", body);
+        Assert.DoesNotContain("AI Minimum Review Score", body);
     }
 
     [Fact]
@@ -213,9 +213,7 @@ public sealed class CopilotCodingStrategyTests
         var context = CreateContext(autonomyLevel: 3);
         var body = CopilotCodingStrategy.BuildIssueBody(context);
 
-        Assert.Contains("Autonomy Normalization", body);
-        Assert.Contains("1/Plan Only", body);
-        Assert.Contains("5/Full Autonomy", body);
+        Assert.DoesNotContain("Autonomy Normalization", body);
     }
 
     [Fact]
@@ -239,7 +237,7 @@ public sealed class CopilotCodingStrategyTests
         var context = CreateContext(autonomyLevel: 3);
         var body = CopilotCodingStrategy.BuildIssueBody(context);
 
-        Assert.Contains("If score meets/exceeds minimum and Autonomy Level > 1, continue to Coding", body);
+        Assert.DoesNotContain("continue to Coding", body);
     }
 
     // ========== AGENT NAME TESTS ==========

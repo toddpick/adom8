@@ -26,7 +26,10 @@ public sealed class StoryContext : IStoryContext
     {
         WorkItemId = workItemId;
         _logger = logger;
-        StoryDirectory = Path.Combine(repositoryPath, ".ado", "stories", $"US-{workItemId}");
+        var root = string.IsNullOrWhiteSpace(repositoryPath)
+            ? Path.Combine(Path.GetTempPath(), "ado-agent-stories")
+            : repositoryPath;
+        StoryDirectory = Path.Combine(root, ".ado", "stories", $"US-{workItemId}");
 
         Directory.CreateDirectory(StoryDirectory);
     }

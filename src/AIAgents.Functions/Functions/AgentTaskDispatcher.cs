@@ -149,9 +149,11 @@ public sealed class AgentTaskDispatcher
             }
         }
 
-        var skipCloneCapacityCheck = IsNoCloneDelegationPath(workItem, agentTask, _copilotOptions);
+        // InitializeCodebase stories skip Testing/Review/Documentation (they only need Planning + Coding + Deployment)
+        var isInitializeCodebase = workItem?.Tags.Any(tag =>
+            string.Equals(tag, AIPipelineNames.InitializeCodebaseTag, StringComparison.OrdinalIgnoreCase)) == true;
 
-        if (skipCloneCapacityCheck && ShouldSkipForInitializeNoClone(agentTask.AgentType))
+        if (isInitializeCodebase && ShouldSkipForInitializeNoClone(agentTask.AgentType))
         {
             _logger.LogInformation(
                 "Skipping {AgentType} agent for WI-{WorkItemId}: no-clone delegation path",
@@ -167,7 +169,9 @@ public sealed class AgentTaskDispatcher
             return;
         }
 
-        if (!skipCloneCapacityCheck && RequiresCloneCapacityCheck(agentTask.AgentType))
+        // All pipeline agents use GitHub REST API — no local clone. Capacity check only runs
+        // if a future agent re-introduces local clone (RequiresCloneCapacityCheck returns true).
+        if (RequiresCloneCapacityCheck(agentTask.AgentType))
         {
             var sizing = await _repositorySizingService.EvaluateAsync(cancellationToken);
             if (sizing.CheckPerformed && !sizing.CanProceed)
@@ -487,26 +491,38 @@ public sealed class AgentTaskDispatcher
         }
     };
 
+    /// <summary>
+    /// All pipeline agents (Planning → Deployment) now use the GitHub REST API exclusively —
+    /// no local git clone is performed. Capacity checks are only needed for agents that
+    /// actually clone the repository to local disk.
+    /// Currently none do (CodebaseDocumentation uses API-only mode by default).
+    /// Kept as a hook in case a future agent requires local clone.
+    /// </summary>
     private static bool RequiresCloneCapacityCheck(AgentType agentType) => agentType switch
     {
-        AgentType.Planning => true,
-        AgentType.Coding => true,
-        AgentType.Testing => true,
-        AgentType.Review => true,
-        AgentType.Documentation => true,
+        // All pipeline agents use GitHub REST API — no local clone needed
+        AgentType.Planning => false,
+        AgentType.Coding => false,
+        AgentType.Testing => false,
+        AgentType.Review => false,
+        AgentType.Documentation => false,
+        AgentType.Deployment => false,
         AgentType.CodebaseDocumentation => false,
         _ => false
     };
 
+    /// <summary>
+    /// Returns true when the pipeline path does not require a local git clone.
+    /// Since all pipeline agents now use the GitHub REST API exclusively, this returns
+    /// true for all stories. The InitializeCodebase tag check is preserved for the
+    /// <see cref="ShouldSkipForInitializeNoClone"/> gate (skips Testing/Review/Docs for onboarding).
+    /// </summary>
     private static bool IsNoCloneDelegationPath(StoryWorkItem? workItem, AgentTask task, CopilotOptions copilotOptions)
     {
-        if (workItem is null)
-        {
-            return false;
-        }
-
-        return workItem.Tags.Any(tag =>
-            string.Equals(tag, AIPipelineNames.InitializeCodebaseTag, StringComparison.OrdinalIgnoreCase));
+        // All pipeline agents use GitHub REST API — no local clone path exists anymore.
+        // Return true for all stories so the capacity check is always skipped.
+        // The InitializeCodebase-specific skip logic is handled by ShouldSkipForInitializeNoClone.
+        return true;
     }
 
     private static bool ShouldSkipForInitializeNoClone(AgentType agentType) => agentType switch
