@@ -20,9 +20,11 @@ public sealed class GitHubApiContextService : IGitHubApiContextService
 {
     private static readonly TimeSpan[] s_branchHeadRetryDelays =
     [
-        TimeSpan.FromMilliseconds(200),
-        TimeSpan.FromMilliseconds(400),
-        TimeSpan.FromMilliseconds(800)
+        TimeSpan.FromMilliseconds(250),
+        TimeSpan.FromMilliseconds(500),
+        TimeSpan.FromMilliseconds(1000),
+        TimeSpan.FromMilliseconds(2000),
+        TimeSpan.FromMilliseconds(4000)
     ];
 
     private readonly GitHubOptions _gitHub;
@@ -245,23 +247,39 @@ public sealed class GitHubApiContextService : IGitHubApiContextService
     {
         for (var attempt = 0; ; attempt++)
         {
-            var response = await _httpClient.GetAsync(
-                $"repos/{_gitHub.Owner}/{_gitHub.Repo}/branches/{Uri.EscapeDataString(branch)}",
-                ct);
-            var body = await response.Content.ReadAsStringAsync(ct);
-            if (response.IsSuccessStatusCode)
+            var gitRefResult = await TryGetBranchHeadShaFromGitRefAsync(branch, ct);
+            if (gitRefResult.Sha is not null)
             {
-                using var doc = JsonDocument.Parse(body);
-                return doc.RootElement.GetProperty("commit").GetProperty("sha").GetString()
-                       ?? throw new InvalidOperationException($"Could not resolve head SHA for branch '{branch}'.");
+                return gitRefResult.Sha;
             }
 
-            // Newly-created refs can take a moment to appear on the /branches endpoint.
-            if (response.StatusCode == HttpStatusCode.NotFound && attempt < s_branchHeadRetryDelays.Length)
+            if (gitRefResult.StatusCode != HttpStatusCode.NotFound)
+            {
+                throw new HttpRequestException(
+                    $"Failed to resolve GitHub branch '{branch}' via git ref in '{_gitHub.Owner}/{_gitHub.Repo}': {(int)gitRefResult.StatusCode} {gitRefResult.StatusCode}. {gitRefResult.Body}",
+                    null,
+                    gitRefResult.StatusCode);
+            }
+
+            var branchResult = await TryGetBranchHeadShaFromBranchesAsync(branch, ct);
+            if (branchResult.Sha is not null)
+            {
+                return branchResult.Sha;
+            }
+
+            if (branchResult.StatusCode != HttpStatusCode.NotFound)
+            {
+                throw new HttpRequestException(
+                    $"Failed to resolve GitHub branch '{branch}' via /branches in '{_gitHub.Owner}/{_gitHub.Repo}': {(int)branchResult.StatusCode} {branchResult.StatusCode}. {branchResult.Body}",
+                    null,
+                    branchResult.StatusCode);
+            }
+
+            if (attempt < s_branchHeadRetryDelays.Length)
             {
                 var delay = s_branchHeadRetryDelays[attempt];
                 _logger.LogDebug(
-                    "GitHub branch {Branch} was not yet visible on /branches (attempt {Attempt}/{MaxAttempts}); retrying in {DelayMs}ms",
+                    "GitHub branch {Branch} was not yet visible on git ref or /branches (attempt {Attempt}/{MaxAttempts}); retrying in {DelayMs}ms",
                     branch,
                     attempt + 1,
                     s_branchHeadRetryDelays.Length + 1,
@@ -271,10 +289,48 @@ public sealed class GitHubApiContextService : IGitHubApiContextService
             }
 
             throw new HttpRequestException(
-                $"Failed to resolve GitHub branch '{branch}' in '{_gitHub.Owner}/{_gitHub.Repo}': {(int)response.StatusCode} {response.StatusCode}. {body}",
+                $"Failed to resolve GitHub branch '{branch}' in '{_gitHub.Owner}/{_gitHub.Repo}': 404 NotFound. git/ref: {gitRefResult.Body} /branches: {branchResult.Body}",
                 null,
-                response.StatusCode);
+                HttpStatusCode.NotFound);
         }
+    }
+
+    private async Task<(HttpStatusCode StatusCode, string Body, string? Sha)> TryGetBranchHeadShaFromGitRefAsync(
+        string branch,
+        CancellationToken ct)
+    {
+        using var response = await _httpClient.GetAsync(
+            $"repos/{_gitHub.Owner}/{_gitHub.Repo}/git/ref/heads/{Uri.EscapeDataString(branch)}",
+            ct);
+        var body = await response.Content.ReadAsStringAsync(ct);
+        if (!response.IsSuccessStatusCode)
+        {
+            return (response.StatusCode, body, null);
+        }
+
+        using var doc = JsonDocument.Parse(body);
+        var sha = doc.RootElement.GetProperty("object").GetProperty("sha").GetString()
+            ?? throw new InvalidOperationException($"Could not resolve head SHA for branch '{branch}' from git ref.");
+        return (response.StatusCode, body, sha);
+    }
+
+    private async Task<(HttpStatusCode StatusCode, string Body, string? Sha)> TryGetBranchHeadShaFromBranchesAsync(
+        string branch,
+        CancellationToken ct)
+    {
+        using var response = await _httpClient.GetAsync(
+            $"repos/{_gitHub.Owner}/{_gitHub.Repo}/branches/{Uri.EscapeDataString(branch)}",
+            ct);
+        var body = await response.Content.ReadAsStringAsync(ct);
+        if (!response.IsSuccessStatusCode)
+        {
+            return (response.StatusCode, body, null);
+        }
+
+        using var doc = JsonDocument.Parse(body);
+        var sha = doc.RootElement.GetProperty("commit").GetProperty("sha").GetString()
+            ?? throw new InvalidOperationException($"Could not resolve head SHA for branch '{branch}' from /branches.");
+        return (response.StatusCode, body, sha);
     }
 
     private async Task<string?> TryGetFileContentAsync(string path, string branch, CancellationToken ct)
