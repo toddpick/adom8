@@ -20,7 +20,7 @@ Before running the pipeline, you need to gather the following information and cr
 10. **Copilot Enabled (Optional)**: Set pipeline variable `COPILOT_ENABLED` (`true` by default) to delegate coding to GitHub Copilot by default.
 11. **MCP Bootstrap Enabled (Optional)**: Set pipeline variable `MCP_BOOTSTRAP_ENABLED` (`true` by default) to create MCP bootstrap guidance files in your GitHub repo.
 12. **Copilot ADO MCP PAT (Optional override)**: Set secret pipeline variable `COPILOT_MCP_AZURE_DEVOPS_PAT` only if you want a dedicated PAT for MCP; otherwise onboarding reuses `ONBOARDING_PAT` automatically for MCP secret sync.
-13. **GitHub Base Branch (Optional)**: Set pipeline variable `GITHUB_BASE_BRANCH` (`main` by default) to choose which branch AI feature branches are created from (for example, `dev`).
+13. **GitHub Base Branch (Optional)**: Set pipeline variable `GITHUB_BASE_BRANCH` to choose which branch AI feature branches are created from (for example, `dev`). If you leave it blank, onboarding uses the repository's default branch.
 
 ### Create Tokens
 
@@ -69,7 +69,7 @@ Create a Fine-grained Personal Access Token in GitHub scoped to your target repo
    - `COPILOT_ENABLED` (optional, defaults to `true`)
    - `MCP_BOOTSTRAP_ENABLED` (optional, defaults to `true`)
    - `COPILOT_MCP_AZURE_DEVOPS_PAT` (optional secret override; if omitted, pipeline uses `ONBOARDING_PAT`)
-   - `GITHUB_BASE_BRANCH` (optional, defaults to `main`; set to `dev` if you want AI feature branches based on your dev branch)
+   - `GITHUB_BASE_BRANCH` (optional; leave blank to use the repository default branch, or set it explicitly such as `dev`)
    
    **Secret Variables** (Make sure to check "Keep this value secret"):
    - `ONBOARDING_PAT`

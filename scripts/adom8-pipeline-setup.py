@@ -12,10 +12,67 @@ import json
 import secrets
 import requests
 import time
-from urllib.parse import urlparse
+from urllib.parse import quote, urlparse
 from azure.identity import DefaultAzureCredential
 from azure.keyvault.secrets import SecretClient
 from azure.core.exceptions import ResourceNotFoundError
+
+
+def resolve_github_base_branch(github_org, github_repo, github_token, configured_branch):
+    requested_branch = (configured_branch or "").strip()
+    headers = {
+        "Authorization": f"Bearer {github_token}",
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+        "User-Agent": "ADOm8-Onboarding/1.0"
+    }
+
+    repo_url = f"https://api.github.com/repos/{github_org}/{github_repo}"
+    repo_response = requests.get(repo_url, headers=headers, timeout=30)
+    repo_body = repo_response.text
+    if not repo_response.ok:
+        if requested_branch:
+            print(
+                f"Warning: Could not resolve repository default branch for {github_org}/{github_repo} "
+                f"({repo_response.status_code}). Using configured GITHUB_BASE_BRANCH='{requested_branch}'."
+            )
+            return requested_branch
+
+        print(
+            f"Error: GITHUB_BASE_BRANCH was not supplied and repository default branch could not be resolved "
+            f"for {github_org}/{github_repo} ({repo_response.status_code}): {repo_body}"
+        )
+        sys.exit(1)
+
+    repo_json = repo_response.json()
+    repository_default_branch = (repo_json.get("default_branch") or "").strip()
+    if not repository_default_branch:
+        if requested_branch:
+            print(
+                f"Warning: Repository {github_org}/{github_repo} did not return a default branch. "
+                f"Using configured GITHUB_BASE_BRANCH='{requested_branch}'."
+            )
+            return requested_branch
+
+        print(f"Error: Repository {github_org}/{github_repo} did not report a default branch.")
+        sys.exit(1)
+
+    if not requested_branch:
+        print(f"No GITHUB_BASE_BRANCH supplied - using repository default branch '{repository_default_branch}'.")
+        return repository_default_branch
+
+    branch_ref_url = f"https://api.github.com/repos/{github_org}/{github_repo}/git/ref/heads/{quote(requested_branch, safe='')}"
+    branch_response = requests.get(branch_ref_url, headers=headers, timeout=30)
+    if branch_response.ok:
+        print(f"Using configured GITHUB_BASE_BRANCH='{requested_branch}'.")
+        return requested_branch
+
+    print(
+        f"Warning: Configured GITHUB_BASE_BRANCH='{requested_branch}' was not found or not accessible "
+        f"for {github_org}/{github_repo} ({branch_response.status_code}). "
+        f"Falling back to repository default branch '{repository_default_branch}'."
+    )
+    return repository_default_branch
 
 def main():
     parser = argparse.ArgumentParser(description="ADOm8 Pipeline Setup Script")
@@ -43,7 +100,6 @@ def main():
     copilot_checkpoint_enforcement_enabled = os.environ.get("COPILOT_CHECKPOINT_ENFORCEMENT_ENABLED", "true").strip().lower() in ["1", "true", "yes", "on"]
     copilot_checkpoint_fail_hard = os.environ.get("COPILOT_CHECKPOINT_FAIL_HARD", "true").strip().lower() in ["1", "true", "yes", "on"]
     copilot_required_ado_checkpoints = os.environ.get("COPILOT_REQUIRED_ADO_CHECKPOINTS", "LastAgent,AICurrentAgent,CompletionComment").strip() or "LastAgent,AICurrentAgent,CompletionComment"
-    github_base_branch = os.environ.get("GITHUB_BASE_BRANCH", "main").strip() or "main"
     copilot_webhook_secret = (os.environ.get("COPILOT_WEBHOOK_SECRET") or "").strip()
     repo_capacity_enabled = os.environ.get("REPO_CAPACITY_ENABLED", "true").strip().lower() in ["1", "true", "yes", "on"]
     repo_capacity_max_working_tree_mb = (os.environ.get("REPO_CAPACITY_MAX_WORKING_TREE_MB", "500").strip() or "500")
@@ -66,6 +122,12 @@ def main():
     if not claude_api_key and not openai_api_key:
         print("Error: At least one AI provider key is required: set CLAUDE_API_KEY (Anthropic) or OPENAI_API_KEY (OpenAI).")
         sys.exit(1)
+
+    github_base_branch = resolve_github_base_branch(
+        args.github_org,
+        args.github_repo,
+        github_token,
+        os.environ.get("GITHUB_BASE_BRANCH"))
 
     # Determine primary AI provider — Claude preferred when both supplied
     if claude_api_key:

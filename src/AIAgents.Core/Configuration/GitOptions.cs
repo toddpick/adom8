@@ -43,9 +43,9 @@ public sealed class GitOptions
 
     /// <summary>
     /// Preferred base branch for creating new AI feature branches.
-    /// Defaults to <c>main</c> when not configured.
+    /// Leave blank to use the repository provider's default branch behavior.
     /// </summary>
-    public string BaseBranch { get; init; } = "main";
+    public string BaseBranch { get; init; } = string.Empty;
 
     /// <summary>
     /// Local directory path for cloning repositories.

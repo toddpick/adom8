@@ -29,9 +29,9 @@ public sealed class GitHubOptions
 
     /// <summary>
     /// Preferred base branch for AI story branches and Copilot delegation bootstrap.
-    /// Defaults to <c>main</c> when not configured.
+    /// Leave blank to use the repository's default branch.
     /// </summary>
-    public string BaseBranch { get; init; } = "main";
+    public string BaseBranch { get; init; } = string.Empty;
 
     /// <summary>
     /// The filename of the GitHub Actions workflow to trigger for Level 5 autonomy.
