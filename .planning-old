@@ -1,0 +1,138 @@
+# ADOm8 â€” Project Planning & Backlog
+
+## In Progress
+- Running the onboarding pipeline on the first real project (My Credit Plan DNN)
+- Multi-user GitHub PAT routing prototype is implemented on branch `feature/multi-user-github-pat-routing` (not merged yet)
+
+---
+
+## Backlog
+
+### #1 â€” Pipeline & Setup
+- [ ] Verify end-to-end pipeline run succeeds on real project
+- [ ] Confirm `Copilot__WebhookSecret` is correctly validated on first GitHub webhook delivery
+- [ ] Confirm `claude-sonnet-4-20250514` (or `gpt-4o` for OpenAI path) is accepted by the live API
+- [ ] Verify the runtime PAT created by Stage 2 has the correct scopes
+- [ ] Add SaaS onboarding compatibility diagnostics (repo drift, required app settings, and webhook alignment)
+- [ ] Add fork-sync freshness checks and guidance when customer repo is behind upstream
+- [ ] Add post-setup compatibility summary in SaaS showing "ready / drifted / needs sync"
+- [ ] Add guidance flow for "customize your fork" vs "stay sync-safe for upstream fixes"
+
+### #2 â€” Per-Agent Model Overrides (Story-level config)
+Fields exist in ADO: `AI Model Tier`, `AI Planning Model`, `AI Coding Model`, `AI Testing Model`, `AI Review Model`, `AI Documentation Model`, `AI Coding Provider`
+- [ ] Confirm the 4-layer model priority logic in `AIClientFactory` reads these ADO fields correctly per-story
+- [ ] Test that setting `AI Coding Model = gpt-4o` on a story actually changes the model used
+- [ ] Test that `AI Model Tier = economy` correctly maps to the right model across all agents
+- [ ] Document the per-story override behaviour in the get-started guide once verified
+
+### #3 â€” Wire Up Extended Tracking Fields (currently blank after story runs)
+These fields are created by the pipeline but the agent does NOT yet write them back to the work item after each run:
+- `AI Tokens Used` â€” total LLM token consumption for the story
+- `AI Cost` â€” estimated cost in USD
+- `AI Processing Time` â€” wall-clock duration in seconds
+- `AI Complexity` â€” planning agent complexity estimate
+- `AI Files Generated` â€” count of files created or modified
+- `AI Tests Generated` â€” count of test cases written
+- `AI PR Number` â€” GitHub PR number (if opened)
+- `AI Critical Issues` â€” count/list of critical review findings
+- `AI Deployment Decision` â€” deployment agent go/no-go output
+
+**Task:** After each agent stage completes, update the ADO work item via `WorkItemTrackingHttpClient`
+(or the existing ADO service wrapper) with the accumulated values.
+Consider: single update at end of run vs. progressive updates per stage.
+
+### #4 â€” `Current AI Agent` picklist values
+- [ ] Confirm all picklist values match agent names used at runtime (Planning Agent, Coding Agent, etc.)
+- [ ] Ensure the field is cleared / set to `None` when agent finishes so board cards do not stay stale
+
+### #5 â€” Board Card Styles (cosmetic, low priority)
+- [ ] Document the recommended color rules for `Current AI Agent` values
+- [ ] Add recommended colors to the get-started Step 6 guide
+
+### #6 â€” Google Gemini Support
+- [ ] Wire `GOOGLE_API_KEY` end-to-end as a first-class provider (pipeline script handles storage; confirm app settings)
+- [ ] Test with a real Gemini API key
+- [ ] Add Gemini as an option in the Step 3 Variables docs
+
+### #7 â€” SVG Infographics
+- [ ] Create / verify `step-4-run.svg` (pipeline stages diagram)
+- [ ] Update `step-5-verify.svg` to reflect trimmed field list (2 settings + 4 tracking)
+
+### #8 â€” Agent Library, Selection & Governance
+- [ ] Add layered `.adom8/agents` library (`stack/`, `standards/`, `patterns/`, `meta/`) as reusable defaults
+- [ ] Keep existing `.agent` indexed docs as factual context source (read-only reference)
+- [ ] Add `agent-selector` manifest and deterministic `applicable_agents` output from Planning agent
+- [ ] Define versioning plus precedence/conflict rules across org/default/custom agents
+- [ ] Add token-budgeting rules per stage/agent with fallback behavior when limits are hit
+- [ ] Add onboarding flow for org-provided custom agents and approval of generated defaults
+- [ ] Roll out in phases: Phase 1 (baseline), Phase 2 (governance), Phase 3 (advanced tuning)
+
+### #9 â€” Multi-User GitHub PAT Routing (feature branch exists)
+- [ ] Review prototype branch `feature/multi-user-github-pat-routing`
+- [ ] Decide merge scope (full feature vs. phased rollout)
+- [ ] Merge to `main` after docs and governance checks
+
+### #10 â€” HIGH PRIORITY Future Phase: Replace Custom Coding Agent with Claude GitHub App (Post-demo)
+**Future phase only — no current implementation changes.**
+
+**Problem statement:** The current custom Coding Agent clone/generation path in Azure is creating storage capacity failures and long-term maintenance burden.
+
+**Target Coding Tier Strategy (future state):**
+- **Tier 1 (Primary):** GitHub Copilot native agent (issue assignment or `@copilot` mention), visible in GitHub Agents tab, uses existing Copilot subscription.
+- **Tier 2 (Secondary):** Claude GitHub App (triggered by `@claude` mention on PR), runs on GitHub runners, uses customer `ANTHROPIC_API_KEY` GitHub repository secret, model configurable in workflow YAML (`claude-sonnet-4-6` default, `claude-opus-4-6` for higher complexity).
+- **Tier 3 (Fallback):** Existing OpenAI-based internal agentic path retained for customers without Copilot/Claude access.
+
+**Orchestrator role in this phase:**
+- Azure Function orchestrator posts the trigger comment (`@claude`) and tracks outcome/status.
+- Remove dependence on full custom clone/generation path for Tier 2 use cases.
+
+**Security posture note (documented for enterprise review):**
+- Tier 1 under existing Microsoft/GitHub Enterprise DPA.
+- Tier 2 under Anthropic API agreement.
+- No additional third-party vendor security review expected beyond existing approved vendors.
+
+**Benefits to document:**
+- Eliminates Azure storage blowup risk from custom clone-heavy coding path.
+- Reduces largest maintenance hotspot in orchestrator codebase.
+- Provides native real-time visibility in GitHub (Agents/Actions surfaces).
+- Creates clean two-vendor security narrative (Microsoft/GitHub + Anthropic).
+
+**Phase gates:**
+- [ ] Architecture RFC and rollback plan approved
+- [ ] Tier routing policy finalized (Copilot/Claude/OpenAI fallback)
+- [ ] Enterprise security and legal sign-off notes added to docs
+- [ ] Pilot on one project before general rollout
+
+### #11 â€” LOWER PRIORITY Future Phase: Native GitHub App Integration for ADO Plumbing (Post-demo)
+**Future phase only — additive integration, not a replacement of Azure Functions.**
+
+Known installed GitHub Apps in org (for future exploration):
+- Azure Boards (scoped to my-credit-plan-dnn and my-credit-plan-portal)
+- Azure Pipelines (scoped to my-credit-plan-dnn, my-credit-plan-portal, and adom8Fork)
+- Claude (permission update pending approval)
+
+Potential future explorations:
+- Use Azure Boards `AB#[workitem]` commit/PR linking for native work-item association.
+- Use Azure Pipelines native GitHub checks so Deployment Agent can monitor check status instead of direct ADO pipeline polling where appropriate.
+- Use `@claude` as alternate Coding Agent trigger with model selection via workflow YAML.
+
+**Critical constraint (must remain explicit):**
+- Azure Functions remain the intelligence layer for event capture, enrichment, custom-field updates (including `Current AI Agent`), analytics, and SaaS dashboard data.
+- GitHub Apps only replace plumbing portions where native integrations are stronger.
+- Current webhook + direct API architecture remains fully in place until this phase is explicitly prioritized and approved.
+
+**Phase gates:**
+- [ ] Integration boundaries documented (what moves vs. what stays in Functions)
+- [ ] No-regression plan for custom fields and dashboard telemetry
+- [ ] Pilot with one repo using dual-path monitoring before broader adoption
+
+---
+
+## Completed
+- [x] All 4 pipeline script bugs fixed (model version, webhook secret key name, optional OpenAI/Google keys, per-agent note)
+- [x] OpenAI as a first-class alternative to Anthropic (either-or logic, generic `ADOM8-AI-KEY` KV name)
+- [x] Step 1-5 get-started guide fully written with screenshots and SVGs
+- [x] Step 6 (Optional Fields) created and separated from required Step 5
+- [x] `BoardConfigSteps` trimmed to 4 required fields only (Autonomy Level + AI Minimum Review Score in settings; Current AI Agent + AI Last Agent in tracking)
+- [x] `AI Model Tier` moved to Step 6 optional (batch preset, not required; agent runs fine without it)
+- [x] Apache 2.0 license added to OSS repo

@@ -2,6 +2,7 @@ import { useState } from 'react';
 
 import AuthImage from '../mosaic/images/auth-image.png';
 import { validateAppKey } from '../api';
+import BrandLogo from './BrandLogo';
 
 export default function LoginGate({ onAuthenticated }) {
   const [appKey, setAppKey] = useState('');
@@ -43,12 +44,7 @@ export default function LoginGate({ onAuthenticated }) {
             <div className="flex-1">
               <div className="flex h-16 items-center justify-between px-4 sm:px-6 lg:px-8">
                 <div className="flex items-center gap-3">
-                  <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-violet-500 text-white shadow-lg shadow-violet-500/20">
-                    <svg width="20" height="20" viewBox="0 0 32 32" fill="none">
-                      <path d="M16 3l10 5.8v14.4L16 29 6 23.2V8.8L16 3Z" fill="currentColor" />
-                      <path d="M16 8.7l5 2.9v5.8L16 20.3l-5-2.9v-5.8l5-2.9Z" fill="white" />
-                    </svg>
-                  </span>
+                  <BrandLogo className="h-11 w-11" />
                   <span className="text-sm font-semibold text-gray-900">ADOm8</span>
                 </div>
               </div>

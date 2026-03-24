@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 44 44" width="44" height="44" fill="none">
+  <defs>
+    <linearGradient id="brand-eight-gradient" x1="0%" y1="50%" x2="100%" y2="50%">
+      <stop offset="0%" stop-color="#7CB0FF" />
+      <stop offset="55%" stop-color="#3AA8FF" />
+      <stop offset="100%" stop-color="#0078D4" />
+    </linearGradient>
+    <radialGradient id="brand-eight-glow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#3AA8FF" stop-opacity="0.45" />
+      <stop offset="100%" stop-color="#3AA8FF" stop-opacity="0" />
+    </radialGradient>
+  </defs>
+  <rect x="1" y="1" width="42" height="42" rx="12" fill="url(#brand-eight-glow)" />
+  <rect x="1" y="1" width="42" height="42" rx="12" fill="rgba(15,23,42,0.72)" stroke="rgba(124,176,255,0.35)" />
+  <circle cx="16" cy="22" r="7.2" stroke="url(#brand-eight-gradient)" stroke-width="4.1" stroke-linecap="round" />
+  <circle cx="28" cy="22" r="7.2" stroke="url(#brand-eight-gradient)" stroke-width="4.1" stroke-linecap="round" />
+  <circle cx="22" cy="22" r="1.9" fill="#9FD0FF" fill-opacity="0.9" />
+</svg>

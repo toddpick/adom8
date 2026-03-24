@@ -163,6 +163,17 @@ Respond ONLY with valid JSON matching this structure:
 ALWAYS include the full plan even when proceed=false — the analyst needs the analysis to fix the story.
 If unverified external dependencies are detected, add a warning note in the technicalApproach field.";
 
+        if (IsInitializeCodebaseStory(workItem))
+        {
+            systemPrompt += @"
+
+SPECIAL CASE — INITIALIZE CODEBASE STORIES:
+- These stories are exploratory by design and are expected to discover the tech stack, project structure, and repository conventions by scanning the repository.
+- Do NOT set readiness.proceed=false solely because exact frameworks, library versions, architecture patterns, or documentation targets must be discovered from repository files during the scan.
+- Treat repository-scannable unknowns as assumptions or researchNeeded notes, not blockers.
+- Only reject when there are true blocking issues such as missing required story content, placeholder text, impossible scope, or dependencies that cannot be resolved by repository inspection.";
+        }
+
         var userPrompt = $@"## Story Details
 **ID:** {workItem.Id}
 **Title:** {workItem.Title}
@@ -244,7 +255,8 @@ Analyze this story and create a comprehensive implementation plan.";
 
         // 12. Triage gate — check readiness
         var readiness = planResult.Readiness;
-        if (readiness is not null && !readiness.Proceed)
+        var relaxedInitializeCodebasePass = ShouldRelaxInitializeCodebaseReadiness(workItem, readiness);
+        if (readiness is not null && !readiness.Proceed && !relaxedInitializeCodebasePass)
         {
             // Story is NOT ready — send back with feedback
             _logger.LogInformation(
@@ -338,8 +350,12 @@ Analyze this story and create a comprehensive implementation plan.";
             ? $"<br/>Readiness: {readiness.ReadinessScore}/100"
             : "";
 
+        var readinessOverrideInfo = relaxedInitializeCodebasePass
+            ? "<br/>Readiness Override: exploratory Initialize Codebase story allowed to proceed despite research-needed items."
+            : "";
+
         await _adoClient.AddWorkItemCommentAsync(workItem.Id,
-            $"<b>🤖 AI Planning Agent Complete</b><br/>Complexity: {planResult.Complexity} story points<br/>Sub-tasks: {planResult.SubTasks.Count}<br/>Risks: {planResult.Risks.Count}{readinessInfo}",
+            $"<b>🤖 AI Planning Agent Complete</b><br/>Complexity: {planResult.Complexity} story points<br/>Sub-tasks: {planResult.SubTasks.Count}<br/>Risks: {planResult.Risks.Count}{readinessInfo}{readinessOverrideInfo}",
             cancellationToken);
 
         // 12. Update story state
@@ -363,8 +379,12 @@ Analyze this story and create a comprehensive implementation plan.";
         state.Decisions.Add(new Decision
         {
             Agent = "Planning",
-            DecisionText = $"Estimated complexity: {planResult.Complexity} story points",
-            Rationale = planResult.TechnicalApproach
+            DecisionText = relaxedInitializeCodebasePass
+                ? $"Estimated complexity: {planResult.Complexity} story points (initialize-codebase exploratory override applied)"
+                : $"Estimated complexity: {planResult.Complexity} story points",
+            Rationale = relaxedInitializeCodebasePass
+                ? $"{planResult.TechnicalApproach}\n\nInitialize Codebase note: repository-scannable research items were treated as non-blocking."
+                : planResult.TechnicalApproach
         });
         await context.SaveStateAsync(state, cancellationToken);
 
@@ -956,6 +976,40 @@ Analyze this story and create a comprehensive implementation plan.";
             Pointers = matchedPaths,
             MissingRecommendedPointers = missingPaths
         };
+    }
+
+    internal static bool IsInitializeCodebaseStory(StoryWorkItem workItem)
+        => workItem.Tags.Any(tag => string.Equals(tag, AIPipelineNames.InitializeCodebaseTag, StringComparison.OrdinalIgnoreCase))
+            || workItem.Title.Contains("Initialize Codebase", StringComparison.OrdinalIgnoreCase)
+            || workItem.Title.Contains("Codebase Intelligence", StringComparison.OrdinalIgnoreCase);
+
+    internal static bool ShouldRelaxInitializeCodebaseReadiness(StoryWorkItem workItem, PlanningReadiness? readiness)
+    {
+        if (!IsInitializeCodebaseStory(workItem) || readiness is null || readiness.Proceed)
+            return false;
+
+        if (readiness.Blockers.Count == 0)
+            return true;
+
+        return readiness.Blockers.All(IsRepositoryDiscoveryConcern);
+    }
+
+    private static bool IsRepositoryDiscoveryConcern(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+            return true;
+
+        var normalized = text.ToLowerInvariant();
+        return normalized.Contains("unverified", StringComparison.Ordinal)
+            || normalized.Contains("verify", StringComparison.Ordinal)
+            || normalized.Contains("verification", StringComparison.Ordinal)
+            || normalized.Contains("research", StringComparison.Ordinal)
+            || normalized.Contains("external api", StringComparison.Ordinal)
+            || normalized.Contains("assumption", StringComparison.Ordinal)
+            || normalized.Contains("library", StringComparison.Ordinal)
+            || normalized.Contains("tech stack", StringComparison.Ordinal)
+            || normalized.Contains("capabilities", StringComparison.Ordinal)
+            || normalized.Contains("endpoint", StringComparison.Ordinal);
     }
 
     private sealed class InitializationBundle

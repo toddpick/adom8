@@ -494,6 +494,50 @@ public sealed class PlanningAgentServiceTests
         _adoMock.Verify(a => a.UpdateWorkItemStateAsync(12345, "Needs Revision", It.IsAny<CancellationToken>()), Times.Once);
     }
 
+    [Fact]
+    public async Task ExecuteAsync_InitializeCodebaseStory_WithResearchNeeded_ProceedsToCoding()
+    {
+        var initializeCodebaseStory = MockAIResponses.SampleWorkItem(
+            title: "Initialize Codebase Intelligence Documentation") with
+        {
+            Tags = [AIPipelineNames.InitializeCodebaseTag]
+        };
+
+        SetupHappyPath(workItem: initializeCodebaseStory, aiResponse: MockAIResponses.PlanningResponseWithResearchNeeded);
+        var service = CreateService();
+        var task = new AgentTask { WorkItemId = initializeCodebaseStory.Id, AgentType = AgentType.Planning };
+
+        await service.ExecuteAsync(task);
+
+        Assert.Equal("AI Code", _capturedState.CurrentState);
+        _taskQueueMock.Verify(q => q.EnqueueAsync(
+            It.Is<AgentTask>(t => t.AgentType == AgentType.Coding),
+            It.IsAny<CancellationToken>()), Times.Once);
+        _adoMock.Verify(a => a.UpdateWorkItemStateAsync(initializeCodebaseStory.Id, "Needs Revision", It.IsAny<CancellationToken>()), Times.Never);
+        _adoMock.Verify(a => a.AddWorkItemCommentAsync(initializeCodebaseStory.Id,
+            It.Is<string>(c => c.Contains("Readiness Override", StringComparison.OrdinalIgnoreCase)),
+            It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_InitializeCodebaseStory_WithConcreteBlockers_StillMovesToNeedsRevision()
+    {
+        var initializeCodebaseStory = MockAIResponses.SampleWorkItem(
+            title: "Initialize Codebase Intelligence Documentation") with
+        {
+            Tags = [AIPipelineNames.InitializeCodebaseTag]
+        };
+
+        SetupHappyPath(workItem: initializeCodebaseStory, aiResponse: MockAIResponses.RejectedPlanningResponse);
+        var service = CreateService();
+        var task = new AgentTask { WorkItemId = initializeCodebaseStory.Id, AgentType = AgentType.Planning };
+
+        await service.ExecuteAsync(task);
+
+        Assert.Equal("Needs Revision", _capturedState.CurrentState);
+        _adoMock.Verify(a => a.UpdateWorkItemStateAsync(initializeCodebaseStory.Id, "Needs Revision", It.IsAny<CancellationToken>()), Times.Once);
+    }
+
     // ========== PLACEHOLDER DETECTION TESTS ==========
 
     [Theory]

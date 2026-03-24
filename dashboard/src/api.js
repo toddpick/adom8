@@ -8,6 +8,7 @@ const CODEBASE_INTELLIGENCE_ENDPOINT = '/api/codebase-intelligence';
 const INITIALIZE_CODEBASE_ENDPOINT = '/api/initialize-codebase';
 const CLEAR_STORIES_ENDPOINT = '/api/clear-stories';
 const CLEAR_ACTIVITY_ENDPOINT = '/api/clear-activity';
+const VALIDATE_DASHBOARD_KEY_ENDPOINT = '/api/validate-dashboard-key';
 
 function getBaseOrigin() {
   if (config.apiBaseUrl) {
@@ -130,10 +131,10 @@ export async function validateAppKey(appKey) {
   }
 
   try {
-    await fetchJsonFromCandidates(STATUS_ENDPOINTS, trimmed);
+    await sendJsonRequest(VALIDATE_DASHBOARD_KEY_ENDPOINT, trimmed);
     return true;
   } catch (error) {
-    if (error.code === 401 || error.code === 404) {
+    if (error.code === 401 || error.code === 403 || error.code === 404) {
       return false;
     }
 

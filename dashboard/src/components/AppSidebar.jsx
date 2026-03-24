@@ -3,6 +3,7 @@ import { NavLink } from 'react-router-dom';
 
 import packageJson from '../../package.json';
 import { initializeCodebase } from '../api';
+import BrandLogo from './BrandLogo';
 import { formatRelativeTime } from '../utils/formatting';
 
 function NavItem({ to, label, icon, end = false }) {
@@ -310,12 +311,7 @@ export default function AppSidebar({
             </svg>
           </button>
           <NavLink end to="/" className="flex items-center gap-3">
-            <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-violet-500 text-white shadow-lg shadow-violet-500/20">
-              <svg width="20" height="20" viewBox="0 0 32 32" fill="none">
-                <path d="M16 3l10 5.8v14.4L16 29 6 23.2V8.8L16 3Z" fill="currentColor" />
-                <path d="M16 8.7l5 2.9v5.8L16 20.3l-5-2.9v-5.8l5-2.9Z" fill="white" />
-              </svg>
-            </span>
+            <BrandLogo className="h-11 w-11" />
             <span>
               <span className="block text-sm font-semibold text-gray-900">ADOm8</span>
               <span className="block text-xs uppercase tracking-[0.2em] text-gray-400">Dashboard</span>

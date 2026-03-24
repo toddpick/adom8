@@ -1,6 +1,7 @@
 import { formatDistanceToNowStrict } from 'date-fns';
 
 import { STATUS_LABELS } from '../constants';
+import BrandLogo from './BrandLogo';
 
 function statusClasses(status) {
   switch (status) {
@@ -50,6 +51,7 @@ export default function AppHeader({
                 <rect x="4" y="17" width="16" height="2" />
               </svg>
             </button>
+            <BrandLogo className="hidden h-9 w-9 sm:block" />
             <div>
               <div className="text-xs font-semibold uppercase tracking-[0.18em] text-gray-400">ADOm8</div>
               <h1 className="text-lg font-semibold text-gray-900">{pageTitle}</h1>
