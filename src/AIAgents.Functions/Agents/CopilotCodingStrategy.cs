@@ -104,15 +104,25 @@ public sealed class CopilotCodingStrategy : ICodingStrategy
 
             await EnsureBranchExistsAsync(context.BranchName, cancellationToken);
 
+            var issueContext = context;
+            if (context.AttachedImagePaths.Count > 0 || context.AttachedDocumentPaths.Count > 0)
+            {
+                var uploaded = await TryUploadSupportingArtifactsAsync(context, cancellationToken);
+                if (uploaded)
+                {
+                    issueContext = context with { SupportingArtifactsInBranch = true };
+                }
+            }
+
             int issueNumber = 0;
 
             if (_copilotOptions.CreateIssue)
             {
-                issueNumber = await CreateGitHubIssueAsync(context, cancellationToken);
+                issueNumber = await CreateGitHubIssueAsync(issueContext, cancellationToken);
 
                 // Assign to Copilot coding agent via the proper GitHub API
                 await AssignIssueToAgentAsync(issueNumber, context.BranchName, cancellationToken);
-                await PostKickoffCommentAsync(issueNumber, context, cancellationToken);
+                await PostKickoffCommentAsync(issueNumber, issueContext, cancellationToken);
 
                 _logger.LogInformation(
                     "Created GitHub Issue #{IssueNumber}, assigned Copilot agent, and posted kickoff for WI-{WorkItemId}",
@@ -171,6 +181,74 @@ public sealed class CopilotCodingStrategy : ICodingStrategy
             {
                 s_delegationLocks.TryRemove(context.WorkItemId, out _);
             }
+        }
+    }
+
+    private async Task<bool> TryUploadSupportingArtifactsAsync(CodingContext context, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(context.SupportingArtifactsLocalRootPath))
+        {
+            return false;
+        }
+
+        var relativePaths = context.AttachedImagePaths
+            .Concat(context.AttachedDocumentPaths)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        if (relativePaths.Count == 0)
+        {
+            return false;
+        }
+
+        var binaryFiles = new Dictionary<string, byte[]>(StringComparer.OrdinalIgnoreCase);
+        foreach (var relativePath in relativePaths)
+        {
+            var fullPath = Path.Combine(
+                context.SupportingArtifactsLocalRootPath,
+                relativePath.Replace('/', Path.DirectorySeparatorChar));
+
+            if (!File.Exists(fullPath))
+            {
+                _logger.LogWarning(
+                    "Supporting artifact missing on disk for WI-{WorkItemId}: {Path}",
+                    context.WorkItemId,
+                    fullPath);
+                continue;
+            }
+
+            binaryFiles[relativePath] = await File.ReadAllBytesAsync(fullPath, cancellationToken);
+        }
+
+        if (binaryFiles.Count == 0)
+        {
+            return false;
+        }
+
+        try
+        {
+            await CommitBinaryFilesAsync(
+                context.BranchName,
+                binaryFiles,
+                $"Add supporting artifacts for US-{context.WorkItemId}",
+                cancellationToken);
+
+            _logger.LogInformation(
+                "Uploaded {Count} supporting artifact(s) to branch {Branch} for WI-{WorkItemId}",
+                binaryFiles.Count,
+                context.BranchName,
+                context.WorkItemId);
+
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(
+                ex,
+                "Failed to upload supporting artifacts to branch {Branch} for WI-{WorkItemId}",
+                context.BranchName,
+                context.WorkItemId);
+            return false;
         }
     }
 
@@ -265,13 +343,127 @@ public sealed class CopilotCodingStrategy : ICodingStrategy
             $"Failed to create branch '{branchName}' for Copilot delegation (status {(int)createResponse.StatusCode}): {createBody}");
     }
 
+    private async Task CommitBinaryFilesAsync(
+        string branchName,
+        IReadOnlyDictionary<string, byte[]> files,
+        string commitMessage,
+        CancellationToken cancellationToken)
+    {
+        if (files.Count == 0)
+        {
+            return;
+        }
+
+        var headSha = await GetBranchHeadShaAsync(branchName, cancellationToken);
+
+        var commitResponse = await _httpClient.GetAsync(
+            $"repos/{_githubOptions.Owner}/{_githubOptions.Repo}/git/commits/{headSha}",
+            cancellationToken);
+        var commitBody = await commitResponse.Content.ReadAsStringAsync(cancellationToken);
+        commitResponse.EnsureSuccessStatusCode();
+
+        using var commitDoc = JsonDocument.Parse(commitBody);
+        var baseTreeSha = commitDoc.RootElement.GetProperty("tree").GetProperty("sha").GetString()
+            ?? throw new InvalidOperationException("Could not resolve base tree SHA.");
+
+        var treeItems = new List<object>();
+        foreach (var (path, bytes) in files)
+        {
+            var blobPayload = JsonSerializer.Serialize(new
+            {
+                content = Convert.ToBase64String(bytes),
+                encoding = "base64"
+            });
+
+            var blobResponse = await _httpClient.PostAsync(
+                $"repos/{_githubOptions.Owner}/{_githubOptions.Repo}/git/blobs",
+                new StringContent(blobPayload, Encoding.UTF8, "application/json"),
+                cancellationToken);
+            var blobBody = await blobResponse.Content.ReadAsStringAsync(cancellationToken);
+            blobResponse.EnsureSuccessStatusCode();
+
+            using var blobDoc = JsonDocument.Parse(blobBody);
+            var blobSha = blobDoc.RootElement.GetProperty("sha").GetString()
+                ?? throw new InvalidOperationException($"Could not create blob for '{path}'.");
+
+            treeItems.Add(new
+            {
+                path,
+                mode = "100644",
+                type = "blob",
+                sha = blobSha
+            });
+        }
+
+        var treePayload = JsonSerializer.Serialize(new
+        {
+            base_tree = baseTreeSha,
+            tree = treeItems
+        });
+
+        var treeResponse = await _httpClient.PostAsync(
+            $"repos/{_githubOptions.Owner}/{_githubOptions.Repo}/git/trees",
+            new StringContent(treePayload, Encoding.UTF8, "application/json"),
+            cancellationToken);
+        var treeBody = await treeResponse.Content.ReadAsStringAsync(cancellationToken);
+        treeResponse.EnsureSuccessStatusCode();
+
+        using var treeDoc = JsonDocument.Parse(treeBody);
+        var newTreeSha = treeDoc.RootElement.GetProperty("sha").GetString()
+            ?? throw new InvalidOperationException("Could not resolve new tree SHA.");
+
+        var newCommitPayload = JsonSerializer.Serialize(new
+        {
+            message = commitMessage,
+            tree = newTreeSha,
+            parents = new[] { headSha }
+        });
+
+        var newCommitResponse = await _httpClient.PostAsync(
+            $"repos/{_githubOptions.Owner}/{_githubOptions.Repo}/git/commits",
+            new StringContent(newCommitPayload, Encoding.UTF8, "application/json"),
+            cancellationToken);
+        var newCommitBody = await newCommitResponse.Content.ReadAsStringAsync(cancellationToken);
+        newCommitResponse.EnsureSuccessStatusCode();
+
+        using var newCommitDoc = JsonDocument.Parse(newCommitBody);
+        var newCommitSha = newCommitDoc.RootElement.GetProperty("sha").GetString()
+            ?? throw new InvalidOperationException("Could not resolve new commit SHA.");
+
+        var updateRefPayload = JsonSerializer.Serialize(new
+        {
+            sha = newCommitSha,
+            force = false
+        });
+
+        var updateRefResponse = await _httpClient.PatchAsync(
+            $"repos/{_githubOptions.Owner}/{_githubOptions.Repo}/git/refs/heads/{Uri.EscapeDataString(branchName)}",
+            new StringContent(updateRefPayload, Encoding.UTF8, "application/json"),
+            cancellationToken);
+        var updateRefBody = await updateRefResponse.Content.ReadAsStringAsync(cancellationToken);
+        updateRefResponse.EnsureSuccessStatusCode();
+    }
+
+    private async Task<string> GetBranchHeadShaAsync(string branchName, CancellationToken cancellationToken)
+    {
+        var response = await _httpClient.GetAsync(
+            $"repos/{_githubOptions.Owner}/{_githubOptions.Repo}/git/ref/heads/{Uri.EscapeDataString(branchName)}",
+            cancellationToken);
+        var body = await response.Content.ReadAsStringAsync(cancellationToken);
+        response.EnsureSuccessStatusCode();
+
+        using var doc = JsonDocument.Parse(body);
+        return doc.RootElement.GetProperty("object").GetProperty("sha").GetString()
+            ?? throw new InvalidOperationException($"Could not resolve head SHA for branch '{branchName}'.");
+    }
+
     /// <summary>
     /// Creates an ephemeral GitHub Issue with the story plan and coding instructions.
     /// This issue serves as the "prompt" to Copilot and is auto-closed after reconciliation.
     /// </summary>
     private async Task<int> CreateGitHubIssueAsync(CodingContext context, CancellationToken cancellationToken)
     {
-        var issueBody = BuildIssueBody(context, _agentAssignee);
+        var issueBody = BuildIssueBody(context, _agentAssignee, _githubOptions.Owner, _githubOptions.Repo);
         var assigneeCandidates = BuildAssigneeCandidates(_agentAssignee);
         var primaryAssignee = assigneeCandidates.FirstOrDefault();
 
@@ -639,7 +831,11 @@ public sealed class CopilotCodingStrategy : ICodingStrategy
     /// Includes the plan, acceptance criteria, coding guidelines, and explicit
     /// instructions about which branch to work on.
     /// </summary>
-    internal static string BuildIssueBody(CodingContext context, string? agentName = null)
+    internal static string BuildIssueBody(
+        CodingContext context,
+        string? agentName = null,
+        string? gitHubOwner = null,
+        string? gitHubRepo = null)
     {
         var sb = new StringBuilder();
 
@@ -687,7 +883,13 @@ public sealed class CopilotCodingStrategy : ICodingStrategy
         {
             sb.AppendLine("## Description");
             sb.AppendLine();
-            sb.AppendLine(context.WorkItem.Description);
+            sb.AppendLine(GitHubIssueHtmlRenderer.RewriteAdoHtml(
+                context.WorkItem.Description,
+                gitHubOwner,
+                gitHubRepo,
+                context.BranchName,
+                context.AttachedImagePaths,
+                context.SupportingArtifactsInBranch));
             sb.AppendLine();
         }
 
@@ -695,11 +897,17 @@ public sealed class CopilotCodingStrategy : ICodingStrategy
         {
             sb.AppendLine("## Acceptance Criteria");
             sb.AppendLine();
-            sb.AppendLine(context.WorkItem.AcceptanceCriteria);
+            sb.AppendLine(GitHubIssueHtmlRenderer.RewriteAdoHtml(
+                context.WorkItem.AcceptanceCriteria,
+                gitHubOwner,
+                gitHubRepo,
+                context.BranchName,
+                context.AttachedImagePaths,
+                context.SupportingArtifactsInBranch));
             sb.AppendLine();
         }
 
-        if (!string.IsNullOrWhiteSpace(context.StoryDocumentsFolder))
+        if (context.SupportingArtifactsInBranch && !string.IsNullOrWhiteSpace(context.StoryDocumentsFolder))
         {
             sb.AppendLine("## Story Supporting Files Folder");
             sb.AppendLine();
@@ -708,7 +916,7 @@ public sealed class CopilotCodingStrategy : ICodingStrategy
             sb.AppendLine();
         }
 
-        if (context.AttachedImagePaths.Count > 0)
+        if (context.SupportingArtifactsInBranch && context.AttachedImagePaths.Count > 0)
         {
             sb.AppendLine("## Attached Visual References");
             sb.AppendLine();
@@ -720,7 +928,7 @@ public sealed class CopilotCodingStrategy : ICodingStrategy
             sb.AppendLine();
         }
 
-        if (context.AttachedDocumentPaths.Count > 0)
+        if (context.SupportingArtifactsInBranch && context.AttachedDocumentPaths.Count > 0)
         {
             sb.AppendLine("## Attached Document References");
             sb.AppendLine();

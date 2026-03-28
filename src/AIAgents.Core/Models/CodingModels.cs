@@ -36,6 +36,12 @@ public sealed record CodingContext
     public string StoryDocumentsFolder { get; init; } = string.Empty;
 
     /// <summary>
+    /// Local filesystem root where supporting files were materialized for this story.
+    /// Empty when no supporting files were downloaded.
+    /// </summary>
+    public string SupportingArtifactsLocalRootPath { get; init; } = string.Empty;
+
+    /// <summary>
     /// Repository-relative paths to image attachments materialized from the ADO work item.
     /// </summary>
     public IReadOnlyList<string> AttachedImagePaths { get; init; } = [];
@@ -44,6 +50,11 @@ public sealed record CodingContext
     /// Repository-relative paths to document attachments materialized from the ADO work item.
     /// </summary>
     public IReadOnlyList<string> AttachedDocumentPaths { get; init; } = [];
+
+    /// <summary>
+    /// True when supporting artifacts were uploaded to the GitHub feature branch.
+    /// </summary>
+    public bool SupportingArtifactsInBranch { get; init; }
 
     /// <summary>
     /// The feature branch name (e.g., "feature/US-123").

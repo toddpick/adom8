@@ -219,6 +219,7 @@ public sealed class CodingAgentService : IAgentService
                 CodingGuidelines = codebaseCtx,
                 ExistingFilesSummary = fileListSummary,
                 StoryDocumentsFolder = supportingArtifacts.StoryDocumentsFolder,
+                SupportingArtifactsLocalRootPath = supportingArtifacts.LocalRootPath,
                 AttachedImagePaths = supportingArtifacts.ImagePaths,
                 AttachedDocumentPaths = supportingArtifacts.DocumentPaths,
                 BranchName = branchName,

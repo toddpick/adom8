@@ -24,7 +24,12 @@ public sealed class CopilotCodingStrategyTests
         string? description = "As a user, I want to register with my email.",
         string? acceptanceCriteria = "- Users can register\n- Emails validated",
         string codingGuidelines = "Use C# conventions. Follow SOLID principles.",
-        int autonomyLevel = 3)
+        int autonomyLevel = 3,
+        string storyDocumentsFolder = "",
+        IReadOnlyList<string>? attachedImagePaths = null,
+        IReadOnlyList<string>? attachedDocumentPaths = null,
+        string supportingArtifactsLocalRootPath = "",
+        bool supportingArtifactsInBranch = false)
     {
         var wi = MockAIResponses.SampleWorkItem(
             id: workItemId,
@@ -41,6 +46,11 @@ public sealed class CopilotCodingStrategyTests
             PlanMarkdown = plan,
             CodingGuidelines = codingGuidelines,
             ExistingFilesSummary = "src/Program.cs\nsrc/Service.cs",
+            StoryDocumentsFolder = storyDocumentsFolder,
+            SupportingArtifactsLocalRootPath = supportingArtifactsLocalRootPath,
+            AttachedImagePaths = attachedImagePaths ?? Array.Empty<string>(),
+            AttachedDocumentPaths = attachedDocumentPaths ?? Array.Empty<string>(),
+            SupportingArtifactsInBranch = supportingArtifactsInBranch,
             BranchName = branchName,
             CorrelationId = "test-corr-123"
         };
@@ -133,6 +143,22 @@ public sealed class CopilotCodingStrategyTests
 
         Assert.Contains("## Description", body);
         Assert.Contains("Custom description for Copilot", body);
+    }
+
+    [Fact]
+    public void BuildIssueBody_RewritesAdoImageTagsToGitHubBranchUrls()
+    {
+        const string description = "<div>Preview</div><div><img src=\"https://dev.azure.com/org/proj/_apis/wit/attachments/abc?fileName=image.png\" alt=\"Image\"></div>";
+        var context = CreateContext(
+            description: description,
+            storyDocumentsFolder: ".ado/stories/US-12345/documents",
+            attachedImagePaths: [".ado/stories/US-12345/documents/image.png"],
+            supportingArtifactsInBranch: true);
+
+        var body = CopilotCodingStrategy.BuildIssueBody(context, "copilot", "owner", "repo");
+
+        Assert.Contains("https://github.com/owner/repo/blob/feature/US-12345/.ado/stories/US-12345/documents/image.png?raw=1", body);
+        Assert.DoesNotContain("dev.azure.com/org/proj/_apis/wit/attachments/abc", body);
     }
 
     [Fact]
@@ -344,6 +370,74 @@ public sealed class CopilotCodingStrategyTests
         Assert.Equal("Pending", delegation.Status);
     }
 
+    [Fact]
+    public async Task ExecuteAsync_UploadsSupportingArtifactsBeforeCreatingIssue()
+    {
+        var githubOptions = Options.Create(new AIAgents.Core.Configuration.GitHubOptions
+        {
+            Owner = "toddpick",
+            Repo = "adom8",
+            Token = "test-token",
+            BaseBranch = "main"
+        });
+        var copilotOptions = Options.Create(new AIAgents.Core.Configuration.CopilotOptions
+        {
+            Enabled = true,
+            CreateIssue = true,
+            Model = "copilot"
+        });
+
+        var delegationService = new DelayedInMemoryDelegationService(TimeSpan.Zero);
+        var logger = new Mock<ILogger>();
+        var handler = new FakeGitHubHandler();
+        var httpClient = new HttpClient(handler)
+        {
+            BaseAddress = new Uri("https://api.github.com/")
+        };
+
+        var strategy = new CopilotCodingStrategy(
+            githubOptions,
+            copilotOptions,
+            delegationService,
+            logger.Object,
+            httpClient: httpClient);
+
+        var root = Path.Combine(Path.GetTempPath(), $"copilot-supporting-{Guid.NewGuid():N}");
+        var relativeImagePath = ".ado/stories/US-149/documents/image.png";
+        var fullImagePath = Path.Combine(root, relativeImagePath.Replace('/', Path.DirectorySeparatorChar));
+        Directory.CreateDirectory(Path.GetDirectoryName(fullImagePath)!);
+        await File.WriteAllBytesAsync(fullImagePath, [0x01, 0x02, 0x03], CancellationToken.None);
+
+        try
+        {
+            var context = CreateContext(
+                workItemId: 149,
+                branchName: "feature/US-149",
+                description: "<div>Preview</div><div><img src=\"https://dev.azure.com/org/proj/_apis/wit/attachments/abc?fileName=image.png\" alt=\"Image\"></div>",
+                storyDocumentsFolder: ".ado/stories/US-149/documents",
+                attachedImagePaths: [relativeImagePath],
+                supportingArtifactsLocalRootPath: root);
+
+            var result = await strategy.ExecuteAsync(context, CancellationToken.None);
+
+            Assert.Equal("copilot-delegated", result.Mode);
+            Assert.Equal(1, handler.BlobCreateCount);
+            Assert.Equal(1, handler.TreeCreateCount);
+            Assert.Equal(1, handler.CommitCreateCount);
+            Assert.Equal(1, handler.RefPatchCount);
+            Assert.NotNull(handler.LastIssueBody);
+            Assert.Contains("https://github.com/toddpick/adom8/blob/feature/US-149/.ado/stories/US-149/documents/image.png?raw=1", handler.LastIssueBody);
+            Assert.DoesNotContain("dev.azure.com/org/proj/_apis/wit/attachments/abc", handler.LastIssueBody);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
+    }
+
     private sealed class DelayedInMemoryDelegationService : ICopilotDelegationService
     {
         private readonly TimeSpan _lookupDelay;
@@ -430,25 +524,70 @@ public sealed class CopilotCodingStrategyTests
     private sealed class FakeGitHubHandler : HttpMessageHandler
     {
         private int _issueCounter = 100;
+        private int _blobCounter = 200;
+        private int _commitCounter = 300;
 
         public int IssueCreateCount { get; private set; }
+        public int BlobCreateCount { get; private set; }
+        public int TreeCreateCount { get; private set; }
+        public int CommitCreateCount { get; private set; }
+        public int RefPatchCount { get; private set; }
+        public string? LastIssueBody { get; private set; }
 
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
             var path = request.RequestUri?.PathAndQuery ?? string.Empty;
 
-            if (request.Method == HttpMethod.Get && path.Contains("/git/ref/heads/feature%2FUS-148", StringComparison.Ordinal))
+            if (request.Method == HttpMethod.Get && path.Contains("/git/ref/heads/", StringComparison.Ordinal))
             {
                 return Json(HttpStatusCode.OK, new
                 {
-                    @ref = "refs/heads/feature/US-148",
+                    @ref = "refs/heads/feature/test",
                     @object = new { sha = "abc123" }
                 });
+            }
+
+            if (request.Method == HttpMethod.Get && path.Contains("/git/commits/abc123", StringComparison.Ordinal))
+            {
+                return Json(HttpStatusCode.OK, new
+                {
+                    sha = "abc123",
+                    tree = new { sha = "tree-base-123" }
+                });
+            }
+
+            if (request.Method == HttpMethod.Post && path.EndsWith("/git/blobs", StringComparison.Ordinal))
+            {
+                BlobCreateCount++;
+                var blobNumber = Interlocked.Increment(ref _blobCounter);
+                return Json(HttpStatusCode.Created, new { sha = $"blob-{blobNumber}" });
+            }
+
+            if (request.Method == HttpMethod.Post && path.EndsWith("/git/trees", StringComparison.Ordinal))
+            {
+                TreeCreateCount++;
+                return Json(HttpStatusCode.Created, new { sha = "tree-new-123" });
+            }
+
+            if (request.Method == HttpMethod.Post && path.EndsWith("/git/commits", StringComparison.Ordinal))
+            {
+                CommitCreateCount++;
+                var commitNumber = Interlocked.Increment(ref _commitCounter);
+                return Json(HttpStatusCode.Created, new { sha = $"commit-{commitNumber}" });
+            }
+
+            if (request.Method == HttpMethod.Patch && path.Contains("/git/refs/heads/", StringComparison.Ordinal))
+            {
+                RefPatchCount++;
+                return Json(HttpStatusCode.OK, new { });
             }
 
             if (request.Method == HttpMethod.Post && path.EndsWith("/issues", StringComparison.Ordinal))
             {
                 IssueCreateCount++;
+                var requestBody = await request.Content!.ReadAsStringAsync(cancellationToken);
+                using var issueDoc = JsonDocument.Parse(requestBody);
+                LastIssueBody = issueDoc.RootElement.GetProperty("body").GetString();
                 await Task.Delay(200, cancellationToken);
                 var issueNumber = Interlocked.Increment(ref _issueCounter);
                 return Json(HttpStatusCode.Created, new { number = issueNumber });
@@ -459,7 +598,7 @@ public sealed class CopilotCodingStrategyTests
                 return Json(HttpStatusCode.Created, new { });
             }
 
-            if (request.Method == HttpMethod.Get && path.Contains("/issues/101", StringComparison.Ordinal))
+            if (request.Method == HttpMethod.Get && path.Contains("/issues/", StringComparison.Ordinal) && !path.Contains("/comments", StringComparison.Ordinal))
             {
                 return Json(HttpStatusCode.OK, new
                 {
@@ -473,11 +612,6 @@ public sealed class CopilotCodingStrategyTests
             if (request.Method == HttpMethod.Post && path.Contains("/comments", StringComparison.Ordinal))
             {
                 return Json(HttpStatusCode.Created, new { });
-            }
-
-            if (request.Method == HttpMethod.Patch && path.Contains("/issues/101", StringComparison.Ordinal))
-            {
-                return Json(HttpStatusCode.OK, new { });
             }
 
             throw new InvalidOperationException($"Unexpected GitHub request: {request.Method} {path}");

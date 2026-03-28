@@ -480,7 +480,13 @@ public sealed class GitHubOrchestrationLauncherService : IGitHubOrchestrationLau
         {
             sb.AppendLine("## Description");
             sb.AppendLine();
-            sb.AppendLine(workItem.Description);
+            sb.AppendLine(GitHubIssueHtmlRenderer.RewriteAdoHtml(
+                workItem.Description,
+                null,
+                null,
+                branchName,
+                supportingArtifacts.ImagePaths,
+                supportingArtifacts.ImagePaths.Count > 0));
             sb.AppendLine();
         }
 
@@ -488,7 +494,13 @@ public sealed class GitHubOrchestrationLauncherService : IGitHubOrchestrationLau
         {
             sb.AppendLine("## Acceptance Criteria");
             sb.AppendLine();
-            sb.AppendLine(workItem.AcceptanceCriteria);
+            sb.AppendLine(GitHubIssueHtmlRenderer.RewriteAdoHtml(
+                workItem.AcceptanceCriteria,
+                null,
+                null,
+                branchName,
+                supportingArtifacts.ImagePaths,
+                supportingArtifacts.ImagePaths.Count > 0));
             sb.AppendLine();
         }
 

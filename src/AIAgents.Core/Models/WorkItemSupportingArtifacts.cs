@@ -6,6 +6,12 @@ namespace AIAgents.Core.Models;
 public sealed record WorkItemSupportingArtifacts
 {
     /// <summary>
+    /// Local filesystem root where supporting files were materialized.
+    /// Empty when no files were downloaded.
+    /// </summary>
+    public string LocalRootPath { get; init; } = string.Empty;
+
+    /// <summary>
     /// Repository-relative folder containing downloaded supporting files for this story.
     /// Empty when no files were downloaded.
     /// </summary>

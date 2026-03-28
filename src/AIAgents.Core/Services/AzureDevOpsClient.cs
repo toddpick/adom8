@@ -329,6 +329,7 @@ public sealed class AzureDevOpsClient : IAzureDevOpsClient, IDisposable
 
         return new WorkItemSupportingArtifacts
         {
+            LocalRootPath = materializationRoot,
             StoryDocumentsFolder = Path.GetRelativePath(materializationRoot, outputDir).Replace('\\', '/'),
             ImagePaths = imagePaths,
             DocumentPaths = documentPaths,
