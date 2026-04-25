@@ -1,0 +1,44 @@
+trigger:
+  branches:
+    include:
+      - main
+
+stages:
+  - stage: DeployShared
+    jobs:
+      - job: Bicep
+        steps:
+          - task: AzureCLI@2
+            displayName: Deploy shared infrastructure
+            inputs:
+              azureSubscription: adom8-shared-connection
+              scriptType: bash
+              scriptLocation: inlineScript
+              inlineScript: |
+                az deployment sub create \
+                  --location westus2 \
+                  --template-file infra/shared.bicep \
+                  --parameters resourceGroupName=rg-adom8-shared
+
+      - job: DeployRegistrationApi
+        dependsOn: Bicep
+        steps:
+          - task: DotNetCoreCLI@2
+            displayName: Build Registration API
+            inputs:
+              command: publish
+              projects: src/Functions/*.csproj
+
+          - task: AzureFunctionApp@2
+            displayName: Deploy Registration API
+            inputs:
+              azureSubscription: adom8-shared-connection
+              appName: fa-adom8-registration
+
+      - job: DeployOnboardingUI
+        dependsOn: Bicep
+        steps:
+          - task: AzureStaticWebApp@0
+            inputs:
+              app_location: src/web
+              output_location: out
