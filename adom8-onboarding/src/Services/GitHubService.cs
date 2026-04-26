@@ -36,9 +36,18 @@ public sealed class GitHubService : IGitHubService
 
     private static (string owner, string repo) ParseRepo(string repoUrl)
     {
-        var uri = new Uri(repoUrl);
-        var parts = uri.AbsolutePath.Trim('/').Split('/');
+        string path;
+        if (Uri.TryCreate(repoUrl, UriKind.Absolute, out var uri))
+        {
+            path = uri.AbsolutePath;
+        }
+        else
+        {
+            path = repoUrl;
+        }
+
+        var parts = path.Trim('/').Split('/', StringSplitOptions.RemoveEmptyEntries);
         if (parts.Length < 2) throw new ArgumentException("Invalid GitHub repository URL.");
-        return (parts[0], parts[1]);
+        return (parts[0], parts[1].EndsWith(".git", StringComparison.OrdinalIgnoreCase) ? parts[1][..^4] : parts[1]);
     }
 }

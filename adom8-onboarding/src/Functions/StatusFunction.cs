@@ -10,7 +10,7 @@ public sealed class StatusFunction
 {
     [Function("GetProvisioningStatus")]
     public async Task<HttpResponseData> GetStatus(
-        [HttpTrigger(AuthorizationLevel.Anonymous, "get", Route = "projects/{provisioningId}/status")] HttpRequestData req,
+        [HttpTrigger(AuthorizationLevel.Function, "get", Route = "projects/{provisioningId}/status")] HttpRequestData req,
         [DurableClient] DurableTaskClient client,
         string provisioningId)
     {

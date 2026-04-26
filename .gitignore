@@ -42,6 +42,8 @@ terraform.rc
 
 # Node
 node_modules/
+.next/
+out/
 npm-debug.log*
 
 # IDE

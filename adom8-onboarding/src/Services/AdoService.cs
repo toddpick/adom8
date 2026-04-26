@@ -18,7 +18,9 @@ public sealed class AdoService : IAdoService
     {
         var client = _httpClientFactory.CreateClient();
         var token = Convert.ToBase64String(System.Text.Encoding.ASCII.GetBytes($":{pat}"));
-        using var request = new HttpRequestMessage(HttpMethod.Get, $"{adoOrg}/_apis/projects/{adoProject}?api-version=7.1-preview.4");
+        var organizationUrl = NormalizeOrganizationUrl(adoOrg);
+        var projectSegment = Uri.EscapeDataString(adoProject);
+        using var request = new HttpRequestMessage(HttpMethod.Get, $"{organizationUrl}/_apis/projects/{projectSegment}?api-version=7.1-preview.4");
         request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Basic", token);
 
         var response = await client.SendAsync(request, cancellationToken);
@@ -26,5 +28,16 @@ public sealed class AdoService : IAdoService
         {
             throw new InvalidOperationException($"ADO project validation failed with {(int)response.StatusCode}.");
         }
+    }
+
+    private static string NormalizeOrganizationUrl(string adoOrg)
+    {
+        var trimmed = adoOrg.Trim().TrimEnd('/');
+        if (Uri.TryCreate(trimmed, UriKind.Absolute, out var uri))
+        {
+            return uri.GetLeftPart(UriPartial.Path).TrimEnd('/');
+        }
+
+        return $"https://dev.azure.com/{trimmed}";
     }
 }

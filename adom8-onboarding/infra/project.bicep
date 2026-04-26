@@ -1,5 +1,8 @@
+targetScope = 'subscription'
+
 param projectId string
 param location string = 'westus2'
+param sharedResourceGroupName string = 'rg-adom8-shared'
 param sharedKeyVaultName string = 'kv-adom8-shared'
 param sharedServiceBusNamespace string = 'sb-adom8-shared'
 
@@ -22,3 +25,19 @@ module projectResources './project.resources.bicep' = {
     location: location
   }
 }
+
+module projectMessaging './project.messaging.bicep' = {
+  name: 'adom8-project-messaging-${projectId}'
+  scope: resourceGroup(sharedResourceGroupName)
+  params: {
+    projectId: projectId
+    sharedKeyVaultName: sharedKeyVaultName
+    sharedServiceBusNamespace: sharedServiceBusNamespace
+    projectFunctionPrincipalId: projectResources.outputs.functionPrincipalId
+  }
+}
+
+output resourceGroupName string = rg.name
+output functionAppName string = projectResources.outputs.functionAppName
+output storageAccountName string = projectResources.outputs.storageAccountName
+output serviceBusTopicName string = projectMessaging.outputs.serviceBusTopicName

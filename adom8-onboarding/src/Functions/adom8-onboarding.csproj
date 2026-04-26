@@ -8,6 +8,13 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Include="..\Activities\**\*.cs" LinkBase="Activities" />
+    <Compile Include="..\Models\**\*.cs" LinkBase="Models" />
+    <Compile Include="..\Orchestrators\**\*.cs" LinkBase="Orchestrators" />
+    <Compile Include="..\Services\**\*.cs" LinkBase="Services" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="Microsoft.Azure.Functions.Worker" Version="1.23.0" />
     <PackageReference Include="Microsoft.Azure.Functions.Worker.Sdk" Version="1.18.0" OutputItemType="Analyzer" />
     <PackageReference Include="Microsoft.Azure.Functions.Worker.Extensions.Http" Version="3.2.0" />

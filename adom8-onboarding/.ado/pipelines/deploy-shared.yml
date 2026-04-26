@@ -3,6 +3,13 @@ trigger:
     include:
       - main
 
+variables:
+  azureServiceConnection: adom8-shared-connection
+  location: westus2
+  sharedResourceGroupName: rg-adom8-shared
+  onboardingFunctionAppName: fa-adom8-registration
+  onboardingStaticWebAppName: stapp-adom8-onboarding
+
 stages:
   - stage: DeployShared
     jobs:
@@ -11,14 +18,18 @@ stages:
           - task: AzureCLI@2
             displayName: Deploy shared infrastructure
             inputs:
-              azureSubscription: adom8-shared-connection
+              azureSubscription: $(azureServiceConnection)
               scriptType: bash
               scriptLocation: inlineScript
               inlineScript: |
                 az deployment sub create \
-                  --location westus2 \
-                  --template-file infra/shared.bicep \
-                  --parameters resourceGroupName=rg-adom8-shared
+                  --location $(location) \
+                  --template-file adom8-onboarding/infra/shared.bicep \
+                  --parameters \
+                    resourceGroupName=$(sharedResourceGroupName) \
+                    location=$(location) \
+                    onboardingFunctionAppName=$(onboardingFunctionAppName) \
+                    onboardingStaticWebAppName=$(onboardingStaticWebAppName)
 
       - job: DeployRegistrationApi
         dependsOn: Bicep
@@ -27,18 +38,81 @@ stages:
             displayName: Build Registration API
             inputs:
               command: publish
-              projects: src/Functions/*.csproj
+              publishWebProjects: false
+              projects: adom8-onboarding/src/Functions/adom8-onboarding.csproj
+              arguments: --configuration Release --output $(Build.ArtifactStagingDirectory)/onboarding-functions
+              zipAfterPublish: true
 
           - task: AzureFunctionApp@2
             displayName: Deploy Registration API
             inputs:
-              azureSubscription: adom8-shared-connection
-              appName: fa-adom8-registration
+              azureSubscription: $(azureServiceConnection)
+              appType: functionApp
+              appName: $(onboardingFunctionAppName)
+              package: $(Build.ArtifactStagingDirectory)/onboarding-functions/**/*.zip
 
       - job: DeployOnboardingUI
-        dependsOn: Bicep
+        dependsOn:
+          - Bicep
+          - DeployRegistrationApi
         steps:
+          - task: NodeTool@0
+            inputs:
+              versionSpec: 20.x
+            displayName: Install Node.js 20
+
+          - script: npm ci
+            workingDirectory: adom8-onboarding/src/web
+            displayName: Install onboarding UI dependencies
+
+          - task: AzureCLI@2
+            displayName: Fetch onboarding API settings
+            inputs:
+              azureSubscription: $(azureServiceConnection)
+              scriptType: bash
+              scriptLocation: inlineScript
+              inlineScript: |
+                subscriptionId=$(az account show --query id -o tsv)
+                functionKey=$(az rest --method post \
+                  --uri "https://management.azure.com/subscriptions/${subscriptionId}/resourceGroups/$(sharedResourceGroupName)/providers/Microsoft.Web/sites/$(onboardingFunctionAppName)/host/default/listKeys?api-version=2022-03-01" \
+                  --query "functionKeys.default" -o tsv)
+
+                if [ -z "$functionKey" ] || [ "$functionKey" = "null" ]; then
+                  echo "Onboarding Function App key was not returned."
+                  exit 1
+                fi
+
+                echo "##vso[task.setvariable variable=ONBOARDING_API_BASE_URL]https://$(onboardingFunctionAppName).azurewebsites.net"
+                echo "##vso[task.setvariable variable=ONBOARDING_FUNCTION_KEY;issecret=true]$functionKey"
+
+          - script: npm run build
+            workingDirectory: adom8-onboarding/src/web
+            displayName: Build onboarding UI
+            env:
+              NEXT_PUBLIC_ONBOARDING_API_BASE_URL: $(ONBOARDING_API_BASE_URL)
+              NEXT_PUBLIC_ONBOARDING_FUNCTION_KEY: $(ONBOARDING_FUNCTION_KEY)
+
+          - task: AzureCLI@2
+            displayName: Fetch Static Web App deployment token
+            inputs:
+              azureSubscription: $(azureServiceConnection)
+              scriptType: bash
+              scriptLocation: inlineScript
+              inlineScript: |
+                token=$(az staticwebapp secrets list \
+                  --name $(onboardingStaticWebAppName) \
+                  --resource-group $(sharedResourceGroupName) \
+                  --query "properties.apiKey" -o tsv)
+
+                if [ -z "$token" ] || [ "$token" = "null" ]; then
+                  echo "Static Web App deployment token was not returned."
+                  exit 1
+                fi
+
+                echo "##vso[task.setvariable variable=STATIC_WEB_APP_API_TOKEN;issecret=true]$token"
+
           - task: AzureStaticWebApp@0
             inputs:
-              app_location: src/web
-              output_location: out
+              azure_static_web_apps_api_token: $(STATIC_WEB_APP_API_TOKEN)
+              app_location: adom8-onboarding/src/web
+              output_location: .next
