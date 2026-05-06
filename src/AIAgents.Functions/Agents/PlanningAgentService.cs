@@ -157,8 +157,27 @@ Respond ONLY with valid JSON matching this structure:
   ""dependencies"": [""string""],
   ""risks"": [""string""],
   ""assumptions"": [""string""],
-  ""testingStrategy"": ""string""
+  ""testingStrategy"": ""string"",
+  ""spec"": {
+    ""summary"": ""string — one-paragraph statement of what is being built and why"",
+    ""components"": [""string — interface/class/service/UI component touched""],
+    ""behaviors"": [""string — concrete behavior the implementation must exhibit""],
+    ""acceptanceCriteria"": [""string — checkable bullet derived from the story""],
+    ""nonGoals"": [""string — explicitly out of scope""]
+  },
+  ""ambiguities"": [
+    {
+      ""topic"": ""string — short label"",
+      ""question"": ""string — the unresolved question framed for a human"",
+      ""source"": ""story|codebase|skill|external"",
+      ""assumption"": ""string — working assumption if proceeding without clarification (may be empty)""
+    }
+  ]
 }
+
+The `spec` and `ambiguities` arrays drive Coding-agent-facing artifacts (SPEC.md, AMBIGUITIES.md):
+- spec: derive from the story description, the existing codebase context surfaced above, and any referenced skill files. It should read like a spec the Coding agent can follow, not a human-authored design doc.
+- ambiguities: only include items you cannot resolve from the inputs already provided. If the story is well-defined and the codebase has a single obvious pattern, return an empty array. Each ambiguity must include a usable working assumption so the Coding agent can proceed at higher autonomy levels.
 
 ALWAYS include the full plan even when proceed=false — the analyst needs the analysis to fix the story.
 If unverified external dependencies are detected, add a warning note in the technicalApproach field.";
@@ -242,13 +261,59 @@ Analyze this story and create a comprehensive implementation plan.";
         await context.WriteArtifactAsync("ACCEPTANCE_TRACE.json", JsonSerializer.Serialize(acceptanceTrace, s_artifactJsonOptions), cancellationToken);
         await context.WriteArtifactAsync("INITIALIZATION_BUNDLE.json", JsonSerializer.Serialize(initializationBundle, s_artifactJsonOptions), cancellationToken);
 
+        // 9b. Render SPEC.md and AMBIGUITIES.md — derived from the same inputs
+        // the agent already has. The ambiguity disposition is computed up-front
+        // so AMBIGUITIES.md records the actual routing decision.
+        var ambiguityDisposition = ResolveAmbiguityDisposition(planResult.Ambiguities, workItem.AutonomyLevel);
+
+        var specModel = new Dictionary<string, object?>
+        {
+            ["WORK_ITEM_ID"] = $"US-{workItem.Id}",
+            ["TITLE"] = workItem.Title,
+            ["ACCEPTANCE_CRITERIA"] = workItem.AcceptanceCriteria ?? "No acceptance criteria",
+            ["AFFECTED_FILES"] = planResult.AffectedFiles,
+            ["SPEC_SUMMARY"] = planResult.Spec?.Summary is { Length: > 0 } summary
+                ? summary
+                : planResult.ProblemAnalysis,
+            ["SPEC_COMPONENTS"] = planResult.Spec?.Components ?? (IReadOnlyList<string>)Array.Empty<string>(),
+            ["SPEC_BEHAVIORS"] = planResult.Spec?.Behaviors ?? (IReadOnlyList<string>)Array.Empty<string>(),
+            ["SPEC_ACCEPTANCE"] = planResult.Spec?.AcceptanceCriteria ?? (IReadOnlyList<string>)Array.Empty<string>(),
+            ["SPEC_NON_GOALS"] = planResult.Spec?.NonGoals ?? (IReadOnlyList<string>)Array.Empty<string>(),
+            ["TIMESTAMP"] = DateTime.UtcNow.ToString("O")
+        };
+        var renderedSpec = await _templateEngine.RenderAsync("SPEC.template.md", specModel, cancellationToken);
+        await context.WriteArtifactAsync("SPEC.md", renderedSpec, cancellationToken);
+
+        var ambiguitiesModel = new Dictionary<string, object?>
+        {
+            ["WORK_ITEM_ID"] = $"US-{workItem.Id}",
+            ["TITLE"] = workItem.Title,
+            ["AUTONOMY_LEVEL"] = workItem.AutonomyLevel,
+            ["AMBIGUITIES"] = planResult.Ambiguities
+                .Select(a => new Dictionary<string, object?>
+                {
+                    ["topic"] = a.Topic,
+                    ["question"] = a.Question,
+                    ["source"] = a.Source,
+                    ["assumption"] = a.Assumption
+                })
+                .ToList(),
+            ["AMBIGUITY_DISPOSITION"] = ambiguityDisposition.Label,
+            ["ROUTING_NOTE"] = ambiguityDisposition.RoutingNote,
+            ["TIMESTAMP"] = DateTime.UtcNow.ToString("O")
+        };
+        var renderedAmbiguities = await _templateEngine.RenderAsync("AMBIGUITIES.template.md", ambiguitiesModel, cancellationToken);
+        await context.WriteArtifactAsync("AMBIGUITIES.md", renderedAmbiguities, cancellationToken);
+
         // 10. Commit plan files to GitHub via API (atomic, no local clone)
         await _githubContext.WriteFilesAsync(
             branchName,
             new Dictionary<string, string>
             {
                 [$".ado/stories/US-{workItem.Id}/PLAN.md"] = renderedPlan,
-                [$".ado/stories/US-{workItem.Id}/TASKS.md"] = renderedTasks
+                [$".ado/stories/US-{workItem.Id}/TASKS.md"] = renderedTasks,
+                [$".ado/stories/US-{workItem.Id}/SPEC.md"] = renderedSpec,
+                [$".ado/stories/US-{workItem.Id}/AMBIGUITIES.md"] = renderedAmbiguities
             },
             $"[AI Planning] US-{workItem.Id}: {workItem.Title}",
             cancellationToken);
@@ -324,6 +389,10 @@ Analyze this story and create a comprehensive implementation plan.";
                 Details = readiness.Reason
             };
             state.AcceptanceTrace = acceptanceTrace;
+            AddDocArtifact(state.Artifacts.Docs, "PLAN.md");
+            AddDocArtifact(state.Artifacts.Docs, "TASKS.md");
+            AddDocArtifact(state.Artifacts.Docs, "SPEC.md");
+            AddDocArtifact(state.Artifacts.Docs, "AMBIGUITIES.md");
             state.Decisions.Add(new Decision
             {
                 Agent = "Planning",
@@ -345,6 +414,74 @@ Analyze this story and create a comprehensive implementation plan.";
             return AgentResult.Ok(aiResult.Usage?.TotalTokens ?? 0, aiResult.Usage?.EstimatedCost ?? 0m);
         }
 
+        // 12b. Ambiguity gate — readiness already passed, but if Planning
+        // surfaced ambiguities and the story's autonomy level is below the
+        // self-resolve threshold, route back to the analyst before coding.
+        if (ambiguityDisposition.RouteBack)
+        {
+            _logger.LogInformation(
+                "Planning agent routing WI-{WorkItemId} to Needs Revision due to {Count} ambiguities at autonomy level {Level}",
+                task.WorkItemId, planResult.Ambiguities.Count, workItem.AutonomyLevel);
+
+            var ambiguityList = string.Join("<br/>", planResult.Ambiguities.Select(a =>
+                $"❓ <b>{System.Net.WebUtility.HtmlEncode(a.Topic)}:</b> {System.Net.WebUtility.HtmlEncode(a.Question)}"));
+
+            await _adoClient.AddWorkItemCommentAsync(workItem.Id,
+                $"<b>🚧 AI Planning Agent — Ambiguities Need Clarification</b><br/>" +
+                $"<b>Autonomy Level:</b> {workItem.AutonomyLevel} (below self-resolve threshold of {AmbiguitySelfResolveThreshold})<br/>" +
+                $"<b>Open Items:</b><br/>{ambiguityList}<br/><br/>" +
+                $"See <code>AMBIGUITIES.md</code> for full detail. Resolve or raise the autonomy level, then move the story back to 'AI Agent' to re-trigger the pipeline.",
+                cancellationToken);
+
+            await _adoClient.AddWorkItemCommentAsync(
+                workItem.Id,
+                $"Moved to Needs Revision. Reason: {planResult.Ambiguities.Count} ambiguities surfaced at autonomy level {workItem.AutonomyLevel}.",
+                cancellationToken);
+
+            state.Agents["Planning"] = AgentStatus.Completed();
+            state.Agents["Planning"].AdditionalData = new Dictionary<string, object>
+            {
+                ["triageResult"] = "ambiguities-need-clarification",
+                ["ambiguityCount"] = planResult.Ambiguities.Count,
+                ["autonomyLevel"] = workItem.AutonomyLevel
+            };
+            state.CurrentState = "Needs Revision";
+            state.CurrentStage = "Planning";
+            state.LastActivityUtc = DateTime.UtcNow;
+            state.Blockers = planResult.Ambiguities
+                .Select(a => $"Clarification required: {a.Topic} — {a.Question}")
+                .ToList();
+            state.HandoffRef = new StoryHandoffReference
+            {
+                Source = "PlanningAgentService",
+                Stage = "Needs Revision",
+                CorrelationId = task.CorrelationId,
+                Details = ambiguityDisposition.RoutingNote
+            };
+            state.AcceptanceTrace = acceptanceTrace;
+            AddDocArtifact(state.Artifacts.Docs, "PLAN.md");
+            AddDocArtifact(state.Artifacts.Docs, "TASKS.md");
+            AddDocArtifact(state.Artifacts.Docs, "SPEC.md");
+            AddDocArtifact(state.Artifacts.Docs, "AMBIGUITIES.md");
+            state.Decisions.Add(new Decision
+            {
+                Agent = "Planning",
+                DecisionText = $"Story routed to Needs Revision: {planResult.Ambiguities.Count} ambiguities at autonomy level {workItem.AutonomyLevel}",
+                Rationale = ambiguityDisposition.RoutingNote
+            });
+            await context.SaveStateAsync(state, cancellationToken);
+
+            try { await _adoClient.UpdateWorkItemFieldAsync(workItem.Id, CustomFieldNames.Paths.LastAgent, "Planning", cancellationToken); }
+            catch { /* field may not exist yet */ }
+
+            try { await _adoClient.UpdateWorkItemFieldAsync(workItem.Id, CustomFieldNames.Paths.CurrentAIAgent, string.Empty, cancellationToken); }
+            catch { /* field may not exist yet */ }
+
+            await _adoClient.UpdateWorkItemStateAsync(workItem.Id, "Needs Revision", cancellationToken);
+
+            return AgentResult.Ok(aiResult.Usage?.TotalTokens ?? 0, aiResult.Usage?.EstimatedCost ?? 0m);
+        }
+
         // 13. Story IS ready — proceed to coding
         var readinessInfo = readiness is not null
             ? $"<br/>Readiness: {readiness.ReadinessScore}/100"
@@ -354,8 +491,12 @@ Analyze this story and create a comprehensive implementation plan.";
             ? "<br/>Readiness Override: exploratory Initialize Codebase story allowed to proceed despite research-needed items."
             : "";
 
+        var ambiguityInfo = planResult.Ambiguities.Count > 0
+            ? $"<br/>Ambiguities: {planResult.Ambiguities.Count} (proceeding with documented assumptions; autonomy level {workItem.AutonomyLevel})"
+            : "";
+
         await _adoClient.AddWorkItemCommentAsync(workItem.Id,
-            $"<b>🤖 AI Planning Agent Complete</b><br/>Complexity: {planResult.Complexity} story points<br/>Sub-tasks: {planResult.SubTasks.Count}<br/>Risks: {planResult.Risks.Count}{readinessInfo}{readinessOverrideInfo}",
+            $"<b>🤖 AI Planning Agent Complete</b><br/>Complexity: {planResult.Complexity} story points<br/>Sub-tasks: {planResult.SubTasks.Count}<br/>Risks: {planResult.Risks.Count}{readinessInfo}{readinessOverrideInfo}{ambiguityInfo}",
             cancellationToken);
 
         // 12. Update story state
@@ -374,6 +515,8 @@ Analyze this story and create a comprehensive implementation plan.";
         state.AcceptanceTrace = acceptanceTrace;
         AddDocArtifact(state.Artifacts.Docs, "PLAN.md");
         AddDocArtifact(state.Artifacts.Docs, "TASKS.md");
+        AddDocArtifact(state.Artifacts.Docs, "SPEC.md");
+        AddDocArtifact(state.Artifacts.Docs, "AMBIGUITIES.md");
         AddDocArtifact(state.Artifacts.Docs, "ACCEPTANCE_TRACE.json");
         AddDocArtifact(state.Artifacts.Docs, "INITIALIZATION_BUNDLE.json");
         state.Decisions.Add(new Decision
@@ -573,6 +716,19 @@ Analyze this story and create a comprehensive implementation plan.";
                 };
             }
 
+            PlanningSpec? spec = null;
+            if (root.TryGetProperty("spec", out var specEl) && specEl.ValueKind == JsonValueKind.Object)
+            {
+                spec = new PlanningSpec
+                {
+                    Summary = specEl.TryGetProperty("summary", out var s) ? s.GetString() ?? "" : "",
+                    Components = GetStringArray(specEl, "components"),
+                    Behaviors = GetStringArray(specEl, "behaviors"),
+                    AcceptanceCriteria = GetStringArray(specEl, "acceptanceCriteria"),
+                    NonGoals = GetStringArray(specEl, "nonGoals")
+                };
+            }
+
             return new PlanningResult
             {
                 ProblemAnalysis = root.GetProperty("problemAnalysis").GetString() ?? "",
@@ -585,7 +741,9 @@ Analyze this story and create a comprehensive implementation plan.";
                 Risks = GetStringArray(root, "risks"),
                 Assumptions = GetStringArray(root, "assumptions"),
                 TestingStrategy = root.GetProperty("testingStrategy").GetString() ?? "",
-                Readiness = readiness
+                Readiness = readiness,
+                Spec = spec,
+                Ambiguities = ParseAmbiguities(root)
             };
         }
         catch (JsonException)
@@ -605,6 +763,34 @@ Analyze this story and create a comprehensive implementation plan.";
                 TestingStrategy = "Unit and integration tests recommended"
             };
         }
+    }
+
+    private static List<PlanningAmbiguity> ParseAmbiguities(JsonElement root)
+    {
+        if (!root.TryGetProperty("ambiguities", out var arr) || arr.ValueKind != JsonValueKind.Array)
+            return [];
+
+        var result = new List<PlanningAmbiguity>();
+        foreach (var element in arr.EnumerateArray())
+        {
+            if (element.ValueKind != JsonValueKind.Object)
+                continue;
+
+            var topic = element.TryGetProperty("topic", out var t) ? t.GetString() : null;
+            var question = element.TryGetProperty("question", out var q) ? q.GetString() : null;
+            if (string.IsNullOrWhiteSpace(topic) || string.IsNullOrWhiteSpace(question))
+                continue;
+
+            result.Add(new PlanningAmbiguity
+            {
+                Topic = topic!,
+                Question = question!,
+                Source = element.TryGetProperty("source", out var src) ? src.GetString() ?? "story" : "story",
+                Assumption = element.TryGetProperty("assumption", out var a) ? a.GetString() ?? "" : ""
+            });
+        }
+
+        return result;
     }
 
     private static List<string> GetStringArray(JsonElement root, string propertyName)
@@ -977,6 +1163,42 @@ Analyze this story and create a comprehensive implementation plan.";
             MissingRecommendedPointers = missingPaths
         };
     }
+
+    /// <summary>
+    /// Autonomy level at and above which the Coding agent is allowed to
+    /// proceed with documented assumptions when ambiguities exist. Below
+    /// this threshold, ambiguities route the story back for human
+    /// clarification before coding begins.
+    /// </summary>
+    internal const int AmbiguitySelfResolveThreshold = 4;
+
+    internal static AmbiguityDisposition ResolveAmbiguityDisposition(
+        IReadOnlyList<PlanningAmbiguity> ambiguities,
+        int autonomyLevel)
+    {
+        if (ambiguities.Count == 0)
+        {
+            return new AmbiguityDisposition(
+                RouteBack: false,
+                Label: "None",
+                RoutingNote: "No ambiguities surfaced — Coding Agent may proceed without caveat.");
+        }
+
+        if (autonomyLevel >= AmbiguitySelfResolveThreshold)
+        {
+            return new AmbiguityDisposition(
+                RouteBack: false,
+                Label: $"Proceeding with assumptions (autonomy {autonomyLevel} ≥ {AmbiguitySelfResolveThreshold})",
+                RoutingNote: $"Autonomy level {autonomyLevel} permits self-resolution. The Coding Agent will treat the working assumptions above as decisions.");
+        }
+
+        return new AmbiguityDisposition(
+            RouteBack: true,
+            Label: $"Routing to Needs Revision (autonomy {autonomyLevel} < {AmbiguitySelfResolveThreshold})",
+            RoutingNote: $"Autonomy level {autonomyLevel} requires human clarification before coding. Resolve the items above or raise the autonomy level to {AmbiguitySelfResolveThreshold}+.");
+    }
+
+    internal sealed record AmbiguityDisposition(bool RouteBack, string Label, string RoutingNote);
 
     internal static bool IsInitializeCodebaseStory(StoryWorkItem workItem)
         => workItem.Tags.Any(tag => string.Equals(tag, AIPipelineNames.InitializeCodebaseTag, StringComparison.OrdinalIgnoreCase))
