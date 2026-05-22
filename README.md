@@ -108,6 +108,33 @@ flowchart TD
 - **Multi-provider** — Claude, OpenAI, or Azure OpenAI via configuration
 - **Hybrid coding** — Coding agent uses a Strategy pattern: built-in agentic tool-use loop (default) or GitHub Copilot's coding agent for complex stories, configurable via `Copilot:Enabled`
 
+## Multi-Cloud Deployment Pattern
+
+ADOm8's agent logic is decoupled from any single cloud through three abstractions: `IStorageService`, `IMessagingService`, and `ISecretsService`. Each cloud is a **Capability Pack** — same agents, different transport. Azure DevOps remains the unchanged system of record either way.
+
+| Concern | Azure (this repo) | AWS ([toddpick/adom8-aws](https://github.com/toddpick/adom8-aws)) |
+|---|---|---|
+| Compute | Azure Functions (.NET 8 isolated, Y1 Consumption) | AWS Lambda (.NET 8, Lambda Annotations) |
+| Queue | Azure Service Bus topic + subscription (max delivery 10) | Amazon SQS + DLQ (maxReceiveCount=3) |
+| Tables | Azure Table Storage | Amazon DynamoDB (on-demand) |
+| Secrets | Azure Key Vault | AWS Secrets Manager |
+| Timer | Azure Functions TimerTrigger | EventBridge Scheduler |
+| HTTP ingress | Function App HTTPS | API Gateway HTTP API v2 |
+| Dashboard | Azure Static Web Apps | S3 static website |
+| SDLC system of record | **Azure DevOps** | **Azure DevOps** |
+
+**Cross-cloud invariant:** the AWS pack references zero Azure SDK packages, and both clouds use the **single-dispatcher** queue pattern (one consumer, keyed DI routing) to avoid silent message-loss caused by competing filtered consumers.
+
+### Recommended Perimeter (both clouds)
+
+For production-grade deployments, front the public surface with a WAF layer:
+
+- **Azure:** Application Gateway v2 + WAF_v2 (OWASP 3.2) → Function App with access restrictions limiting traffic to the App Gateway subnet.
+- **AWS:** CloudFront + AWS WAFv2 (Managed Rules: Core, Known Bad Inputs, SQLi) → API Gateway + S3 dashboard origin.
+- Webhook endpoints (`/webhook`, `/copilot-bridge`) keep their existing HMAC signature verification; WAF adds rate-limit + admin-path IP allow-listing.
+
+See [adom8-aws](https://github.com/toddpick/adom8-aws) for the AWS capability pack source, Terraform modules, and full architecture decisions.
+
 ## Quick Start
 
 Estimated setup time: **10-15 minutes typical** using the automated Azure Pipeline.
