@@ -3,92 +3,37 @@
 <head>
   <meta charset="UTF-8" />
   <title>ADOmate — AWS Architecture</title>
-  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; background: #0a0f1e; font-family: 'Segoe UI', system-ui, sans-serif; overflow: hidden; }
+    body { display: flex; flex-direction: column; padding: 14px 18px 10px; gap: 8px; }
 
-    html, body {
-      height: 100%;
-      background: #0a0f1e;
-      font-family: 'Segoe UI', system-ui, sans-serif;
-      overflow: hidden;
-    }
-
-    body {
-      display: flex;
-      flex-direction: column;
-      padding: 16px 20px 12px;
-      gap: 10px;
-    }
-
-    /* ── Header ───────────────────────────────────────────────── */
     header { text-align: center; flex-shrink: 0; }
-    header h1 { color: #f1f5f9; font-size: 22px; font-weight: 700; }
+    header h1 { color: #f1f5f9; font-size: 21px; font-weight: 700; }
     header .sub { color: #64748b; font-size: 12px; margin-top: 3px; }
-    .badge {
-      display: inline-block; margin-top: 5px;
-      padding: 2px 10px; border-radius: 999px; font-size: 10px;
-      font-weight: 700; letter-spacing: 0.08em;
-      color: #fbbf24; border: 1px solid #92400e; background: #1c1000;
-    }
+    .badge { display:inline-block; margin-top:5px; padding:2px 10px; border-radius:999px; font-size:10px; font-weight:700; letter-spacing:.08em; color:#fbbf24; border:1px solid #92400e; background:#1c1000; }
 
-    /* ── Toolbar ──────────────────────────────────────────────── */
-    .toolbar {
-      display: flex; align-items: center; justify-content: center;
-      gap: 16px; flex-shrink: 0; flex-wrap: wrap;
-    }
-
-    .legend { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
-    .li { display: flex; align-items: center; gap: 5px; font-size: 11px; color: #cbd5e1; }
-    .chip { width: 13px; height: 13px; border-radius: 2px; flex-shrink: 0; }
+    .toolbar { display:flex; align-items:center; justify-content:center; gap:14px; flex-shrink:0; flex-wrap:wrap; }
+    .legend { display:flex; flex-wrap:wrap; gap:11px; align-items:center; }
+    .li { display:flex; align-items:center; gap:5px; font-size:11px; color:#cbd5e1; }
+    .chip { width:13px; height:13px; border-radius:2px; flex-shrink:0; }
     .g  { background:#166534; border:2px solid #22c55e; }
     .o  { background:#7c2d12; border:2px dashed #f97316; }
     .b  { background:#1e3a8a; border:2px solid #3b82f6; }
     .p  { background:#4c1d95; border:2px solid #8b5cf6; }
     .a  { background:#78350f; border:2px solid #d97706; }
 
-    .zoom-row { display: flex; align-items: center; gap: 6px; }
-    .btn {
-      background: #1e293b; border: 1px solid #334155; color: #f1f5f9;
-      border-radius: 5px; height: 28px; padding: 0 9px;
-      font-size: 15px; cursor: pointer; user-select: none;
-      display: flex; align-items: center;
-    }
-    .btn:hover { background: #334155; }
-    .btn.sm { font-size: 11px; letter-spacing: 0.03em; }
-    #zoom-pct { color: #94a3b8; font-size: 11px; min-width: 46px; text-align: center; }
-    .hint { color: #475569; font-size: 10px; }
+    .zrow { display:flex; align-items:center; gap:6px; }
+    .btn { background:#1e293b; border:1px solid #334155; color:#f1f5f9; border-radius:5px; height:27px; padding:0 9px; font-size:15px; cursor:pointer; user-select:none; display:flex; align-items:center; }
+    .btn:hover { background:#334155; }
+    .btn.sm { font-size:11px; letter-spacing:.03em; }
+    #zoom-pct { color:#94a3b8; font-size:11px; min-width:44px; text-align:center; }
+    .hint { color:#475569; font-size:10px; }
 
-    /* ── Diagram canvas ───────────────────────────────────────── */
-    #canvas {
-      flex: 1;
-      background: #111827;
-      border: 1px solid #1e293b;
-      border-radius: 12px;
-      overflow: hidden;
-      position: relative;
-      cursor: grab;
-      min-height: 0;
-    }
-    #canvas.dragging { cursor: grabbing; }
-
-    #mover {
-      position: absolute;
-      top: 0; left: 0;
-      transform-origin: 0 0;
-      will-change: transform;
-    }
-
-    /* ── Hidden render target ─────────────────────────────────── */
-    #mermaid-offscreen {
-      position: fixed; top: -9999px; left: -9999px;
-      visibility: hidden; pointer-events: none;
-    }
-
-    footer {
-      text-align: center; color: #1e293b;
-      font-size: 10px; flex-shrink: 0;
-    }
+    #canvas { flex:1; background:#111827; border:1px solid #1e293b; border-radius:12px; overflow:hidden; position:relative; cursor:grab; min-height:0; }
+    #canvas.dragging { cursor:grabbing; }
+    #mover { position:absolute; top:0; left:0; transform-origin:0 0; will-change:transform; }
+    footer { text-align:center; color:#1e293b; font-size:10px; flex-shrink:0; }
   </style>
 </head>
 <body>
@@ -107,299 +52,273 @@
     <div class="li"><span class="chip p"></span>DynamoDB</div>
     <div class="li"><span class="chip a"></span>SQS Queue</div>
   </div>
-  <div class="zoom-row">
-    <button class="btn" id="btn-in" title="Zoom in">+</button>
+  <div class="zrow">
+    <button class="btn" id="btn-in">+</button>
     <span id="zoom-pct">100%</span>
-    <button class="btn" id="btn-out" title="Zoom out">−</button>
+    <button class="btn" id="btn-out">-</button>
     <button class="btn sm" id="btn-fit">Fit</button>
-    <span class="hint">Scroll · Drag to pan</span>
+    <span class="hint">Scroll to zoom · Drag to pan</span>
   </div>
 </div>
 
-<div id="canvas">
-  <div id="mover"></div>
-</div>
-
+<div id="canvas"><div id="mover"></div></div>
 <footer>ADOmate · Memory AI - Adom8 (574667603109) · Architecture snapshot 2026-05-26</footer>
 
-<!-- Mermaid renders here first (off-screen), then SVG is moved into #mover -->
-<div id="mermaid-offscreen">
-  <div id="mermaid-src" class="mermaid">
-%%{init: {
-  "theme": "dark",
-  "themeVariables": {
-    "background": "#111827",
-    "primaryColor": "#1e293b",
-    "primaryTextColor": "#f1f5f9",
-    "primaryBorderColor": "#475569",
-    "lineColor": "#94a3b8",
-    "secondaryColor": "#0f172a",
-    "tertiaryColor": "#0f172a",
-    "clusterBkg": "#0f172a",
-    "clusterBorder": "#334155",
-    "fontSize": "13px"
-  },
-  "flowchart": { "curve": "basis", "padding": 22 }
-}}%%
-flowchart TB
-
-    classDef impl   fill:#166534,color:#bbf7d0,stroke:#22c55e,stroke-width:2px
-    classDef aspire fill:#7c2d12,color:#fed7aa,stroke:#f97316,stroke-width:2px,stroke-dasharray:6 4
-    classDef ext    fill:#1e3a8a,color:#bfdbfe,stroke:#3b82f6,stroke-width:2px
-    classDef sqs    fill:#78350f,color:#fef3c7,stroke:#d97706,stroke-width:2px
-    classDef db     fill:#4c1d95,color:#ede9fe,stroke:#8b5cf6,stroke-width:2px
-
-    DYN["🔍 Dynatrace"]:::aspire
-    ADO["📋 Azure DevOps"]:::ext
-    AI["🧠 AI Provider\nClaude · Azure OpenAI"]:::ext
-    GH["📁 GitHub\nRepo · Issues · PRs"]:::ext
-    GHCP["🤖 GitHub Copilot\nCoding Agent"]:::ext
-    CLIENT["👤 Admin · Browser · Mobile"]:::ext
-
-    subgraph AWS["  ☁️  AWS us-east-1 — OO-ChurchSecurity-NonProd  "]
-
-      subgraph ENTRY["Entry & Orchestration"]
-        APP_EV["App Event / EventBridge"]:::aspire
-        OWH["OrchestratorWebhookFunction\nPOST /webhook"]:::impl
-        CPB["CopilotBridgeWebhookFunction\nPOST /copilot-bridge"]:::impl
-      end
-
-      SQS["📨  SQS: adom8-agent-tasks-dev\n+ Poison DLQ  (14-day retention, maxReceive=3)"]:::sqs
-      DISP["AgentTaskDispatcher Lambda\n(single SQS consumer — routes by AgentType)"]:::impl
-
-      subgraph AGENTS["Agent Pipeline"]
-        PL["PlannerAgentFunction\n300s · 512 MB"]:::impl
-        CO["CodingAgentFunction\n600s · 1024 MB"]:::impl
-        TE["TestingAgentFunction\n300s · 512 MB"]:::impl
-        RE["ReviewAgentFunction\n300s · 512 MB"]:::impl
-        DO["DocumentationAgentFunction\n300s · 512 MB"]:::impl
-        DE["DeploymentAgentFunction\n300s · 512 MB"]:::impl
-      end
-
-      subgraph DATA["Data Layer"]
-        DB1["DynamoDB\nactivity-log · 90-day TTL"]:::db
-        DB2["DynamoDB\ncopilot-delegations"]:::db
-        DB3["DynamoDB\nstory-context"]:::db
-        SEC["Secrets Manager\nadom8/{projectId}/*"]:::impl
-      end
-
-      subgraph SCHED["Scheduled Workers (EventBridge)"]
-        TOCH["CopilotTimeoutChecker\nevery 15 min"]:::impl
-        DLQH["DeadLetterQueueHandler\nevery 5 min"]:::impl
-      end
-
-      subgraph APIUTIL["API Utilities"]
-        STAT["GET /status\n(queue depth + activity log)"]:::impl
-        HEAL["GET /health"]:::impl
-        INIT["POST /initialize-codebase"]:::impl
-        EMRG["POST /emergency-stop\nPOST /resume/{workItemId}"]:::impl
-      end
-
-      subgraph PORTAL["Admin Portal"]
-        OKTA["OKTA OIDC\nAuth Layer"]:::aspire
-        CF["Amazon CloudFront\nCDN"]:::aspire
-        S3["S3 Static Site\n(bucket deployed, CDN not yet)"]:::impl
-      end
-
-    end
-
-    %% ── Dynatrace aspirational entry ─────────────────
-    DYN        -. "future: alert fires event" .->  APP_EV
-    APP_EV     -. "aspirational path"         .->  OWH
-
-    %% ── Real entry today ─────────────────────────────
-    ADO        -->|"ADO Service Hook\nstory state → AI Agent"| OWH
-    OWH        -->|"enqueue AgentTask: Planning"|              SQS
-
-    %% ── Dispatch ─────────────────────────────────────
-    SQS        -->  DISP
-    DISP       -->|"Planning"|     PL
-    DISP       -->|"Coding"|       CO
-    DISP       -->|"Testing"|      TE
-    DISP       -->|"Review"|       RE
-    DISP       -->|"Documentation"| DO
-    DISP       -->|"Deployment"|   DE
-
-    %% ── Planner ──────────────────────────────────────
-    PL         -->|"create branch + PLAN.md"| GH
-    PL         -->|"update work item"|        ADO
-    PL         -->|"enqueue: Coding"|         SQS
-
-    %% ── Coding → Copilot handoff ─────────────────────
-    CO         -->|"create Issue + assign @github-copilot"| GH
-    CO         -->                                          DB2
-    GH         -->                                          GHCP
-    GHCP       -->|"webhook: issue closed"|                 CPB
-    CPB        -->|"enqueue: Testing"|                      SQS
-
-    %% ── Testing → Review → Docs → Deploy ────────────
-    TE         -->|"write test results"|      GH
-    TE         -->|"enqueue: Review"|         SQS
-    RE         -->|"write REVIEW.md + score"| GH
-    RE         -->|"enqueue: Documentation"| SQS
-    DO         -->|"push docs + create PR"|   GH
-    DO         -->|"enqueue: Deployment"|     SQS
-    DE         -->|"merge PR decision"|       GH
-    DE         -->|"update final story state"| ADO
-
-    %% ── AI calls (sampled — all agents call AI) ──────
-    PL         -. "AI call" .-> AI
-    CO         -. "AI call" .-> AI
-    TE         -. "AI call" .-> AI
-    RE         -. "AI call" .-> AI
-    DO         -. "AI call" .-> AI
-    DE         -. "AI call" .-> AI
-
-    %% ── Activity logging ─────────────────────────────
-    PL & CO & TE & RE & DO & DE --> DB1
-
-    %% ── Status / health ──────────────────────────────
-    STAT       -->|"read recent entries"|     DB1
-    STAT       -. "peek (non-consuming)" .->  SQS
-
-    %% ── Scheduled workers ────────────────────────────
-    TOCH       -->|"check stalled delegations"| DB2
-    TOCH       -->|"re-enqueue if timed out"|   SQS
-    DLQH       -. "monitor" .->                 SQS
-
-    %% ── Admin portal ─────────────────────────────────
-    CLIENT     -. "aspirational: auth" .-> OKTA
-    OKTA       -. "aspirational"       .-> CF
-    CF         -. "aspirational"       .-> S3
-    CLIENT     -->|"direct (no auth yet)"| STAT
-    CLIENT     -->                          HEAL
-    CLIENT     -->                          INIT
-    CLIENT     -->                          EMRG
-  </div>
-</div>
-
 <script>
-mermaid.initialize({ startOnLoad: false, securityLevel: 'loose' });
+const W = 220, H = 56, WW = 440, HT = 68;
 
+const STYLES = {
+  impl:   { fill:'#166534', stroke:'#22c55e', text:'#bbf7d0', dash:false },
+  aspire: { fill:'#7c2d12', stroke:'#f97316', text:'#fed7aa', dash:true  },
+  ext:    { fill:'#1e3a8a', stroke:'#3b82f6', text:'#bfdbfe', dash:false },
+  sqs:    { fill:'#78350f', stroke:'#d97706', text:'#fef3c7', dash:false },
+  db:     { fill:'#4c1d95', stroke:'#8b5cf6', text:'#ede9fe', dash:false },
+};
+
+const NODES = [
+  { id:'DYN',    cx:110,  cy:240,  w:W,  h:HT, type:'aspire', lines:['🔍 Dynatrace','Monitoring'] },
+  { id:'CLIENT', cx:110,  cy:1840, w:W,  h:HT, type:'ext',    lines:['👤 Admin','Browser · Mobile'] },
+  { id:'ADO',    cx:1850, cy:260,  w:W,  h:HT, type:'ext',    lines:['📋 Azure DevOps','User Story'] },
+  { id:'AI',     cx:1850, cy:790,  w:W,  h:HT, type:'ext',    lines:['🧠 AI Provider','Claude · Azure OpenAI'] },
+  { id:'GH',     cx:1850, cy:1060, w:W,  h:HT, type:'ext',    lines:['📁 GitHub','Repo · Issues · PRs'] },
+  { id:'GHCP',   cx:1850, cy:1300, w:W,  h:HT, type:'ext',    lines:['🤖 GitHub Copilot','Coding Agent'] },
+
+  { id:'APP_EV', cx:420,  cy:240,  w:W,  h:HT, type:'aspire', lines:['App Event','EventBridge'] },
+  { id:'OWH',    cx:790,  cy:240,  w:WW, h:HT, type:'impl',   lines:['OrchestratorWebhookFunction','POST /webhook'] },
+  { id:'CPB',    cx:1220, cy:240,  w:WW, h:HT, type:'impl',   lines:['CopilotBridgeWebhookFunction','POST /copilot-bridge'] },
+
+  { id:'SQS',    cx:790,  cy:390,  w:WW, h:HT, type:'sqs',    lines:['📨 SQS: adom8-agent-tasks-dev','+ Poison DLQ  (14-day retention, maxReceive=3)'] },
+  { id:'DISP',   cx:790,  cy:510,  w:WW, h:HT, type:'impl',   lines:['AgentTaskDispatcher Lambda','single consumer · routes by AgentType'] },
+
+  { id:'PL', cx:790, cy:620,  w:WW, h:H, type:'impl', lines:['PlannerAgentFunction  ·  300s  ·  512 MB'] },
+  { id:'CO', cx:790, cy:700,  w:WW, h:H, type:'impl', lines:['CodingAgentFunction  ·  600s  ·  1024 MB'] },
+  { id:'TE', cx:790, cy:780,  w:WW, h:H, type:'impl', lines:['TestingAgentFunction  ·  300s  ·  512 MB'] },
+  { id:'RE', cx:790, cy:860,  w:WW, h:H, type:'impl', lines:['ReviewAgentFunction  ·  300s  ·  512 MB'] },
+  { id:'DO', cx:790, cy:940,  w:WW, h:H, type:'impl', lines:['DocumentationAgentFunction  ·  300s  ·  512 MB'] },
+  { id:'DE', cx:790, cy:1020, w:WW, h:H, type:'impl', lines:['DeploymentAgentFunction  ·  300s  ·  512 MB'] },
+
+  { id:'DB1', cx:420,  cy:1190, w:W, h:HT, type:'db',   lines:['DynamoDB','activity-log  ·  90d TTL'] },
+  { id:'DB2', cx:720,  cy:1190, w:W, h:HT, type:'db',   lines:['DynamoDB','copilot-delegations'] },
+  { id:'DB3', cx:1020, cy:1190, w:W, h:HT, type:'db',   lines:['DynamoDB','story-context'] },
+  { id:'SEC', cx:1310, cy:1190, w:W, h:HT, type:'impl', lines:['Secrets Manager','adom8/{projectId}/*'] },
+
+  { id:'TOCH', cx:520, cy:1360, w:W, h:HT, type:'impl', lines:['CopilotTimeoutChecker','every 15 min'] },
+  { id:'DLQH', cx:890, cy:1360, w:W, h:HT, type:'impl', lines:['DeadLetterQueueHandler','every 5 min'] },
+
+  { id:'STAT', cx:380,  cy:1530, w:W, h:HT, type:'impl', lines:['GET /status','queue depth + activity'] },
+  { id:'HEAL', cx:650,  cy:1530, w:W, h:H,  type:'impl', lines:['GET /health'] },
+  { id:'INIT', cx:920,  cy:1530, w:W, h:H,  type:'impl', lines:['POST /initialize-codebase'] },
+  { id:'EMRG', cx:1200, cy:1530, w:W, h:HT, type:'impl', lines:['POST /emergency-stop','/resume/{workItemId}'] },
+
+  { id:'OKTA', cx:520,  cy:1700, w:W, h:HT, type:'aspire', lines:['OKTA OIDC','Auth Layer'] },
+  { id:'CF',   cx:790,  cy:1700, w:W, h:HT, type:'aspire', lines:['Amazon CloudFront','CDN'] },
+  { id:'S3',   cx:1060, cy:1700, w:W, h:HT, type:'impl',   lines:['S3 Static Site','(bucket deployed, CDN pending)'] },
+];
+
+const GROUPS = [
+  { label:'Entry & Orchestration',           x:275, y:180,  w:1090, h:110 },
+  { label:'Agent Pipeline',                  x:545, y:580,  w:500,  h:490 },
+  { label:'Data Layer',                      x:275, y:1140, w:1100, h:110 },
+  { label:'Scheduled Workers (EventBridge)', x:275, y:1305, w:760,  h:110 },
+  { label:'API Utilities',                   x:275, y:1475, w:1090, h:110 },
+  { label:'Admin Portal',                    x:275, y:1645, w:870,  h:110 },
+];
+
+const EDGES = [
+  { f:'DYN',    t:'APP_EV', label:'future trigger', dashed:true },
+  { f:'APP_EV', t:'OWH',    label:'aspirational',   dashed:true },
+  { f:'ADO',    t:'OWH',    label:'Service Hook / state→AI Agent' },
+  { f:'OWH',    t:'SQS',    label:'enqueue: Planning' },
+  { f:'SQS',    t:'DISP' },
+  { f:'DISP',   t:'PL',  label:'Planning'      },
+  { f:'DISP',   t:'CO',  label:'Coding'        },
+  { f:'DISP',   t:'TE',  label:'Testing'       },
+  { f:'DISP',   t:'RE',  label:'Review'        },
+  { f:'DISP',   t:'DO',  label:'Documentation' },
+  { f:'DISP',   t:'DE',  label:'Deployment'    },
+  { f:'PL', t:'GH',  label:'create branch + PLAN.md' },
+  { f:'PL', t:'ADO', label:'update story' },
+  { f:'PL', t:'SQS', label:'enqueue: Coding', loopLeft:true },
+  { f:'CO', t:'GH',  label:'create Issue + assign @github-copilot' },
+  { f:'CO', t:'DB2', label:'store delegation' },
+  { f:'GH', t:'GHCP' },
+  { f:'GHCP', t:'CPB', label:'webhook: issue closed' },
+  { f:'CPB',  t:'SQS', label:'enqueue: Testing' },
+  { f:'TE', t:'GH',  label:'write test results' },
+  { f:'TE', t:'SQS', label:'enqueue: Review',         loopLeft:true },
+  { f:'RE', t:'GH',  label:'write REVIEW.md + score' },
+  { f:'RE', t:'SQS', label:'enqueue: Documentation',  loopLeft:true },
+  { f:'DO', t:'GH',  label:'push docs + create PR' },
+  { f:'DO', t:'SQS', label:'enqueue: Deployment',     loopLeft:true },
+  { f:'DE', t:'GH',  label:'merge PR decision' },
+  { f:'DE', t:'ADO', label:'update final story state' },
+  { f:'PL', t:'AI', label:'AI call', dashed:true },
+  { f:'CO', t:'AI', label:'AI call', dashed:true },
+  { f:'TE', t:'AI', label:'AI call', dashed:true },
+  { f:'RE', t:'AI', label:'AI call', dashed:true },
+  { f:'DO', t:'AI', label:'AI call', dashed:true },
+  { f:'DE', t:'AI', label:'AI call', dashed:true },
+  { f:'PL', t:'DB1' }, { f:'CO', t:'DB1' }, { f:'TE', t:'DB1' },
+  { f:'RE', t:'DB1' }, { f:'DO', t:'DB1' }, { f:'DE', t:'DB1' },
+  { f:'STAT', t:'DB1', label:'read recent entries' },
+  { f:'STAT', t:'SQS', label:'peek (non-consuming)', dashed:true },
+  { f:'TOCH', t:'DB2', label:'check stalled delegations' },
+  { f:'TOCH', t:'SQS', label:'re-enqueue if timed out' },
+  { f:'DLQH', t:'SQS', label:'monitor', dashed:true },
+  { f:'CLIENT', t:'OKTA', label:'aspirational auth', dashed:true },
+  { f:'OKTA',   t:'CF',   label:'aspirational',      dashed:true },
+  { f:'CF',     t:'S3',   label:'aspirational',      dashed:true },
+  { f:'CLIENT', t:'STAT', label:'direct (no auth)' },
+  { f:'CLIENT', t:'HEAL' },
+  { f:'CLIENT', t:'INIT' },
+  { f:'CLIENT', t:'EMRG' },
+];
+
+const SVG_W = 2080, SVG_H = 1870;
+const ns = 'http://www.w3.org/2000/svg';
+
+function nById(id) { return NODES.find(n => n.id === id); }
+
+function edgePath(e) {
+  const f = nById(e.f), t = nById(e.t);
+  const fW2 = f.w/2, fH2 = f.h/2, tW2 = t.w/2, tH2 = t.h/2;
+
+  if (e.loopLeft) {
+    const rail = 215;
+    return `M ${f.cx-fW2} ${f.cy} L ${rail} ${f.cy} L ${rail} ${t.cy} L ${t.cx-tW2} ${t.cy}`;
+  }
+
+  const dx = t.cx - f.cx, dy = t.cy - f.cy;
+  let x1, y1, x2, y2;
+  if (Math.abs(dx) >= Math.abs(dy)) {
+    x1 = f.cx + (dx>0?fW2:-fW2); y1 = f.cy;
+    x2 = t.cx + (dx>0?-tW2:tW2); y2 = t.cy;
+  } else {
+    x1 = f.cx; y1 = f.cy + (dy>0?fH2:-fH2);
+    x2 = t.cx; y2 = t.cy + (dy>0?-tH2:tH2);
+  }
+  const c1x = x1+(x2-x1)*0.45, c2x = x1+(x2-x1)*0.55;
+  return `M ${x1} ${y1} C ${c1x} ${y1}, ${c2x} ${y2}, ${x2} ${y2}`;
+}
+
+function el(tag, attrs) {
+  const e = document.createElementNS(ns, tag);
+  Object.entries(attrs).forEach(([k,v]) => e.setAttribute(k,v));
+  return e;
+}
+
+function txt(content, attrs) {
+  const t = el('text', attrs);
+  t.textContent = content;
+  return t;
+}
+
+function buildSVG() {
+  const svg = el('svg', { width:SVG_W, height:SVG_H, viewBox:`0 0 ${SVG_W} ${SVG_H}` });
+
+  // Arrowhead markers
+  const defs = el('defs', {});
+  [[`arr`,`#94a3b8`],[`arr-d`,`#f97316`]].forEach(([id,col]) => {
+    const m = el('marker', { id, viewBox:'0 0 10 10', refX:'9', refY:'5', markerWidth:'7', markerHeight:'7', orient:'auto-start-reverse' });
+    const p = el('path', { d:'M 0 1 L 9 5 L 0 9 z', fill:col });
+    m.appendChild(p); defs.appendChild(m);
+  });
+  svg.appendChild(defs);
+
+  // AWS boundary
+  svg.appendChild(el('rect', { x:260,y:130, width:1200,height:1620, rx:12, fill:'#080d1a', stroke:'#f97316', 'stroke-width':'1.5' }));
+  svg.appendChild(txt('☁️  AWS us-east-1 — OO-ChurchSecurity-NonProd', { x:270,y:152, fill:'#f97316', 'font-size':'11', 'font-family':'Segoe UI,sans-serif' }));
+
+  // Section boxes
+  GROUPS.forEach(g => {
+    svg.appendChild(el('rect', { x:g.x,y:g.y, width:g.w,height:g.h, rx:7, fill:'#0d1424', stroke:'#1e293b', 'stroke-width':'1' }));
+    svg.appendChild(txt(g.label, { x:g.x+8,y:g.y+14, fill:'#475569', 'font-size':'10', 'font-family':'Segoe UI,sans-serif' }));
+  });
+
+  // Edges
+  EDGES.forEach(e => {
+    const d = e.dashed;
+    const path = el('path', {
+      d: edgePath(e), fill:'none',
+      stroke: d ? '#f9731666' : '#47556977',
+      'stroke-width':'1.5',
+      'marker-end': d ? 'url(#arr-d)' : 'url(#arr)',
+      ...(d ? { 'stroke-dasharray':'5 3' } : {})
+    });
+    svg.appendChild(path);
+
+    if (e.label) {
+      const f = nById(e.f), t = nById(e.t);
+      const mx = (f.cx+t.cx)/2, my = (f.cy+t.cy)/2;
+      e.label.split('\n').forEach((line,i,arr) => {
+        svg.appendChild(txt(line, {
+          x: mx, y: my - (arr.length-1)*7 + i*14,
+          'text-anchor':'middle', fill: d?'#f9731699':'#64748b',
+          'font-size':'9', 'font-family':'Segoe UI,sans-serif'
+        }));
+      });
+    }
+  });
+
+  // Nodes
+  NODES.forEach(n => {
+    const s = STYLES[n.type];
+    const x = n.cx-n.w/2, y = n.cy-n.h/2;
+    svg.appendChild(el('rect', {
+      x,y, width:n.w, height:n.h, rx:7,
+      fill:s.fill, stroke:s.stroke, 'stroke-width':'2',
+      ...(s.dash ? { 'stroke-dasharray':'6 3' } : {})
+    }));
+    const lh = 16, total = n.lines.length;
+    n.lines.forEach((line, i) => {
+      const startY = n.cy - (total-1)*lh/2;
+      svg.appendChild(txt(line, {
+        x: n.cx, y: startY + i*lh + 4,
+        'text-anchor':'middle', 'dominant-baseline':'middle',
+        fill: s.text,
+        'font-size': (i===0 && total>1) ? '12' : '11',
+        'font-weight': i===0 ? '600' : '400',
+        'font-family':'Segoe UI,sans-serif'
+      }));
+    });
+  });
+
+  return svg;
+}
+
+// Pan / zoom
 const canvas = document.getElementById('canvas');
 const mover  = document.getElementById('mover');
-let scale = 1, panX = 0, panY = 0;
-let svgW = 0, svgH = 0;
+let scale=1, panX=0, panY=0;
 
-function applyTransform() {
+function applyT() {
   mover.style.transform = `translate(${panX}px,${panY}px) scale(${scale})`;
-  document.getElementById('zoom-pct').textContent = Math.round(scale * 100) + '%';
+  document.getElementById('zoom-pct').textContent = Math.round(scale*100)+'%';
 }
-
-function fitToCanvas() {
-  if (!svgW || !svgH) return;
-  const cW = canvas.clientWidth;
-  const cH = canvas.clientHeight;
-  scale = Math.min(cW / svgW, cH / svgH) * 0.94;
-  panX  = (cW - svgW * scale) / 2;
-  panY  = (cH - svgH * scale) / 2;
-  applyTransform();
+function fit() {
+  const s = Math.min(canvas.clientWidth/SVG_W, canvas.clientHeight/SVG_H)*0.96;
+  scale=s; panX=(canvas.clientWidth-SVG_W*s)/2; panY=(canvas.clientHeight-SVG_H*s)/2; applyT();
 }
-
-// ── Mouse wheel zoom toward cursor ──────────────────────────────
 canvas.addEventListener('wheel', e => {
   e.preventDefault();
-  const rect  = canvas.getBoundingClientRect();
-  const mx    = e.clientX - rect.left;
-  const my    = e.clientY - rect.top;
-  const delta = e.deltaY < 0 ? 1.13 : 0.885;
-  const ns    = Math.max(0.04, Math.min(20, scale * delta));
-  panX = mx - (mx - panX) * (ns / scale);
-  panY = my - (my - panY) * (ns / scale);
-  scale = ns;
-  applyTransform();
-}, { passive: false });
+  const r=canvas.getBoundingClientRect(), mx=e.clientX-r.left, my=e.clientY-r.top;
+  const ns2=Math.max(0.04,Math.min(20,scale*(e.deltaY<0?1.13:0.885)));
+  panX=mx-(mx-panX)*(ns2/scale); panY=my-(my-panY)*(ns2/scale); scale=ns2; applyT();
+},{ passive:false });
 
-// ── Drag to pan ──────────────────────────────────────────────────
-let dragging = false, sx = 0, sy = 0;
-canvas.addEventListener('mousedown', e => {
-  dragging = true;
-  sx = e.clientX - panX;
-  sy = e.clientY - panY;
-  canvas.classList.add('dragging');
-  e.preventDefault();
-});
-document.addEventListener('mousemove', e => {
-  if (!dragging) return;
-  panX = e.clientX - sx;
-  panY = e.clientY - sy;
-  applyTransform();
-});
-document.addEventListener('mouseup', () => { dragging = false; canvas.classList.remove('dragging'); });
+let drag=false,sx=0,sy=0;
+canvas.addEventListener('mousedown',e=>{drag=true;sx=e.clientX-panX;sy=e.clientY-panY;canvas.classList.add('dragging');e.preventDefault();});
+document.addEventListener('mousemove',e=>{if(!drag)return;panX=e.clientX-sx;panY=e.clientY-sy;applyT();});
+document.addEventListener('mouseup',()=>{drag=false;canvas.classList.remove('dragging');});
 
-// ── Touch: drag + pinch ──────────────────────────────────────────
-let lastDist = 0;
-canvas.addEventListener('touchstart', e => {
-  if (e.touches.length === 1) {
-    dragging = true;
-    sx = e.touches[0].clientX - panX;
-    sy = e.touches[0].clientY - panY;
-  } else if (e.touches.length === 2) {
-    dragging = false;
-    lastDist = Math.hypot(
-      e.touches[0].clientX - e.touches[1].clientX,
-      e.touches[0].clientY - e.touches[1].clientY);
-  }
-  e.preventDefault();
-}, { passive: false });
+function zC(f){const mx=canvas.clientWidth/2,my=canvas.clientHeight/2,ns2=Math.max(0.04,Math.min(20,scale*f));panX=mx-(mx-panX)*(ns2/scale);panY=my-(my-panY)*(ns2/scale);scale=ns2;applyT();}
+document.getElementById('btn-in').addEventListener('click',()=>zC(1.3));
+document.getElementById('btn-out').addEventListener('click',()=>zC(0.77));
+document.getElementById('btn-fit').addEventListener('click',fit);
+window.addEventListener('resize',fit);
 
-canvas.addEventListener('touchmove', e => {
-  if (e.touches.length === 1 && dragging) {
-    panX = e.touches[0].clientX - sx;
-    panY = e.touches[0].clientY - sy;
-    applyTransform();
-  } else if (e.touches.length === 2) {
-    const dist = Math.hypot(
-      e.touches[0].clientX - e.touches[1].clientX,
-      e.touches[0].clientY - e.touches[1].clientY);
-    const r    = canvas.getBoundingClientRect();
-    const mx   = (e.touches[0].clientX + e.touches[1].clientX) / 2 - r.left;
-    const my   = (e.touches[0].clientY + e.touches[1].clientY) / 2 - r.top;
-    const d    = dist / lastDist;
-    const ns   = Math.max(0.04, Math.min(20, scale * d));
-    panX = mx - (mx - panX) * (ns / scale);
-    panY = my - (my - panY) * (ns / scale);
-    scale = ns; lastDist = dist;
-    applyTransform();
-  }
-  e.preventDefault();
-}, { passive: false });
-
-// ── Buttons ──────────────────────────────────────────────────────
-function zoomCenter(factor) {
-  const mx = canvas.clientWidth / 2;
-  const my = canvas.clientHeight / 2;
-  const ns = Math.max(0.04, Math.min(20, scale * factor));
-  panX = mx - (mx - panX) * (ns / scale);
-  panY = my - (my - panY) * (ns / scale);
-  scale = ns;
-  applyTransform();
-}
-document.getElementById('btn-in').addEventListener('click',  () => zoomCenter(1.3));
-document.getElementById('btn-out').addEventListener('click', () => zoomCenter(0.77));
-document.getElementById('btn-fit').addEventListener('click', fitToCanvas);
-window.addEventListener('resize', fitToCanvas);
-
-// ── Init: render Mermaid off-screen, grab SVG, mount in canvas ───
-async function init() {
-  await mermaid.run({ nodes: [document.getElementById('mermaid-src')] });
-
-  const svg = document.querySelector('#mermaid-src svg');
-  if (!svg) { console.error('Mermaid SVG not found'); return; }
-
-  // Read natural dimensions before we touch anything
-  svgW = parseFloat(svg.getAttribute('width'))  || svg.getBBox?.()?.width  || 900;
-  svgH = parseFloat(svg.getAttribute('height')) || svg.getBBox?.()?.height || 600;
-
-  // Move (not clone) into the pan/zoom container
-  mover.appendChild(svg);
-
-  // Fit after a brief paint tick
-  requestAnimationFrame(() => requestAnimationFrame(fitToCanvas));
-}
-
-init();
+mover.appendChild(buildSVG());
+requestAnimationFrame(fit);
 </script>
-
 </body>
 </html>
