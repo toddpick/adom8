@@ -16,7 +16,7 @@
     .toolbar { display:flex; align-items:center; justify-content:center; gap:14px; flex-shrink:0; flex-wrap:wrap; }
     .tog-row { display:flex; gap:6px; }
     .tog { background:#1e293b; border:1px solid #334155; color:#94a3b8; border-radius:5px; height:27px; padding:0 14px; font-size:12px; font-weight:600; cursor:pointer; user-select:none; transition:background .15s, border-color .15s, color .15s; }
-    .tog.aws.active  { background:#7c2d12; border-color:#f97316; color:#fed7aa; }
+    .tog.aws.active   { background:#7c2d12; border-color:#f97316; color:#fed7aa; }
     .tog.azure.active { background:#0c2d4a; border-color:#0078d4; color:#bfdbfe; }
 
     .legend { display:flex; flex-wrap:wrap; gap:11px; align-items:center; }
@@ -90,59 +90,68 @@ const STYLES = {
 
 // ── AWS Dataset ────────────────────────────────────────────────────────────────
 const AWS = {
-  svgW: 2080, svgH: 1870,
+  svgW: 2080, svgH: 1900,
   loopRail: 215,
   boundaryColor: '#f97316',
-  boundaryRect: { x:260, y:130, w:1200, h:1620 },
+  boundaryRect: { x:260, y:130, w:1200, h:1650 },
   boundaryLabel: 'AWS us-east-1 — OO-ChurchSecurity-NonProd',
-  subTitle: 'OO-ChurchSecurity-NonProd · us-east-1 · Generated 2026-05-26',
-  footer:   'ADOmate · Memory AI - Adom8 (574667603109) · Architecture snapshot 2026-05-26',
+  subTitle: 'OO-ChurchSecurity-NonProd · us-east-1 · Generated 2026-05-27',
+  footer:   'ADOmate · Memory AI - Adom8 (574667603109) · Architecture snapshot 2026-05-27',
   dbChipLabel: 'DynamoDB',
   queueChipLabel: 'SQS Queue',
   nodes: [
-    { id:'DYN',    cx:110,  cy:240,  w:220, h:68, type:'aspire', lines:['🔍 Dynatrace','Monitoring'] },
-    { id:'CLIENT', cx:110,  cy:1840, w:220, h:68, type:'ext',    lines:['👤 Admin','Browser · Mobile'] },
-    { id:'ADO',    cx:1850, cy:260,  w:220, h:68, type:'ext',    lines:['📋 Azure DevOps','User Story'] },
-    { id:'AI',     cx:1850, cy:790,  w:220, h:68, type:'ext',    lines:['🧠 AI Provider','Claude · Azure OpenAI'] },
-    { id:'GH',     cx:1850, cy:1060, w:220, h:68, type:'ext',    lines:['📁 GitHub','Repo · Issues · PRs'] },
-    { id:'GHCP',   cx:1850, cy:1300, w:220, h:68, type:'ext',    lines:['🤖 GitHub Copilot','Coding Agent'] },
-    { id:'APP_EV', cx:420,  cy:240,  w:220, h:68, type:'aspire', lines:['App Event','EventBridge'] },
-    { id:'OWH',    cx:790,  cy:240,  w:440, h:68, type:'impl',   lines:['OrchestratorWebhookFunction','POST /webhook'] },
-    { id:'CPB',    cx:1220, cy:240,  w:440, h:68, type:'impl',   lines:['CopilotBridgeWebhookFunction','POST /copilot-bridge'] },
-    { id:'SQS',    cx:790,  cy:390,  w:440, h:68, type:'sqs',    lines:['📨 SQS: adom8-agent-tasks-dev','+ Poison DLQ  (14-day retention, maxReceive=3)'] },
-    { id:'DISP',   cx:790,  cy:510,  w:440, h:68, type:'impl',   lines:['AgentTaskDispatcher Lambda','single consumer · routes by AgentType'] },
-    { id:'PL', cx:790, cy:620,  w:440, h:56, type:'impl', lines:['PlannerAgentFunction  ·  300s  ·  512 MB'] },
-    { id:'CO', cx:790, cy:700,  w:440, h:56, type:'impl', lines:['CodingAgentFunction  ·  600s  ·  1024 MB'] },
-    { id:'TE', cx:790, cy:780,  w:440, h:56, type:'impl', lines:['TestingAgentFunction  ·  300s  ·  512 MB'] },
-    { id:'RE', cx:790, cy:860,  w:440, h:56, type:'impl', lines:['ReviewAgentFunction  ·  300s  ·  512 MB'] },
-    { id:'DO', cx:790, cy:940,  w:440, h:56, type:'impl', lines:['DocumentationAgentFunction  ·  300s  ·  512 MB'] },
-    { id:'DE', cx:790, cy:1020, w:440, h:56, type:'impl', lines:['DeploymentAgentFunction  ·  300s  ·  512 MB'] },
-    { id:'DB1', cx:420,  cy:1190, w:220, h:68, type:'db',   lines:['DynamoDB','activity-log  ·  90d TTL'] },
-    { id:'DB2', cx:720,  cy:1190, w:220, h:68, type:'db',   lines:['DynamoDB','copilot-delegations'] },
-    { id:'DB3', cx:1020, cy:1190, w:220, h:68, type:'db',   lines:['DynamoDB','story-context'] },
-    { id:'SEC', cx:1310, cy:1190, w:220, h:68, type:'impl', lines:['Secrets Manager','adom8/{projectId}/*'] },
-    { id:'TOCH', cx:520, cy:1360, w:220, h:68, type:'impl', lines:['CopilotTimeoutChecker','every 15 min'] },
-    { id:'DLQH', cx:890, cy:1360, w:220, h:68, type:'impl', lines:['DeadLetterQueueHandler','every 5 min'] },
-    { id:'STAT', cx:380,  cy:1530, w:220, h:68, type:'impl', lines:['GET /status','queue depth + activity'] },
-    { id:'HEAL', cx:650,  cy:1530, w:220, h:56, type:'impl', lines:['GET /health'] },
-    { id:'INIT', cx:920,  cy:1530, w:220, h:56, type:'impl', lines:['POST /initialize-codebase'] },
-    { id:'EMRG', cx:1200, cy:1530, w:220, h:68, type:'impl', lines:['POST /emergency-stop','/resume/{workItemId}'] },
-    { id:'OKTA', cx:520,  cy:1700, w:220, h:68, type:'aspire', lines:['OKTA OIDC','Auth Layer'] },
-    { id:'CF',   cx:790,  cy:1700, w:220, h:68, type:'aspire', lines:['Amazon CloudFront','CDN'] },
-    { id:'S3',   cx:1060, cy:1700, w:220, h:68, type:'impl',   lines:['S3 Static Site','(bucket deployed, CDN pending)'] },
+    { id:'DYN',    cx:110,  cy:240,  w:220, h:68,  type:'aspire', lines:['🔍 Dynatrace','Monitoring'] },
+    { id:'CLIENT', cx:110,  cy:1860, w:220, h:68,  type:'ext',    lines:['👤 Admin','Browser · Mobile'] },
+
+    { id:'ADO',  cx:1850, cy:260,  w:220, h:80,  type:'ext', lines:['📋 Azure DevOps','User Story','outbound auth: PAT Basic Auth'] },
+    { id:'AI',   cx:1850, cy:810,  w:220, h:80,  type:'ext', lines:['🧠 AI Provider','Claude · Azure OpenAI','outbound auth: provider API key'] },
+    { id:'GH',   cx:1850, cy:1080, w:220, h:80,  type:'ext', lines:['📁 GitHub','Repo · Issues · PRs','outbound auth: Bearer token (PAT)'] },
+    { id:'GHCP', cx:1850, cy:1320, w:220, h:68,  type:'ext', lines:['🤖 GitHub Copilot','Coding Agent'] },
+
+    { id:'APP_EV', cx:420, cy:240, w:220, h:68, type:'aspire', lines:['App Event','EventBridge'] },
+
+    { id:'OWH', cx:790,  cy:240, w:440, h:80, type:'impl', lines:['OrchestratorWebhookFunction','POST /webhook','🔓 No API Gateway auth  ⚠️ No HMAC validation'] },
+    { id:'CPB', cx:1220, cy:240, w:440, h:80, type:'impl', lines:['CopilotBridgeWebhookFunction','POST /copilot-bridge','🔓 No API GW auth  ✓ HMAC-SHA256 (X-Hub-Signature-256)'] },
+
+    { id:'SQS',  cx:790, cy:410, w:440, h:68, type:'sqs',  lines:['📨 SQS: adom8-agent-tasks-dev','+ Poison DLQ  (14-day retention, maxReceive=3)'] },
+    { id:'DISP', cx:790, cy:530, w:440, h:80, type:'impl', lines:['AgentTaskDispatcher Lambda','single consumer · routes by AgentType','AWS SDK calls: IAM execution role (no static creds)'] },
+
+    { id:'PL', cx:790, cy:640,  w:440, h:56, type:'impl', lines:['PlannerAgentFunction  ·  300s  ·  512 MB'] },
+    { id:'CO', cx:790, cy:720,  w:440, h:56, type:'impl', lines:['CodingAgentFunction  ·  600s  ·  1024 MB'] },
+    { id:'TE', cx:790, cy:800,  w:440, h:56, type:'impl', lines:['TestingAgentFunction  ·  300s  ·  512 MB'] },
+    { id:'RE', cx:790, cy:880,  w:440, h:56, type:'impl', lines:['ReviewAgentFunction  ·  300s  ·  512 MB'] },
+    { id:'DO', cx:790, cy:960,  w:440, h:56, type:'impl', lines:['DocumentationAgentFunction  ·  300s  ·  512 MB'] },
+    { id:'DE', cx:790, cy:1040, w:440, h:56, type:'impl', lines:['DeploymentAgentFunction  ·  300s  ·  512 MB'] },
+
+    { id:'DB1', cx:420,  cy:1210, w:220, h:68, type:'db',   lines:['DynamoDB','activity-log  ·  90d TTL'] },
+    { id:'DB2', cx:720,  cy:1210, w:220, h:68, type:'db',   lines:['DynamoDB','copilot-delegations'] },
+    { id:'DB3', cx:1020, cy:1210, w:220, h:68, type:'db',   lines:['DynamoDB','story-context'] },
+    { id:'SEC', cx:1310, cy:1210, w:220, h:80, type:'impl', lines:['🔑 Secrets Manager','ADO PAT · GitHub Token','AI API Key · Webhook Secret'] },
+
+    { id:'TOCH', cx:520, cy:1390, w:220, h:68, type:'impl', lines:['CopilotTimeoutChecker','every 15 min'] },
+    { id:'DLQH', cx:890, cy:1390, w:220, h:68, type:'impl', lines:['DeadLetterQueueHandler','every 5 min'] },
+
+    { id:'STAT', cx:380,  cy:1560, w:220, h:80, type:'impl', lines:['GET /status','queue depth + activity','🔓 Anonymous (public)'] },
+    { id:'HEAL', cx:650,  cy:1560, w:220, h:68, type:'impl', lines:['GET /health','🔓 Anonymous (public)'] },
+    { id:'INIT', cx:920,  cy:1560, w:220, h:68, type:'impl', lines:['POST /initialize-codebase','🔓 Anonymous (public)'] },
+    { id:'EMRG', cx:1200, cy:1560, w:220, h:80, type:'impl', lines:['POST /emergency-stop','/resume/{workItemId}','⚠️ No auth (public POST)'] },
+
+    { id:'OKTA', cx:520,  cy:1730, w:220, h:68, type:'aspire', lines:['OKTA OIDC','Auth Layer'] },
+    { id:'CF',   cx:790,  cy:1730, w:220, h:68, type:'aspire', lines:['Amazon CloudFront','CDN'] },
+    { id:'S3',   cx:1060, cy:1730, w:220, h:68, type:'impl',   lines:['S3 Static Site','(bucket deployed, CDN pending)'] },
   ],
   groups: [
-    { label:'Entry & Orchestration',           x:275, y:180,  w:1090, h:110 },
-    { label:'Agent Pipeline',                  x:545, y:580,  w:500,  h:490 },
-    { label:'Data Layer',                      x:275, y:1140, w:1100, h:110 },
-    { label:'Scheduled Workers (EventBridge)', x:275, y:1305, w:760,  h:110 },
-    { label:'API Utilities',                   x:275, y:1475, w:1090, h:110 },
-    { label:'Admin Portal',                    x:275, y:1645, w:870,  h:110 },
+    { label:'Entry & Orchestration',           x:275, y:180,  w:1090, h:120 },
+    { label:'Agent Pipeline',                  x:545, y:600,  w:500,  h:510 },
+    { label:'Data Layer',                      x:275, y:1160, w:1100, h:110 },
+    { label:'Scheduled Workers (EventBridge)', x:275, y:1335, w:760,  h:110 },
+    { label:'API Utilities',                   x:275, y:1500, w:1090, h:120 },
+    { label:'Admin Portal',                    x:275, y:1670, w:870,  h:110 },
   ],
   edges: [
-    { f:'DYN',    t:'APP_EV', label:'future trigger',   dashed:true },
-    { f:'APP_EV', t:'OWH',    label:'aspirational',     dashed:true },
-    { f:'ADO',    t:'OWH',    label:'Service Hook / state→AI Agent' },
+    { f:'DYN',    t:'APP_EV', label:'future trigger',           dashed:true },
+    { f:'APP_EV', t:'OWH',    label:'aspirational',             dashed:true },
+    { f:'ADO',    t:'OWH',    label:'Service Hook / state→AI Agent\n⚠️ no secret validation' },
     { f:'OWH',    t:'SQS',    label:'enqueue: Planning' },
     { f:'SQS',    t:'DISP' },
     { f:'DISP',   t:'PL',  label:'Planning'      },
@@ -157,7 +166,7 @@ const AWS = {
     { f:'CO', t:'GH',  label:'create Issue + assign @github-copilot' },
     { f:'CO', t:'DB2', label:'store delegation' },
     { f:'GH', t:'GHCP' },
-    { f:'GHCP', t:'CPB', label:'webhook: issue closed' },
+    { f:'GHCP', t:'CPB', label:'webhook: issue closed\n✓ HMAC-SHA256 validated' },
     { f:'CPB',  t:'SQS', label:'enqueue: Testing' },
     { f:'TE', t:'GH',  label:'write test results' },
     { f:'TE', t:'SQS', label:'enqueue: Review',         loopLeft:true },
@@ -180,6 +189,7 @@ const AWS = {
     { f:'TOCH', t:'DB2', label:'check stalled delegations' },
     { f:'TOCH', t:'SQS', label:'re-enqueue if timed out' },
     { f:'DLQH', t:'SQS', label:'monitor',               dashed:true },
+    { f:'PL',  t:'SEC', label:'fetch secrets', dashed:true },
     { f:'CLIENT', t:'OKTA', label:'aspirational auth',  dashed:true },
     { f:'OKTA',   t:'CF',   label:'aspirational',       dashed:true },
     { f:'CF',     t:'S3',   label:'aspirational',       dashed:true },
@@ -192,70 +202,78 @@ const AWS = {
 
 // ── Azure Dataset ──────────────────────────────────────────────────────────────
 const AZURE = {
-  svgW: 2190, svgH: 2060,
+  svgW: 2190, svgH: 2100,
   loopRail: 205,
   boundaryColor: '#0078d4',
-  boundaryRect: { x:255, y:120, w:1320, h:1810 },
+  boundaryRect: { x:255, y:120, w:1320, h:1850 },
   boundaryLabel: 'Microsoft Azure — rg-adom8-MyCreditPlan  (East US 2)',
-  subTitle: 'rg-adom8-MyCreditPlan · East US 2 · adom8-func-d997fc28 · .NET 8 Isolated · Generated 2026-05-26',
-  footer:   'ADOmate · rg-adom8-MyCreditPlan · East US 2 · adom8-func-d997fc28 · Architecture snapshot 2026-05-26',
+  subTitle: 'rg-adom8-MyCreditPlan · East US 2 · adom8-func-d997fc28 · .NET 8 Isolated · Generated 2026-05-27',
+  footer:   'ADOmate · rg-adom8-MyCreditPlan · East US 2 · adom8-func-d997fc28 · Architecture snapshot 2026-05-27',
   dbChipLabel: 'Table / Blob Storage',
   queueChipLabel: 'Storage Queue',
   nodes: [
-    { id:'DYN',    cx:110,  cy:240,  w:220, h:68, type:'aspire', lines:['🔍 Dynatrace','(future monitoring)'] },
-    { id:'CLIENT', cx:110,  cy:1760, w:220, h:68, type:'ext',    lines:['👤 Admin','Browser · Mobile'] },
-    { id:'ADO',    cx:1960, cy:255,  w:220, h:68, type:'ext',    lines:['📋 Azure DevOps','User Story + Custom Fields'] },
-    { id:'AI',     cx:1960, cy:770,  w:220, h:68, type:'ext',    lines:['🧠 AI Provider','Claude · OpenAI · Gemini'] },
-    { id:'GH',     cx:1960, cy:1040, w:220, h:68, type:'ext',    lines:['📁 GitHub','Repo · Issues · PRs'] },
-    { id:'GHCP',   cx:1960, cy:1290, w:220, h:68, type:'ext',    lines:['🤖 GitHub Copilot','Coding Agent (MCP)'] },
-    { id:'OWH', cx:500,  cy:250, w:280, h:68, type:'impl', lines:['OrchestratorWebhook','HTTP POST /api/webhook'] },
-    { id:'CPB', cx:890,  cy:250, w:280, h:68, type:'impl', lines:['CopilotBridgeWebhook','HTTP POST /api/copilot-webhook'] },
-    { id:'MCP', cx:1280, cy:250, w:280, h:68, type:'impl', lines:['McpAddComment · McpSetStage · McpStageEvent','HTTP POST /api/mcp/*  (function-key secured)'] },
-    { id:'QUEUE', cx:760, cy:415, w:500, h:68, type:'sqs',  lines:['📨 Azure Storage Queue: agent-tasks','+ agent-tasks-poison DLQ  (retry ×5)'] },
-    { id:'DISP',  cx:760, cy:530, w:500, h:68, type:'impl', lines:['AgentTaskDispatcher','Queue-triggered · keyed DI routing'] },
-    { id:'PL', cx:760, cy:625,  w:460, h:56, type:'impl', lines:['PlanningAgent  ·  Autonomy Level 1+'] },
-    { id:'CO', cx:760, cy:705,  w:460, h:56, type:'impl', lines:['CodingAgent  ·  Autonomy Level 2+  ·  delegates to Copilot'] },
-    { id:'TE', cx:760, cy:785,  w:460, h:56, type:'impl', lines:['TestingAgent  ·  Autonomy Level 3+'] },
-    { id:'RE', cx:760, cy:865,  w:460, h:56, type:'impl', lines:['ReviewAgent  ·  Autonomy Level 3+'] },
-    { id:'DO', cx:760, cy:945,  w:460, h:56, type:'impl', lines:['DocumentationAgent  ·  Autonomy Level 3+'] },
-    { id:'DE', cx:760, cy:1025, w:460, h:56, type:'impl', lines:['DeploymentAgent  ·  Autonomy Level 4+'] },
-    { id:'TABLE',  cx:330,  cy:1225, w:220, h:68, type:'db',    lines:['Table Storage','activitylog table'] },
-    { id:'BLOB',   cx:570,  cy:1225, w:220, h:68, type:'blob',  lines:['Blob Storage','temp-repos container'] },
-    { id:'KV',     cx:810,  cy:1225, w:220, h:68, type:'impl',  lines:['Key Vault','adom8-kv-d997fc28'] },
-    { id:'APPINS', cx:1060, cy:1225, w:220, h:68, type:'ins',   lines:['Application Insights','telemetry · alerts · 30d'] },
-    { id:'SVCBUS', cx:1310, cy:1225, w:220, h:68, type:'aspire',lines:['Service Bus','topic/sub — not yet deployed'] },
-    { id:'DLQH', cx:490, cy:1400, w:250, h:68, type:'impl', lines:['DeadLetterQueueHandler','Timer · every 15 min'] },
-    { id:'TOCH', cx:920, cy:1400, w:250, h:68, type:'impl', lines:['CopilotTimeoutChecker','Timer · every 2 min'] },
-    { id:'HEALTH', cx:340,  cy:1560, w:190, h:56, type:'impl', lines:['GET /api/health'] },
-    { id:'STATUS', cx:565,  cy:1560, w:200, h:56, type:'impl', lines:['GET /api/status'] },
-    { id:'CBINTEL',cx:800,  cy:1560, w:230, h:68, type:'impl', lines:['GET /api/codebase-intelligence','POST /api/analyze-codebase'] },
-    { id:'RESUME', cx:1055, cy:1560, w:210, h:56, type:'impl', lines:['POST /api/resume-pipeline'] },
-    { id:'PROV',   cx:1290, cy:1560, w:240, h:68, type:'impl', lines:['POST /api/provision-ado','idempotent ADO setup'] },
-    { id:'ADMIN',  cx:760,  cy:1650, w:560, h:68, type:'impl', lines:['EmergencyStopExecute · EmergencyStopStatus · ClearActivityFeed · ClearStories · ResetDashboard · InitializeCodebase · GetPendingCode','HTTP (function-key secured) — admin operations'] },
-    { id:'DASH', cx:510, cy:1820, w:330, h:68, type:'impl',   lines:['Azure Static Web App','my-credit-plan-dnn-d997fc28  (Free tier)'] },
-    { id:'OKTA', cx:980, cy:1820, w:220, h:68, type:'aspire', lines:['OKTA OIDC','(auth layer planned)'] },
+    { id:'DYN',    cx:110,  cy:240,  w:220, h:68,  type:'aspire', lines:['🔍 Dynatrace','(future monitoring)'] },
+    { id:'CLIENT', cx:110,  cy:1800, w:220, h:68,  type:'ext',    lines:['👤 Admin','Browser · Mobile'] },
+
+    { id:'ADO',  cx:1960, cy:255,  w:220, h:80,  type:'ext', lines:['📋 Azure DevOps','User Story + Custom Fields','outbound auth: VssBasicCredential (PAT)'] },
+    { id:'AI',   cx:1960, cy:790,  w:220, h:80,  type:'ext', lines:['🧠 AI Provider','Claude · OpenAI · Gemini','outbound auth: provider API key'] },
+    { id:'GH',   cx:1960, cy:1060, w:220, h:80,  type:'ext', lines:['📁 GitHub','Repo · Issues · PRs','outbound auth: Bearer token (PAT)'] },
+    { id:'GHCP', cx:1960, cy:1310, w:220, h:68,  type:'ext', lines:['🤖 GitHub Copilot','Coding Agent (MCP)'] },
+
+    { id:'OWH', cx:500,  cy:250, w:280, h:80, type:'impl', lines:['OrchestratorWebhook','HTTP POST /api/webhook','🔑 Function Key  ⚠️ No HMAC validation'] },
+    { id:'CPB', cx:890,  cy:250, w:280, h:80, type:'impl', lines:['CopilotBridgeWebhook','HTTP POST /api/copilot-webhook','🔑 Function Key  ✓ HMAC-SHA256'] },
+    { id:'MCP', cx:1280, cy:250, w:280, h:68, type:'impl', lines:['McpAddComment · McpSetStage · McpStageEvent','HTTP POST /api/mcp/*  (🔑 Function Key)'] },
+
+    { id:'QUEUE', cx:760, cy:430, w:500, h:68,  type:'sqs',  lines:['📨 Azure Storage Queue: agent-tasks','+ agent-tasks-poison DLQ  (retry ×5)'] },
+    { id:'DISP',  cx:760, cy:550, w:500, h:80,  type:'impl', lines:['AgentTaskDispatcher','Queue-triggered · keyed DI routing','Azure SDK calls: Managed Identity / connection string'] },
+
+    { id:'PL', cx:760, cy:645,  w:460, h:56, type:'impl', lines:['PlanningAgent  ·  Autonomy Level 1+'] },
+    { id:'CO', cx:760, cy:725,  w:460, h:56, type:'impl', lines:['CodingAgent  ·  Autonomy Level 2+  ·  delegates to Copilot'] },
+    { id:'TE', cx:760, cy:805,  w:460, h:56, type:'impl', lines:['TestingAgent  ·  Autonomy Level 3+'] },
+    { id:'RE', cx:760, cy:885,  w:460, h:56, type:'impl', lines:['ReviewAgent  ·  Autonomy Level 3+'] },
+    { id:'DO', cx:760, cy:965,  w:460, h:56, type:'impl', lines:['DocumentationAgent  ·  Autonomy Level 3+'] },
+    { id:'DE', cx:760, cy:1045, w:460, h:56, type:'impl', lines:['DeploymentAgent  ·  Autonomy Level 4+'] },
+
+    { id:'TABLE',  cx:330,  cy:1255, w:220, h:68, type:'db',    lines:['Table Storage','activitylog table'] },
+    { id:'BLOB',   cx:570,  cy:1255, w:220, h:68, type:'blob',  lines:['Blob Storage','temp-repos container'] },
+    { id:'KV',     cx:810,  cy:1255, w:220, h:80, type:'impl',  lines:['🔑 Key Vault','adom8-kv-d997fc28','ADO PAT · GH Token · AI Key'] },
+    { id:'APPINS', cx:1060, cy:1255, w:220, h:68, type:'ins',   lines:['Application Insights','telemetry · alerts · 30d'] },
+    { id:'SVCBUS', cx:1310, cy:1255, w:220, h:68, type:'aspire',lines:['Service Bus','topic/sub — not yet deployed'] },
+
+    { id:'DLQH', cx:490, cy:1430, w:250, h:68, type:'impl', lines:['DeadLetterQueueHandler','Timer · every 15 min'] },
+    { id:'TOCH', cx:920, cy:1430, w:250, h:68, type:'impl', lines:['CopilotTimeoutChecker','Timer · every 2 min'] },
+
+    { id:'HEALTH', cx:340,  cy:1590, w:190, h:68, type:'impl', lines:['GET /api/health','🔓 Anonymous (public)'] },
+    { id:'STATUS', cx:565,  cy:1590, w:200, h:68, type:'impl', lines:['GET /api/status','🔓 Anonymous (public)'] },
+    { id:'CBINTEL',cx:800,  cy:1590, w:230, h:80, type:'impl', lines:['GET /api/codebase-intelligence','POST /api/analyze-codebase','🔑 Function Key'] },
+    { id:'RESUME', cx:1055, cy:1590, w:210, h:68, type:'impl', lines:['POST /api/resume-pipeline','🔑 Function Key'] },
+    { id:'PROV',   cx:1290, cy:1590, w:240, h:80, type:'impl', lines:['POST /api/provision-ado','idempotent ADO setup','🔑 Function Key'] },
+    { id:'ADMIN',  cx:760,  cy:1690, w:560, h:80, type:'impl', lines:['EmergencyStopExecute · EmergencyStopStatus · ClearActivityFeed · ClearStories · ResetDashboard · InitializeCodebase · GetPendingCode','HTTP (🔑 Function Key) — admin operations','Keys stored in Key Vault · passed as ?code= query param'] },
+
+    { id:'DASH', cx:510, cy:1880, w:330, h:68, type:'impl',   lines:['Azure Static Web App','my-credit-plan-dnn-d997fc28  (Free tier)'] },
+    { id:'OKTA', cx:980, cy:1880, w:220, h:68, type:'aspire', lines:['OKTA OIDC','(auth layer planned)'] },
   ],
   groups: [
     { label:'Function App: adom8-func-d997fc28  (Windows · .NET 8 Isolated · Y1 Consumption — EastUS2Plan)',
-      x:270, y:160, w:1290, h:1560, azure:true },
+      x:270, y:160, w:1290, h:1620, azure:true },
     { label:'Entry & Orchestration',
-      x:285, y:188, w:1260, h:115 },
+      x:285, y:188, w:1260, h:125 },
     { label:'Agent Pipeline  (sequential · autonomy-gated)',
-      x:500, y:585, w:520, h:490 },
+      x:500, y:605, w:520, h:510 },
     { label:'Storage Account: adom8std997fc28  +  Key Vault: adom8-kv-d997fc28  +  Application Insights',
-      x:285, y:1168, w:1290, h:115 },
+      x:285, y:1198, w:1290, h:115 },
     { label:'Scheduled Workers (Timer Triggers)',
-      x:285, y:1345, w:760, h:115 },
+      x:285, y:1375, w:760, h:115 },
     { label:'API Utilities',
-      x:285, y:1505, w:1290, h:205 },
+      x:285, y:1535, w:1290, h:255 },
     { label:'Dashboard & Auth',
-      x:285, y:1760, w:840, h:115 },
+      x:285, y:1840, w:840, h:115 },
   ],
   edges: [
-    { f:'DYN',  t:'OWH', label:'future monitoring', dashed:true },
-    { f:'ADO',  t:'OWH', label:'Service Hook / state→AI Agent' },
+    { f:'DYN',  t:'OWH', label:'future monitoring',           dashed:true },
+    { f:'ADO',  t:'OWH', label:'Service Hook / state→AI Agent\n✓ Function Key in webhook URL' },
     { f:'GH',   t:'CPB', label:'PR/issue event\n(WIP removed)' },
-    { f:'GHCP', t:'MCP', label:'MCP tool calls\n(set-stage, add-comment)' },
+    { f:'GHCP', t:'MCP', label:'MCP tool calls\n(set-stage, add-comment)\n✓ Function Key' },
     { f:'MCP',  t:'ADO', label:'update ADO state' },
     { f:'OWH',  t:'QUEUE', label:'enqueue: Planning' },
     { f:'CPB',  t:'QUEUE', label:'enqueue: Testing' },
@@ -289,6 +307,7 @@ const AZURE = {
     { f:'RE', t:'TABLE' }, { f:'DO', t:'TABLE' }, { f:'DE', t:'TABLE' },
     { f:'PL', t:'BLOB', label:'clone repo', dashed:true },
     { f:'CO', t:'BLOB', label:'clone repo', dashed:true },
+    { f:'PL', t:'KV',   label:'fetch secrets', dashed:true },
     { f:'STATUS', t:'TABLE', label:'read activity log' },
     { f:'STATUS', t:'QUEUE', label:'peek queue depth',   dashed:true },
     { f:'DLQH', t:'QUEUE', label:'process poison messages' },
@@ -320,12 +339,12 @@ function tx(content, attrs) {
 }
 
 function edgePath(data, e) {
-  const f = data.nodes.find(n => n.id === e.f);
-  const t = data.nodes.find(n => n.id === e.t);
+  const f = data.nodes.find(function(n){ return n.id===e.f; });
+  const t = data.nodes.find(function(n){ return n.id===e.t; });
   const fW2=f.w/2, fH2=f.h/2, tW2=t.w/2, tH2=t.h/2;
   if (e.loopLeft) {
     const rail = data.loopRail;
-    return 'M '+[f.cx-fW2,f.cy].join(' ')+' L '+rail+' '+f.cy+' L '+rail+' '+t.cy+' L '+(t.cx-tW2)+' '+t.cy;
+    return 'M '+(f.cx-fW2)+' '+f.cy+' L '+rail+' '+f.cy+' L '+rail+' '+t.cy+' L '+(t.cx-tW2)+' '+t.cy;
   }
   const dx=t.cx-f.cx, dy=t.cy-f.cy;
   let x1,y1,x2,y2;
@@ -356,12 +375,11 @@ function buildSVG(data) {
   svg.appendChild(tx(data.boundaryLabel, { x:br.x+10, y:br.y+22, fill:data.boundaryColor, 'font-size':'11', 'font-family':'Segoe UI,sans-serif', 'font-weight':'600' }));
 
   data.groups.forEach(function(g) {
-    svg.appendChild(el('rect',{
-      x:g.x, y:g.y, width:g.w, height:g.h, rx:'8',
+    const attrs = { x:g.x, y:g.y, width:g.w, height:g.h, rx:'8',
       fill: g.azure ? '#0a1628' : '#0d1424',
       stroke: g.azure ? '#0078d466' : '#1e293b',
-      'stroke-width': g.azure ? '1.5' : '1'
-    }));
+      'stroke-width': g.azure ? '1.5' : '1' };
+    svg.appendChild(el('rect', attrs));
     svg.appendChild(tx(g.label, {
       x:g.x+8, y:g.y+14,
       fill: g.azure ? '#0078d4aa' : '#475569',
@@ -408,7 +426,7 @@ function buildSVG(data) {
         x:n.cx, y: sy+i*lh+4,
         'text-anchor':'middle', 'dominant-baseline':'middle',
         fill:s.text,
-        'font-size': (i===0 && total>1) ? '12' : '11',
+        'font-size': (i===0 && total>1) ? '12' : '10',
         'font-weight': i===0 ? '600' : '400',
         'font-family':'Segoe UI,sans-serif'
       }));
