@@ -29,28 +29,30 @@ function getStatusStyles(status) {
  * @param {{agent: {name: string, status: string, lastRun?: string, storiesProcessed?: number, avgDurationSeconds?: number, detail?: string}}} props
  */
 export default function AgentCard({ agent }) {
-  const styles = getStatusStyles(agent.status);
+  const safeAgent = agent ?? {};
+  const styles = getStatusStyles(safeAgent.status);
+  const agentName = String(safeAgent.name ?? 'UnknownAgent');
 
   return (
     <div className={`min-w-[220px] rounded-xl border bg-white p-4 shadow-xs ${styles.border}`}>
       <div className="flex items-start justify-between gap-3">
         <div>
-          <div className="text-sm font-semibold text-gray-900">{agent.name.replace('Agent', ' Agent')}</div>
-          <div className="mt-1 text-xs text-gray-400">Last run {formatRelativeTime(agent.lastRun)}</div>
-          {agent.detail ? <div className="mt-1 truncate text-xs font-medium text-gray-600">{agent.detail}</div> : null}
+          <div className="text-sm font-semibold text-gray-900">{agentName.replace('Agent', ' Agent')}</div>
+          <div className="mt-1 text-xs text-gray-400">Last run {formatRelativeTime(safeAgent.lastRun)}</div>
+          {safeAgent.detail ? <div className="mt-1 truncate text-xs font-medium text-gray-600">{safeAgent.detail}</div> : null}
         </div>
         <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold capitalize ${styles.badge}`}>
-          {agent.status}
+          {safeAgent.status ?? 'idle'}
         </span>
       </div>
       <dl className="mt-5 grid grid-cols-2 gap-3 text-sm">
         <div className="rounded-lg bg-gray-50 p-3">
           <dt className="text-xs uppercase tracking-[0.12em] text-gray-400">Processed</dt>
-          <dd className="mt-2 text-lg font-semibold text-gray-900">{agent.storiesProcessed ?? 0}</dd>
+          <dd className="mt-2 text-lg font-semibold text-gray-900">{safeAgent.storiesProcessed ?? 0}</dd>
         </div>
         <div className="rounded-lg bg-gray-50 p-3">
           <dt className="text-xs uppercase tracking-[0.12em] text-gray-400">Avg Duration</dt>
-          <dd className="mt-2 text-lg font-semibold text-gray-900">{formatDuration(agent.avgDurationSeconds)}</dd>
+          <dd className="mt-2 text-lg font-semibold text-gray-900">{formatDuration(safeAgent.avgDurationSeconds)}</dd>
         </div>
       </dl>
     </div>

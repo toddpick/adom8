@@ -109,6 +109,43 @@ function Ensure-KeyVaultSecretAccess {
     }
 }
 
+function Get-ProjectSlug {
+    param([string]$ProjectName)
+
+    $slug = ([string]$ProjectName).ToLowerInvariant()
+    $slug = [regex]::Replace($slug, '[^a-z0-9-]', '-')
+    $slug = [regex]::Replace($slug, '-+', '-')
+    $slug = $slug.Trim('-')
+    if ([string]::IsNullOrWhiteSpace($slug)) {
+        return 'adom8'
+    }
+
+    return $slug
+}
+
+function Ensure-ServiceBusNamespace {
+    param(
+        [string]$ResourceGroupName,
+        [string]$NamespaceName,
+        [string]$Location
+    )
+
+    $null = az servicebus namespace show --name $NamespaceName --resource-group $ResourceGroupName 2>$null | Out-String
+    if ($LASTEXITCODE -eq 0) {
+        return
+    }
+
+    $null = az servicebus namespace create --name $NamespaceName --resource-group $ResourceGroupName --location $Location --sku Standard 2>$null | Out-String
+    if ($LASTEXITCODE -eq 0) {
+        return
+    }
+
+    $null = az servicebus namespace show --name $NamespaceName --resource-group $ResourceGroupName 2>$null | Out-String
+    if ($LASTEXITCODE -ne 0) {
+        throw "Failed to create or locate Service Bus namespace '$NamespaceName' in resource group '$ResourceGroupName'."
+    }
+}
+
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $defaultConfigPath = Join-Path $PSScriptRoot "bootstrap.config.json"
 $exampleConfigPath = Join-Path $PSScriptRoot "bootstrap.config.example.json"
@@ -175,9 +212,29 @@ $keyVaultName = [string](Get-ConfigValue -Object $config -Path 'keyVault.name' -
 $keyVaultResourceGroupName = [string](Get-ConfigValue -Object $config -Path 'keyVault.resourceGroupName' -Default $resourceGroupName)
 $keyVaultLocation = [string](Get-ConfigValue -Object $config -Path 'keyVault.location' -Default $location)
 $keyVaultUseRbac = [bool](Get-ConfigValue -Object $config -Path 'keyVault.useRbacAuthorization' -Default $true)
+$adoProjectName = [string](Get-ConfigValue -Object $config -Path 'ado.project' -Required)
+$serviceBusResourceGroupName = [string](Get-ConfigValue -Object $config -Path 'serviceBus.resourceGroupName' -Default '')
+$serviceBusNamespaceName = [string](Get-ConfigValue -Object $config -Path 'serviceBus.namespaceName' -Default '')
+$serviceBusLocation = [string](Get-ConfigValue -Object $config -Path 'serviceBus.location' -Default '')
+$serviceBusTopicName = ''
+$serviceBusSubscriptionName = ''
+$serviceBusNamespaceFqdn = ''
 
 if ($keyVaultEnabled -and [string]::IsNullOrWhiteSpace($keyVaultName)) {
     throw "When keyVault.enabled=true, keyVault.name is required."
+}
+
+if (-not [string]::IsNullOrWhiteSpace($serviceBusNamespaceName)) {
+    if ([string]::IsNullOrWhiteSpace($serviceBusResourceGroupName)) {
+        throw "When serviceBus.namespaceName is set, serviceBus.resourceGroupName is required."
+    }
+    if ([string]::IsNullOrWhiteSpace($serviceBusLocation)) {
+        throw "When serviceBus.namespaceName is set, serviceBus.location is required."
+    }
+
+    $serviceBusTopicName = "adom8-$(Get-ProjectSlug -ProjectName $adoProjectName)"
+    $serviceBusSubscriptionName = "adom8-agent"
+    $serviceBusNamespaceFqdn = "$serviceBusNamespaceName.servicebus.windows.net"
 }
 
 $infraPath = Join-Path $repoRoot "infrastructure"
@@ -191,10 +248,20 @@ function_app_name    = "$functionAppName"
 storage_account_name = "$storageAccountName"
 static_web_app_name  = "$staticWebAppName"
 alert_email          = "$alertEmail"
+shared_service_bus_resource_group_name = "$serviceBusResourceGroupName"
+shared_service_bus_namespace_name      = "$serviceBusNamespaceName"
+service_bus_topic_name                 = "$serviceBusTopicName"
+service_bus_subscription_name          = "$serviceBusSubscriptionName"
 "@
 
 Write-Step "Writing infrastructure/terraform.tfvars"
 Set-Content -Path $tfvarsPath -Value $tfvarsContent -Encoding UTF8
+
+if (-not [string]::IsNullOrWhiteSpace($serviceBusNamespaceName)) {
+    Write-Step "Ensuring shared Service Bus namespace"
+    Ensure-ResourceGroup -Name $serviceBusResourceGroupName -Location $serviceBusLocation
+    Ensure-ServiceBusNamespace -ResourceGroupName $serviceBusResourceGroupName -NamespaceName $serviceBusNamespaceName -Location $serviceBusLocation
+}
 
 $tfOutput = $null
 if (-not $SkipTerraform) {
@@ -229,6 +296,19 @@ $dashboardUrl = [string]$tfOutput.dashboard_url.value
 $dashboardApiKey = [string](Get-ConfigValue -Object $config -Path 'deployment.dashboardDeploymentToken' -Default '')
 if ([string]::IsNullOrWhiteSpace($dashboardApiKey)) {
     $dashboardApiKey = [string]$tfOutput.dashboard_api_key.value
+}
+
+if (-not [string]::IsNullOrWhiteSpace($serviceBusNamespaceName)) {
+    Write-Step "Validating Service Bus topic and subscription"
+    $null = az servicebus topic show --name $serviceBusTopicName --namespace-name $serviceBusNamespaceName --resource-group $serviceBusResourceGroupName 2>$null | Out-String
+    if ($LASTEXITCODE -ne 0) {
+        throw "Expected Service Bus topic '$serviceBusTopicName' was not found in namespace '$serviceBusNamespaceName'."
+    }
+
+    $null = az servicebus topic subscription show --name $serviceBusSubscriptionName --namespace-name $serviceBusNamespaceName --resource-group $serviceBusResourceGroupName --topic-name $serviceBusTopicName 2>$null | Out-String
+    if ($LASTEXITCODE -ne 0) {
+        throw "Expected Service Bus subscription '$serviceBusSubscriptionName' was not found on topic '$serviceBusTopicName'."
+    }
 }
 
 $keyVaultSecretUris = @{}
@@ -305,6 +385,12 @@ $sensitiveSettings = [ordered]@{
     "Git__Token" = [string](Get-ConfigValue -Object $config -Path 'git.token' -Required)
 }
 
+if (-not [string]::IsNullOrWhiteSpace($serviceBusNamespaceFqdn)) {
+    $sensitiveSettings["ServiceBus__NamespaceFqdn"] = $serviceBusNamespaceFqdn
+    $sensitiveSettings["ServiceBus__TopicName"] = $serviceBusTopicName
+    $sensitiveSettings["ServiceBus__SubscriptionName"] = $serviceBusSubscriptionName
+}
+
 if ($gitProvider -eq 'github') {
     $sensitiveSettings["GitHub__Token"] = [string](Get-ConfigValue -Object $config -Path 'github.token' -Required)
 }
@@ -322,6 +408,9 @@ $secretNameMap = @{
     "Git__Token" = "Git-Token"
     "GitHub__Token" = "GitHub-Token"
     "Copilot__WebhookSecret" = "Copilot-WebhookSecret"
+    "ServiceBus__NamespaceFqdn" = "ADOM8-SERVICEBUS-NAMESPACE-FQDN"
+    "ServiceBus__TopicName" = "ADOM8-SERVICEBUS-TOPIC-NAME"
+    "ServiceBus__SubscriptionName" = "ADOM8-SERVICEBUS-SUBSCRIPTION-NAME"
 }
 
 foreach ($entry in $sensitiveSettings.GetEnumerator()) {
@@ -396,6 +485,11 @@ Write-Host "Function URL: $functionAppUrl" -ForegroundColor Green
 Write-Host "Dashboard URL: $dashboardUrl" -ForegroundColor Green
 if ($keyVaultEnabled) {
     Write-Host "Key Vault: $keyVaultName" -ForegroundColor Green
+}
+if (-not [string]::IsNullOrWhiteSpace($serviceBusNamespaceFqdn)) {
+    Write-Host "Service Bus Namespace: $serviceBusNamespaceFqdn" -ForegroundColor Green
+    Write-Host "Service Bus Topic: $serviceBusTopicName" -ForegroundColor Green
+    Write-Host "Service Bus Subscription: $serviceBusSubscriptionName" -ForegroundColor Green
 }
 Write-Host ""
 Write-Host "Next: retrieve a function key for secured dashboard actions:" -ForegroundColor Yellow

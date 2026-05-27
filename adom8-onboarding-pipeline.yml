@@ -24,6 +24,9 @@ variables:
   # - RESOURCE_GROUP_NAME
   # - LOCATION
   # - STATIC_WEB_APP_LOCATION (optional; defaults to LOCATION)
+  # - SHARED_SERVICE_BUS_RESOURCE_GROUP_NAME
+  # - SHARED_SERVICE_BUS_NAMESPACE_NAME
+  # - SHARED_SERVICE_BUS_LOCATION
   # - GITHUB_TOKEN (secret)      ← must have 'repo' scope (read + write secrets)
   # - AZURE_SERVICE_CONNECTION
   # - AdoDashboardKey (secret)
@@ -38,6 +41,9 @@ variables:
   STORAGE_ACCOUNT_NAME: 'adom8stplaceholder'
   KEY_VAULT_NAME: 'adom8-kv-placeholder'
   STATIC_WEB_APP_LOCATION: 'eastus2'
+  SHARED_SERVICE_BUS_RESOURCE_GROUP_NAME: ''
+  SHARED_SERVICE_BUS_NAMESPACE_NAME: ''
+  SHARED_SERVICE_BUS_LOCATION: ''
   COPILOT_ENABLED: 'true'
   COPILOT_MODE: 'Auto'
   COPILOT_COMPLEXITY_THRESHOLD: '8'
@@ -89,12 +95,16 @@ stages:
           STORAGE_ACCOUNT_NAME="adom8st${SUFFIX}"
           KEY_VAULT_NAME="adom8-kv-${SUFFIX}"
           SWA_NAME="${SWA_BASE}-${SUFFIX}"
+          SERVICE_BUS_TOPIC_NAME="adom8-${PROJECT_SLUG}"
+          SERVICE_BUS_SUBSCRIPTION_NAME="adom8-agent"
           echo "Using ADO-project-derived Static Web App name: $SWA_NAME"
           echo "##vso[task.setvariable variable=FUNCTION_APP_NAME]$FUNCTION_APP_NAME"
           echo "##vso[task.setvariable variable=STORAGE_ACCOUNT_NAME]$STORAGE_ACCOUNT_NAME"
           echo "##vso[task.setvariable variable=KEY_VAULT_NAME]$KEY_VAULT_NAME"
           echo "##vso[task.setvariable variable=SWA_NAME]$SWA_NAME"
-          echo "Resource names: FuncApp=$FUNCTION_APP_NAME | Storage=$STORAGE_ACCOUNT_NAME | KV=$KEY_VAULT_NAME | SWA=$SWA_NAME"
+          echo "##vso[task.setvariable variable=SERVICE_BUS_TOPIC_NAME]$SERVICE_BUS_TOPIC_NAME"
+          echo "##vso[task.setvariable variable=SERVICE_BUS_SUBSCRIPTION_NAME]$SERVICE_BUS_SUBSCRIPTION_NAME"
+          echo "Resource names: FuncApp=$FUNCTION_APP_NAME | Storage=$STORAGE_ACCOUNT_NAME | KV=$KEY_VAULT_NAME | SWA=$SWA_NAME | SB Topic=$SERVICE_BUS_TOPIC_NAME | SB Sub=$SERVICE_BUS_SUBSCRIPTION_NAME"
 
           echo "Creating Resource Group: $(RESOURCE_GROUP_NAME) in $(LOCATION)"
           az group create --name $(RESOURCE_GROUP_NAME) --location $(LOCATION)
@@ -168,6 +178,120 @@ stages:
           az keyvault set-policy --name $KEY_VAULT_NAME --object-id $PRINCIPAL_ID --secret-permissions get list set
 
           echo "##vso[task.setvariable variable=FUNCTION_PRINCIPAL_ID]$PRINCIPAL_ID"
+
+    - task: AzureCLI@2
+      displayName: 'Create or Reuse Shared Service Bus Resources'
+      inputs:
+        azureSubscription: '$(AZURE_SERVICE_CONNECTION)'
+        scriptType: 'bash'
+        scriptLocation: 'inlineScript'
+        inlineScript: |
+          set -euo pipefail
+
+          if [ -z "$(SHARED_SERVICE_BUS_RESOURCE_GROUP_NAME)" ] || [ -z "$(SHARED_SERVICE_BUS_NAMESPACE_NAME)" ] || [ -z "$(SHARED_SERVICE_BUS_LOCATION)" ]; then
+            echo "ERROR: SHARED_SERVICE_BUS_RESOURCE_GROUP_NAME, SHARED_SERVICE_BUS_NAMESPACE_NAME, and SHARED_SERVICE_BUS_LOCATION are required."
+            exit 1
+          fi
+
+          ADO_PROJECT_NAME="$(System.TeamProject)"
+          if [ -z "$ADO_PROJECT_NAME" ] || [ "$ADO_PROJECT_NAME" = "null" ]; then
+            ADO_PROJECT_NAME="$(AZURE_DEVOPS_PROJECT)"
+          fi
+          PROJECT_SLUG=$(echo "$ADO_PROJECT_NAME" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9-]/-/g' | sed 's/--*/-/g' | sed 's/^-//' | sed 's/-$//')
+          if [ -z "$PROJECT_SLUG" ]; then PROJECT_SLUG="adom8"; fi
+
+          PRINCIPAL_ID="$(FUNCTION_PRINCIPAL_ID)"
+          SERVICE_BUS_RESOURCE_GROUP_NAME="$(SHARED_SERVICE_BUS_RESOURCE_GROUP_NAME)"
+          SERVICE_BUS_NAMESPACE_NAME="$(SHARED_SERVICE_BUS_NAMESPACE_NAME)"
+          SERVICE_BUS_LOCATION="$(SHARED_SERVICE_BUS_LOCATION)"
+          SERVICE_BUS_TOPIC_NAME="adom8-${PROJECT_SLUG}"
+          SERVICE_BUS_SUBSCRIPTION_NAME="adom8-agent"
+          SERVICE_BUS_NAMESPACE_FQDN="${SERVICE_BUS_NAMESPACE_NAME}.servicebus.windows.net"
+
+          echo "Ensuring shared Service Bus resource group exists: $SERVICE_BUS_RESOURCE_GROUP_NAME"
+          az group create --name "$SERVICE_BUS_RESOURCE_GROUP_NAME" --location "$SERVICE_BUS_LOCATION" >/dev/null
+
+          echo "Ensuring shared Service Bus namespace exists: $SERVICE_BUS_NAMESPACE_NAME"
+          if az servicebus namespace show --name "$SERVICE_BUS_NAMESPACE_NAME" --resource-group "$SERVICE_BUS_RESOURCE_GROUP_NAME" >/dev/null 2>&1; then
+            echo "Shared Service Bus namespace already exists. Reusing it."
+          else
+            if az servicebus namespace create --name "$SERVICE_BUS_NAMESPACE_NAME" --resource-group "$SERVICE_BUS_RESOURCE_GROUP_NAME" --location "$SERVICE_BUS_LOCATION" --sku Standard >/dev/null; then
+              echo "Shared Service Bus namespace created."
+            else
+              echo "Namespace create returned a non-zero exit code. Rechecking in case it was created concurrently."
+              if az servicebus namespace show --name "$SERVICE_BUS_NAMESPACE_NAME" --resource-group "$SERVICE_BUS_RESOURCE_GROUP_NAME" >/dev/null 2>&1; then
+                echo "Shared Service Bus namespace was created concurrently. Reusing it."
+              else
+                echo "ERROR: Failed to create or locate Service Bus namespace '$SERVICE_BUS_NAMESPACE_NAME' in resource group '$SERVICE_BUS_RESOURCE_GROUP_NAME'."
+                az resource list --name "$SERVICE_BUS_NAMESPACE_NAME" --resource-type "Microsoft.ServiceBus/namespaces" -o table || true
+                exit 1
+              fi
+            fi
+          fi
+
+          echo "Ensuring project topic exists: $SERVICE_BUS_TOPIC_NAME"
+          az servicebus topic show \
+            --name "$SERVICE_BUS_TOPIC_NAME" \
+            --namespace-name "$SERVICE_BUS_NAMESPACE_NAME" \
+            --resource-group "$SERVICE_BUS_RESOURCE_GROUP_NAME" >/dev/null 2>&1 || \
+          az servicebus topic create \
+            --name "$SERVICE_BUS_TOPIC_NAME" \
+            --namespace-name "$SERVICE_BUS_NAMESPACE_NAME" \
+            --resource-group "$SERVICE_BUS_RESOURCE_GROUP_NAME" >/dev/null
+
+          echo "Ensuring project subscription exists: $SERVICE_BUS_SUBSCRIPTION_NAME"
+          az servicebus topic subscription show \
+            --name "$SERVICE_BUS_SUBSCRIPTION_NAME" \
+            --namespace-name "$SERVICE_BUS_NAMESPACE_NAME" \
+            --resource-group "$SERVICE_BUS_RESOURCE_GROUP_NAME" \
+            --topic-name "$SERVICE_BUS_TOPIC_NAME" >/dev/null 2>&1 || \
+          az servicebus topic subscription create \
+            --name "$SERVICE_BUS_SUBSCRIPTION_NAME" \
+            --namespace-name "$SERVICE_BUS_NAMESPACE_NAME" \
+            --resource-group "$SERVICE_BUS_RESOURCE_GROUP_NAME" \
+            --topic-name "$SERVICE_BUS_TOPIC_NAME" >/dev/null
+
+          SERVICE_BUS_SUBSCRIPTION_ID=$(az servicebus topic subscription show \
+            --name "$SERVICE_BUS_SUBSCRIPTION_NAME" \
+            --namespace-name "$SERVICE_BUS_NAMESPACE_NAME" \
+            --resource-group "$SERVICE_BUS_RESOURCE_GROUP_NAME" \
+            --topic-name "$SERVICE_BUS_TOPIC_NAME" \
+            --query id -o tsv)
+
+          echo "Ensuring Function App managed identity can receive from $SERVICE_BUS_SUBSCRIPTION_ID"
+          EXISTING_ASSIGNMENT_COUNT=$(az role assignment list \
+            --assignee-object-id "$PRINCIPAL_ID" \
+            --scope "$SERVICE_BUS_SUBSCRIPTION_ID" \
+            --query "[?roleDefinitionName=='Azure Service Bus Data Receiver'] | length(@)" -o tsv)
+
+          if [ -z "$EXISTING_ASSIGNMENT_COUNT" ] || [ "$EXISTING_ASSIGNMENT_COUNT" = "0" ]; then
+            role_assignment_created="false"
+            for attempt in {1..12}; do
+              if az role assignment create \
+                --assignee-object-id "$PRINCIPAL_ID" \
+                --assignee-principal-type ServicePrincipal \
+                --role "Azure Service Bus Data Receiver" \
+                --scope "$SERVICE_BUS_SUBSCRIPTION_ID" >/dev/null 2>&1; then
+                role_assignment_created="true"
+                echo "Azure Service Bus Data Receiver role assignment created."
+                break
+              fi
+
+              echo "Role assignment not ready yet (attempt $attempt/12). Waiting 10 seconds for managed identity propagation."
+              sleep 10
+            done
+
+            if [ "$role_assignment_created" != "true" ]; then
+              echo "ERROR: Failed to create Azure Service Bus Data Receiver role assignment after waiting for managed identity propagation."
+              exit 1
+            fi
+          else
+            echo "Azure Service Bus Data Receiver role assignment already exists."
+          fi
+
+          echo "##vso[task.setvariable variable=SERVICE_BUS_NAMESPACE_FQDN]$SERVICE_BUS_NAMESPACE_FQDN"
+          echo "##vso[task.setvariable variable=SERVICE_BUS_TOPIC_NAME]$SERVICE_BUS_TOPIC_NAME"
+          echo "##vso[task.setvariable variable=SERVICE_BUS_SUBSCRIPTION_NAME]$SERVICE_BUS_SUBSCRIPTION_NAME"
 
     - task: DotNetCoreCLI@2
       displayName: 'Build Azure Function'
@@ -280,6 +404,15 @@ stages:
           SUFFIX=$(echo -n "$(RESOURCE_GROUP_NAME)" | sha256sum | cut -c1-8)
           FUNCTION_APP_NAME="adom8-func-${SUFFIX}"
           KEY_VAULT_NAME="adom8-kv-${SUFFIX}"
+          ADO_PROJECT_NAME="$(System.TeamProject)"
+          if [ -z "$ADO_PROJECT_NAME" ] || [ "$ADO_PROJECT_NAME" = "null" ]; then
+            ADO_PROJECT_NAME="$(AZURE_DEVOPS_PROJECT)"
+          fi
+          PROJECT_SLUG=$(echo "$ADO_PROJECT_NAME" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9-]/-/g' | sed 's/--*/-/g' | sed 's/^-//' | sed 's/-$//')
+          if [ -z "$PROJECT_SLUG" ]; then PROJECT_SLUG="adom8"; fi
+          SERVICE_BUS_NAMESPACE_FQDN="$(SHARED_SERVICE_BUS_NAMESPACE_NAME).servicebus.windows.net"
+          SERVICE_BUS_TOPIC_NAME="adom8-${PROJECT_SLUG}"
+          SERVICE_BUS_SUBSCRIPTION_NAME="adom8-agent"
           echo "Using FuncApp=$FUNCTION_APP_NAME | KV=$KEY_VAULT_NAME"
 
           echo "Creating Function App Key for Dashboard"
@@ -322,7 +455,10 @@ stages:
             --github-repo "$(GITHUB_REPO)" \
             --resource-group "$(RESOURCE_GROUP_NAME)" \
             --function-app "${FUNCTION_APP_NAME}" \
-            --key-vault "${KEY_VAULT_NAME}"
+            --key-vault "${KEY_VAULT_NAME}" \
+            --service-bus-namespace-fqdn "${SERVICE_BUS_NAMESPACE_FQDN}" \
+            --service-bus-topic-name "${SERVICE_BUS_TOPIC_NAME}" \
+            --service-bus-subscription-name "${SERVICE_BUS_SUBSCRIPTION_NAME}"
       env:
         ONBOARDING_PAT: $(ONBOARDING_PAT)
         CLAUDE_API_KEY: $(CLAUDE_API_KEY)
@@ -431,6 +567,15 @@ stages:
           SUFFIX=$(echo -n "$(RESOURCE_GROUP_NAME)" | sha256sum | cut -c1-8)
           FUNCTION_APP_NAME="adom8-func-${SUFFIX}"
           FUNCTION_URL="https://${FUNCTION_APP_NAME}.azurewebsites.net/api/health"
+          ADO_PROJECT_NAME="$(System.TeamProject)"
+          if [ -z "$ADO_PROJECT_NAME" ] || [ "$ADO_PROJECT_NAME" = "null" ]; then
+            ADO_PROJECT_NAME="$(AZURE_DEVOPS_PROJECT)"
+          fi
+          PROJECT_SLUG=$(echo "$ADO_PROJECT_NAME" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9-]/-/g' | sed 's/--*/-/g' | sed 's/^-//' | sed 's/-$//')
+          if [ -z "$PROJECT_SLUG" ]; then PROJECT_SLUG="adom8"; fi
+          SERVICE_BUS_TOPIC_NAME="adom8-${PROJECT_SLUG}"
+          SERVICE_BUS_SUBSCRIPTION_NAME="adom8-agent"
+          SERVICE_BUS_NAMESPACE_FQDN="$(SHARED_SERVICE_BUS_NAMESPACE_NAME).servicebus.windows.net"
 
           APP_STATE=$(az functionapp show --name "$FUNCTION_APP_NAME" --resource-group "$(RESOURCE_GROUP_NAME)" --query "state" -o tsv)
           APP_KIND=$(az functionapp show --name "$FUNCTION_APP_NAME" --resource-group "$(RESOURCE_GROUP_NAME)" --query "kind" -o tsv)
@@ -465,4 +610,7 @@ stages:
           echo "Indexed Functions: $INDEXED_COUNT"
           echo "Health Endpoint:   $FUNCTION_URL"
           echo "Health HTTP:       $HEALTH_CODE"
+          echo "SB Namespace FQDN: $SERVICE_BUS_NAMESPACE_FQDN"
+          echo "SB Topic:          $SERVICE_BUS_TOPIC_NAME"
+          echo "SB Subscription:   $SERVICE_BUS_SUBSCRIPTION_NAME"
           echo "========================================"

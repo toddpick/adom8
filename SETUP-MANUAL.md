@@ -6,6 +6,7 @@
 > **Fast path (recommended):** If you want maximum automation, use `scripts/bootstrap.ps1` after collecting PATs/API keys. It provisions Azure resources, configures app settings, deploys Functions, rewires dashboard API URL, and deploys dashboard in one run.
 
 > **Key Vault with fast path:** In `scripts/bootstrap.config.json`, set `keyVault.enabled=true` and provide `keyVault.name` to automatically wire managed identity + Key Vault secret references during bootstrap.
+> **Shared Service Bus with fast path:** In `scripts/bootstrap.config.json`, fill in the `serviceBus` block so bootstrap can create or reuse the shared namespace before Terraform creates the per-project topic, subscription, and RBAC assignment.
 
 > **Production security:** After initial setup, follow `SECURITY_HARDENING.md` to move secrets to Key Vault and apply least-privilege controls.
 
@@ -501,7 +502,13 @@ function_app_name    = "ai-agents-func-YOURNAME"    # Must be globally unique
 storage_account_name = "aiagentsstoryourname"        # Globally unique, lowercase, no hyphens, 3-24 chars
 static_web_app_name  = "ai-agent-dashboard-YOURNAME" # Globally unique
 alert_email          = "your-email@example.com"      # Receives monitoring alert notifications
+shared_service_bus_resource_group_name = "adom8-shared-messaging-rg"
+shared_service_bus_namespace_name      = "adom8-shared-servicebus"
+service_bus_topic_name                 = "adom8-your-project"
+service_bus_subscription_name          = "adom8-agent"
 ```
+
+If you use `scripts/bootstrap.ps1`, it writes these Service Bus Terraform values for you from `scripts/bootstrap.config.json` and also ensures the shared namespace exists before running Terraform.
 
 ### 5c. Run Terraform
 

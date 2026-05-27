@@ -84,6 +84,9 @@ def main():
     parser.add_argument("--resource-group", required=True)
     parser.add_argument("--function-app", required=True)
     parser.add_argument("--key-vault", required=True)
+    parser.add_argument("--service-bus-namespace-fqdn", default="")
+    parser.add_argument("--service-bus-topic-name", default="")
+    parser.add_argument("--service-bus-subscription-name", default="")
     args = parser.parse_args()
 
     onboarding_pat = os.environ.get("ONBOARDING_PAT")
@@ -205,6 +208,12 @@ def main():
         "FUNCTION-KEY": function_key,
         "COPILOT-WEBHOOK-SECRET": copilot_webhook_secret
     }
+    if args.service_bus_namespace_fqdn:
+        secrets_to_store["ADOM8-SERVICEBUS-NAMESPACE-FQDN"] = args.service_bus_namespace_fqdn
+    if args.service_bus_topic_name:
+        secrets_to_store["ADOM8-SERVICEBUS-TOPIC-NAME"] = args.service_bus_topic_name
+    if args.service_bus_subscription_name:
+        secrets_to_store["ADOM8-SERVICEBUS-SUBSCRIPTION-NAME"] = args.service_bus_subscription_name
     # Store secondary/additional provider keys if supplied
     if claude_api_key and openai_api_key:
         # Both provided — Claude is primary; store OpenAI as a secondary provider key too
@@ -269,6 +278,12 @@ def main():
         app_settings.append(f"AI__ProviderKeys__OpenAI__ApiKey=@Microsoft.KeyVault(VaultName={args.key_vault};SecretName=OPENAI-API-KEY)")
     if google_api_key:
         app_settings.append(f"AI__ProviderKeys__Google__ApiKey=@Microsoft.KeyVault(VaultName={args.key_vault};SecretName=GOOGLE-API-KEY)")
+    if args.service_bus_namespace_fqdn:
+        app_settings.append(f"ServiceBus__NamespaceFqdn=@Microsoft.KeyVault(VaultName={args.key_vault};SecretName=ADOM8-SERVICEBUS-NAMESPACE-FQDN)")
+    if args.service_bus_topic_name:
+        app_settings.append(f"ServiceBus__TopicName=@Microsoft.KeyVault(VaultName={args.key_vault};SecretName=ADOM8-SERVICEBUS-TOPIC-NAME)")
+    if args.service_bus_subscription_name:
+        app_settings.append(f"ServiceBus__SubscriptionName=@Microsoft.KeyVault(VaultName={args.key_vault};SecretName=ADOM8-SERVICEBUS-SUBSCRIPTION-NAME)")
     # Note: per-agent model overrides (AI__AgentModels__*) and tier presets can be added
     # to the Function App configuration post-setup via the Azure Portal or az CLI.
     app_settings = app_settings  # satisfy linter — list is complete
@@ -704,6 +719,12 @@ Use `mcp.template.json` as a starting point in your MCP client and provide crede
     print(f"- Storage Account: {args.function_app.replace('-', '')[:24]}")
     print(f"- Key Vault: {args.key_vault}")
     print(f"- Function App: {args.function_app}")
+    if args.service_bus_namespace_fqdn:
+        print(f"- Service Bus Namespace FQDN: {args.service_bus_namespace_fqdn}")
+    if args.service_bus_topic_name:
+        print(f"- Service Bus Topic: {args.service_bus_topic_name}")
+    if args.service_bus_subscription_name:
+        print(f"- Service Bus Subscription: {args.service_bus_subscription_name}")
     
     print(f"\nKey Vault URL: {kv_url}")
     print("All secrets have been securely stored in Key Vault.")

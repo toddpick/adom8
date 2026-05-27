@@ -8,3 +8,7 @@ function_app_name    = "ai-agents-func-UNIQUE"       # Must be globally unique
 storage_account_name = "aiagentsstorUNIQUE"           # Must be globally unique, lowercase, no hyphens, 3-24 chars
 static_web_app_name  = "ai-agent-dashboard-UNIQUE"    # Must be globally unique
 alert_email          = "your-email@example.com"       # Receives monitoring alert notifications
+shared_service_bus_resource_group_name = "adom8-shared-messaging-rg" # Existing or pre-created shared messaging resource group
+shared_service_bus_namespace_name      = "adom8-shared-servicebus"    # Existing or bootstrap-created shared namespace
+service_bus_topic_name                 = "adom8-your-project"         # Per-project topic name on the shared namespace
+service_bus_subscription_name          = "adom8-agent"                # Per-project subscription name for the shared topic

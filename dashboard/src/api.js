@@ -1,14 +1,13 @@
 import { config } from './config';
 import { getMockStatusPayload, getMockStoryDetail } from './mockData';
 
-const STATUS_ENDPOINTS = ['/api/status', '/api/GetCurrentStatus'];
-const STORY_DETAIL_ENDPOINTS = ['/api/GetStoryDetail'];
-const HEALTH_ENDPOINT = '/api/health';
-const CODEBASE_INTELLIGENCE_ENDPOINT = '/api/codebase-intelligence';
-const INITIALIZE_CODEBASE_ENDPOINT = '/api/initialize-codebase';
-const CLEAR_STORIES_ENDPOINT = '/api/clear-stories';
-const CLEAR_ACTIVITY_ENDPOINT = '/api/clear-activity';
-const VALIDATE_DASHBOARD_KEY_ENDPOINT = '/api/validate-dashboard-key';
+const STATUS_ENDPOINTS = ['/status'];
+const STORY_DETAIL_ENDPOINTS = ['/story-detail'];
+const HEALTH_ENDPOINT = '/health';
+const CODEBASE_INTELLIGENCE_ENDPOINT = '/codebase-intelligence';
+const INITIALIZE_CODEBASE_ENDPOINT = '/initialize-codebase';
+const CLEAR_STORIES_ENDPOINT = '/clear-stories';
+const CLEAR_ACTIVITY_ENDPOINT = '/clear-activity';
 
 function getBaseOrigin() {
   if (config.apiBaseUrl) {
@@ -122,24 +121,7 @@ async function fetchJsonFromCandidates(paths, appKey, query) {
 
 export async function validateAppKey(appKey) {
   const trimmed = String(appKey || '').trim();
-  if (!trimmed) {
-    return false;
-  }
-
-  if (config.useMockData) {
-    return true;
-  }
-
-  try {
-    await sendJsonRequest(VALIDATE_DASHBOARD_KEY_ENDPOINT, trimmed);
-    return true;
-  } catch (error) {
-    if (error.code === 401 || error.code === 403 || error.code === 404) {
-      return false;
-    }
-
-    throw error;
-  }
+  return trimmed.length > 0;
 }
 
 export async function getCurrentStatus(appKey) {

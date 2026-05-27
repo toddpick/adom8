@@ -116,6 +116,13 @@ When `keyVault.enabled=true`, it also automates:
 9. Grants Key Vault secret read access
 10. Stores sensitive values as Key Vault secrets and configures Function App settings with Key Vault references
 
+When `serviceBus.namespaceName` is configured, it also automates:
+
+11. Creates or reuses the shared Service Bus namespace in the configured shared resource group
+12. Passes the shared namespace plus per-project topic/subscription names into Terraform
+13. Verifies the per-project topic/subscription exist after Terraform
+14. Stores `ServiceBus__NamespaceFqdn`, `ServiceBus__TopicName`, and `ServiceBus__SubscriptionName` via Key Vault refs (or plain app settings when Key Vault is disabled)
+
 ### Usage
 
 ```powershell
@@ -169,3 +176,22 @@ Notes:
 - `resourceGroupName` defaults to infrastructure resource group when blank.
 - `location` defaults to your configured Azure location when blank.
 - Sensitive settings are moved to Key Vault refs: `AI__ApiKey`, `AzureDevOps__Pat`, `Git__Token`, `GitHub__Token`, and optional `Copilot__WebhookSecret`.
+
+### Optional: Shared Service Bus Automation
+
+In `scripts/bootstrap.config.json`:
+
+```json
+"serviceBus": {
+  "resourceGroupName": "adom8-shared-messaging-rg",
+  "namespaceName": "adom8-shared-servicebus",
+  "location": "eastus"
+}
+```
+
+Notes:
+
+- Bootstrap uses this shared namespace for all onboarded projects.
+- The namespace is created once and reused on later runs.
+- The per-project topic is derived automatically as `adom8-<ado-project-slug>`.
+- Terraform creates the project topic, the `adom8-agent` subscription, and the Function App RBAC assignment.

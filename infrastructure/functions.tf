@@ -35,6 +35,10 @@ resource "azurerm_windows_function_app" "agents" {
   service_plan_id            = azurerm_service_plan.functions.id
   storage_account_name       = azurerm_storage_account.functions.name
   storage_account_access_key = azurerm_storage_account.functions.primary_access_key
+
+  identity {
+    type = "SystemAssigned"
+  }
   
   site_config {
     application_stack {

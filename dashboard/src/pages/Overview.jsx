@@ -302,9 +302,10 @@ function AgentPipeline({ agents }) {
 
 function AgentDurationChart({ agents }) {
   const chartData = AGENT_ORDER.map((agentName) => {
-    const agent = agents.find((entry) => entry.name === agentName);
+    const safeAgentName = String(agentName ?? 'UnknownAgent');
+    const agent = (agents ?? []).find((entry) => entry?.name === agentName);
     return {
-      name: agentName.replace('Agent', ''),
+      name: safeAgentName.replace('Agent', ''),
       duration: agent?.avgDurationSeconds ?? 0,
     };
   });

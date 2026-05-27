@@ -52,6 +52,11 @@
     "location": "",
     "useRbacAuthorization": true
   },
+  "serviceBus": {
+    "resourceGroupName": "adom8-shared-messaging-rg",
+    "namespaceName": "adom8-shared-servicebus",
+    "location": "eastus"
+  },
   "copilot": {
     "enabled": false,
     "mode": "Auto",

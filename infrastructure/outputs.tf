@@ -35,6 +35,21 @@ output "storage_connection_string" {
   sensitive   = true
 }
 
+output "service_bus_namespace_fqdn" {
+  description = "Shared Service Bus namespace FQDN"
+  value       = local.service_bus_enabled ? "${var.shared_service_bus_namespace_name}.servicebus.windows.net" : ""
+}
+
+output "service_bus_topic_name" {
+  description = "Per-project Service Bus topic name"
+  value       = local.service_bus_enabled ? azurerm_servicebus_topic.project[0].name : ""
+}
+
+output "service_bus_subscription_name" {
+  description = "Per-project Service Bus subscription name"
+  value       = local.service_bus_enabled ? azurerm_servicebus_subscription.project[0].name : ""
+}
+
 output "next_steps" {
   description = "Post-deployment instructions"
   value       = <<-EOT

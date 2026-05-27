@@ -212,13 +212,13 @@ export default function StoryDetail() {
           <ul className="space-y-4">
             {(metadata.phases ?? []).map((phase, index) => (
               <li
-                key={phase.agent}
+                key={phase?.agent ?? `phase-${index}`}
                 className={`relative rounded-xl pb-4 pl-2 pr-2 pt-1 last:pb-0 ${phase.status === 'active' ? 'bg-sky-50/70' : ''}`}
               >
                 <div className="pl-8">
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
-                      <div className="text-sm font-semibold text-gray-900">{phase.agent.replace('Agent', ' Agent')}</div>
+                      <div className="text-sm font-semibold text-gray-900">{String(phase?.agent ?? 'UnknownAgent').replace('Agent', ' Agent')}</div>
                       <div className="mt-1 text-xs text-gray-500">
                         {phase.status === 'active'
                           ? 'Processing now'

@@ -46,3 +46,27 @@ variable "alert_email" {
   description = "Email address for monitoring alert notifications"
   type        = string
 }
+
+variable "shared_service_bus_resource_group_name" {
+  description = "Resource group containing the shared Service Bus namespace. Leave blank to disable Service Bus resources in Terraform."
+  type        = string
+  default     = ""
+}
+
+variable "shared_service_bus_namespace_name" {
+  description = "Name of the shared Service Bus namespace. Leave blank to disable Service Bus resources in Terraform."
+  type        = string
+  default     = ""
+}
+
+variable "service_bus_topic_name" {
+  description = "Per-project Service Bus topic name. Leave blank to disable Service Bus resources in Terraform."
+  type        = string
+  default     = ""
+}
+
+variable "service_bus_subscription_name" {
+  description = "Per-project Service Bus subscription name. Leave blank to disable Service Bus resources in Terraform."
+  type        = string
+  default     = ""
+}

@@ -16,11 +16,14 @@ Before running the pipeline, you need to gather the following information and cr
 6. **Claude API Key**: Your Anthropic API key.
 7. **Resource Group Name**: The desired name for the new Azure Resource Group.
 8. **Location**: The Azure region (e.g., `eastus`).
-9. **Azure Service Connection**: The name of an existing Azure Resource Manager service connection in your ADO project that has Contributor access to your subscription.
-10. **Copilot Enabled (Optional)**: Set pipeline variable `COPILOT_ENABLED` (`true` by default) to delegate coding to GitHub Copilot by default.
-11. **MCP Bootstrap Enabled (Optional)**: Set pipeline variable `MCP_BOOTSTRAP_ENABLED` (`true` by default) to create MCP bootstrap guidance files in your GitHub repo.
-12. **Copilot ADO MCP PAT (Optional override)**: Set secret pipeline variable `COPILOT_MCP_AZURE_DEVOPS_PAT` only if you want a dedicated PAT for MCP; otherwise onboarding reuses `ONBOARDING_PAT` automatically for MCP secret sync.
-13. **GitHub Base Branch (Optional)**: Set pipeline variable `GITHUB_BASE_BRANCH` to choose which branch AI feature branches are created from (for example, `dev`). If you leave it blank, onboarding uses the repository's default branch.
+9. **Shared Service Bus Resource Group Name**: The dedicated resource group that contains the shared portfolio-wide Service Bus namespace.
+10. **Shared Service Bus Namespace Name**: The shared Service Bus namespace name. The first onboarding run creates it, and later projects reuse it.
+11. **Shared Service Bus Location**: The Azure region used if the shared namespace needs to be created on first onboarding.
+12. **Azure Service Connection**: The name of an existing Azure Resource Manager service connection in your ADO project that has Contributor access to your subscription.
+13. **Copilot Enabled (Optional)**: Set pipeline variable `COPILOT_ENABLED` (`true` by default) to delegate coding to GitHub Copilot by default.
+14. **MCP Bootstrap Enabled (Optional)**: Set pipeline variable `MCP_BOOTSTRAP_ENABLED` (`true` by default) to create MCP bootstrap guidance files in your GitHub repo.
+15. **Copilot ADO MCP PAT (Optional override)**: Set secret pipeline variable `COPILOT_MCP_AZURE_DEVOPS_PAT` only if you want a dedicated PAT for MCP; otherwise onboarding reuses `ONBOARDING_PAT` automatically for MCP secret sync.
+16. **GitHub Base Branch (Optional)**: Set pipeline variable `GITHUB_BASE_BRANCH` to choose which branch AI feature branches are created from (for example, `dev`). If you leave it blank, onboarding uses the repository's default branch.
 
 ### Create Tokens
 
@@ -65,6 +68,9 @@ Create a Fine-grained Personal Access Token in GitHub scoped to your target repo
    - `GITHUB_REPO`
    - `RESOURCE_GROUP_NAME`
    - `LOCATION`
+   - `SHARED_SERVICE_BUS_RESOURCE_GROUP_NAME`
+   - `SHARED_SERVICE_BUS_NAMESPACE_NAME`
+   - `SHARED_SERVICE_BUS_LOCATION`
    - `AZURE_SERVICE_CONNECTION`
    - `COPILOT_ENABLED` (optional, defaults to `true`)
    - `MCP_BOOTSTRAP_ENABLED` (optional, defaults to `true`)
@@ -80,9 +86,9 @@ Create a Fine-grained Personal Access Token in GitHub scoped to your target repo
 3. **Run the Pipeline**:
    - Click **Run**.
    - The pipeline will execute the following stages:
-     - **Stage 1**: Deploy Azure Infrastructure (Resource Group, Storage, Key Vault, Function App).
+     - **Stage 1**: Deploy Azure Infrastructure (Resource Group, Storage, Key Vault, Function App, and shared Service Bus topic/subscription wiring).
      - **Stage 2**: Create a dedicated adom8 Runtime PAT and store it in Key Vault.
-     - **Stage 3**: Store all secrets securely in Key Vault and configure the Function App.
+     - **Stage 3**: Store all secrets and Service Bus connection details securely in Key Vault and configure the Function App.
      - **Stage 4**: Customize the ADO Process (create inherited process, custom fields, states, and board rules).
      - **Stage 5**: Configure GitHub (register webhook, create `.adom8` folder).
           - Includes MCP bootstrap guidance files under `.adom8/mcp/` when `MCP_BOOTSTRAP_ENABLED=true`.
@@ -90,6 +96,7 @@ Create a Fine-grained Personal Access Token in GitHub scoped to your target repo
      - **Stage 7**: Run validation checks and output a summary.
 
     **Hosting model note**: Stage 1 now enforces a Windows Consumption (`Y1`) Function App for `.NET 8` isolated. If a same-name app already exists on Linux, the pipeline deletes and recreates it on Windows to remove hosting drift.
+    **Service Bus note**: Stage 1 also ensures the shared Service Bus namespace exists in the configured shared resource group, creates this project's `adom8-<project-slug>` topic plus `adom8-agent` subscription, grants the Function App managed identity `Azure Service Bus Data Receiver` on that subscription, and stores the namespace/topic/subscription details in the project Key Vault for runtime use.
 
 ## Post-Setup Steps
 
