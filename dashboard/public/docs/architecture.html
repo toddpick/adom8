@@ -32,6 +32,7 @@
     .btn { background:#1e293b; border:1px solid #334155; color:#f1f5f9; border-radius:5px; height:27px; padding:0 9px; font-size:15px; cursor:pointer; user-select:none; display:flex; align-items:center; }
     .btn:hover { background:#334155; }
     .btn.sm { font-size:11px; letter-spacing:.03em; }
+    .btn.guide { font-size:11px; letter-spacing:.03em; padding:0 10px; }
     #zoom-pct { color:#94a3b8; font-size:11px; min-width:44px; text-align:center; }
     .hint { color:#475569; font-size:10px; }
 
@@ -41,6 +42,14 @@
     #canvas.dragging { cursor:grabbing; }
     #mover { position:absolute; top:0; left:0; transform-origin:0 0; will-change:transform; }
     footer { text-align:center; color:#1e293b; font-size:10px; flex-shrink:0; }
+
+    .modal-backdrop { position:fixed; inset:0; background:#020617cc; display:none; align-items:center; justify-content:center; z-index:20; padding:20px; }
+    .modal-backdrop.open { display:flex; }
+    .modal { width:min(1100px, 100%); max-height:calc(100vh - 60px); border:1px solid #334155; border-radius:12px; background:#0f172a; color:#e2e8f0; box-shadow:0 25px 90px #020617; display:flex; flex-direction:column; overflow:hidden; }
+    .modal-header { display:flex; justify-content:space-between; align-items:center; gap:10px; padding:12px 14px; border-bottom:1px solid #1e293b; }
+    .modal-title { font-size:15px; font-weight:700; }
+    .modal-close { min-width:28px; justify-content:center; font-size:17px; }
+    .modal-content { padding:14px; overflow:auto; font-size:13px; line-height:1.48; white-space:pre-wrap; }
   </style>
 </head>
 <body>
@@ -68,6 +77,7 @@
     <span id="zoom-pct">100%</span>
     <button class="btn" id="btn-out">-</button>
     <button class="btn sm" id="btn-fit">Fit</button>
+    <button class="btn sm guide" id="btn-triggers">View Trigger Guide</button>
     <span class="hint">Scroll to zoom &middot; Drag to pan</span>
   </div>
 </div>
@@ -75,8 +85,158 @@
 <div id="canvas" class="aws-bg"><div id="mover"></div></div>
 <footer id="pg-footer"></footer>
 
+<div class="modal-backdrop" id="triggers-modal" aria-hidden="true">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="triggers-title">
+    <div class="modal-header">
+      <div class="modal-title" id="triggers-title">Lambda Trigger Guide</div>
+      <button class="btn modal-close" id="btn-close-triggers" aria-label="Close trigger guide">&times;</button>
+    </div>
+    <div class="modal-content" id="triggers-content"></div>
+  </div>
+</div>
+
 <script>
 const ns = 'http://www.w3.org/2000/svg';
+const TRIGGER_GUIDE_TEXT = `Here’s how each Lambda is triggered in this repo.
+
+1) API Gateway–triggered Lambdas
+These are invoked by the HTTP API defined in /tmp/workspace/toddpick/adom8-aws/infra/modules/api-gateway/main.tf.
+
+OrchestratorWebhookFunction → POST /webhook
+Actual trigger: Azure DevOps Service Hook calls the API Gateway webhook URL.
+Why: ProvisionAdoFunction sets up that ADO Service Hook to point at this endpoint.
+Then it does: enqueues a Planning task when a work item explicitly moves to "AI Agent".
+Files:
+
+/tmp/workspace/toddpick/adom8-aws/infra/modules/api-gateway/main.tf
+/tmp/workspace/toddpick/adom8-aws/src/AdomAWS/Api/OrchestratorWebhookFunction.cs
+/tmp/workspace/toddpick/adom8-aws/src/AdomAWS/Api/ProvisionAdoFunction.cs
+GetCurrentStatusFunction → GET /status
+Actual trigger: browser/dashboard/user hitting the status endpoint.
+File: /tmp/workspace/toddpick/adom8-aws/src/AdomAWS/Api/GetCurrentStatusFunction.cs
+
+GetHealthStatusFunction → GET /health
+Actual trigger: browser/dashboard/user hitting the health endpoint.
+File: /tmp/workspace/toddpick/adom8-aws/src/AdomAWS/Api/GetHealthStatusFunction.cs
+
+InitializeCodebaseFunction → POST /initialize-codebase
+Actual trigger: browser/dashboard/user action.
+File: /tmp/workspace/toddpick/adom8-aws/src/AdomAWS/Api/InitializeCodebaseFunction.cs
+
+GetCodebaseIntelligenceFunction → GET /codebase-intelligence
+Actual trigger: browser/dashboard/user action.
+File: /tmp/workspace/toddpick/adom8-aws/src/AdomAWS/Api/GetCodebaseIntelligenceFunction.cs
+
+ProvisionAdoFunction → POST /provision-ado
+Actual trigger: browser/dashboard/user action.
+Special role: this is the Lambda that configures Azure DevOps so ADO can start calling /webhook.
+File: /tmp/workspace/toddpick/adom8-aws/src/AdomAWS/Api/ProvisionAdoFunction.cs
+
+EmergencyStopFunction → POST /emergency-stop
+Actual trigger: browser/dashboard/user action.
+File: /tmp/workspace/toddpick/adom8-aws/src/AdomAWS/Api/EmergencyStopFunction.cs
+
+ResumePipelineFunction → POST /resume/{workItemId}
+Actual trigger: browser/dashboard/user/manual API call.
+Then it does: enqueues whichever agent type is specified in the request body.
+File: /tmp/workspace/toddpick/adom8-aws/src/AdomAWS/Api/ResumePipelineFunction.cs
+
+CopilotBridgeWebhookFunction → POST /copilot-bridge
+Actual trigger: GitHub webhook event sent to API Gateway.
+Specifically: handles issues / issue_comment events with action == "closed" and then enqueues Testing.
+File: /tmp/workspace/toddpick/adom8-aws/src/AdomAWS/Webhooks/CopilotBridgeWebhook.cs
+
+2) SQS-triggered agent Lambdas
+These are wired with aws_lambda_event_source_mapping in /tmp/workspace/toddpick/adom8-aws/infra/modules/lambda/main.tf.
+
+All of these read from the same SQS queue, but each Lambda only receives messages whose AgentType message attribute matches its filter.
+
+PlanningAgentFunction
+Actual trigger: SQS message with AgentType = PlanningAgent
+Usually enqueued by: OrchestratorWebhookFunction
+File refs:
+
+/tmp/workspace/toddpick/adom8-aws/infra/modules/lambda/main.tf
+/tmp/workspace/toddpick/adom8-aws/src/AdomAWS/Api/OrchestratorWebhookFunction.cs
+CodingAgentFunction
+Actual trigger: SQS message with AgentType = CodingAgent
+Usually enqueued by: PlanningAgentService
+Also enqueued by: CopilotTimeoutChecker for fallback-to-agentic coding
+Files:
+
+/tmp/workspace/toddpick/adom8-aws/src/AdomAWS/Agents/PlanningAgentService.cs
+/tmp/workspace/toddpick/adom8-aws/src/AdomAWS/Workers/CopilotTimeoutChecker.cs
+TestingAgentFunction
+Actual trigger: SQS message with AgentType = TestingAgent
+Usually enqueued by: CodingAgentService (agentic path)
+Also enqueued by: CopilotBridgeWebhookFunction when Copilot completes
+Files:
+
+/tmp/workspace/toddpick/adom8-aws/src/AdomAWS/Agents/CodingAgentService.cs
+/tmp/workspace/toddpick/adom8-aws/src/AdomAWS/Webhooks/CopilotBridgeWebhook.cs
+ReviewAgentFunction
+Actual trigger: SQS message with AgentType = ReviewAgent
+Enqueued by: TestingAgentService
+File: /tmp/workspace/toddpick/adom8-aws/src/AdomAWS/Agents/TestingAgentService.cs
+
+DocumentationAgentFunction
+Actual trigger: SQS message with AgentType = DocumentationAgent
+Enqueued by: ReviewAgentService
+File: /tmp/workspace/toddpick/adom8-aws/src/AdomAWS/Agents/ReviewAgentService.cs
+
+DeploymentAgentFunction
+Actual trigger: SQS message with AgentType = DeploymentAgent
+Enqueued by: DocumentationAgentService
+File: /tmp/workspace/toddpick/adom8-aws/src/AdomAWS/Agents/DocumentationAgentService.cs
+
+Important detail: the SQS attribute is set in /tmp/workspace/toddpick/adom8-aws/src/AdomAWS/Shared/Services/SqsAgentTaskQueue.cs, and the Lambda-side SQS filter is in /tmp/workspace/toddpick/adom8-aws/infra/modules/lambda/main.tf.
+
+3) EventBridge Scheduler–triggered worker Lambdas
+These are defined in /tmp/workspace/toddpick/adom8-aws/infra/modules/eventbridge/main.tf.
+
+DeadLetterQueueHandler
+Actual trigger: EventBridge Scheduler
+Schedule: every 5 minutes
+Purpose: polls the DLQ and handles permanently failed messages
+
+CopilotTimeoutChecker
+Actual trigger: EventBridge Scheduler
+Schedule: every 15 minutes
+Purpose: finds timed-out Copilot delegations and re-enqueues Coding
+
+AgentTaskDispatcher
+Actual trigger: EventBridge Scheduler
+Schedule: every 1 minute
+Important nuance: despite the name, comments say this is mainly a secondary health/manual safety-net. Normal agent execution is primarily SQS → Lambda, not this scheduler.
+
+4) End-to-end pipeline trigger flow
+The main trigger chain is:
+
+Azure DevOps Service Hook
+→ API Gateway POST /webhook
+→ OrchestratorWebhookFunction
+
+OrchestratorWebhookFunction
+→ sends SQS message for PlanningAgentFunction
+
+PlanningAgentFunction
+→ may enqueue CodingAgentFunction
+
+CodingAgentFunction
+
+Agentic path: enqueue TestingAgentFunction
+Copilot path: wait for GitHub webhook to hit /copilot-bridge
+CopilotBridgeWebhookFunction
+→ enqueue TestingAgentFunction
+
+TestingAgentFunction
+→ enqueue ReviewAgentFunction
+
+ReviewAgentFunction
+→ enqueue DocumentationAgentFunction
+
+DocumentationAgentFunction
+→ enqueue DeploymentAgentFunction`;
 
 const STYLES = {
   impl:   { fill:'#166534', stroke:'#22c55e', text:'#bbf7d0', dash:false },
@@ -441,7 +601,10 @@ function buildSVG(data) {
 // ── Pan / zoom ─────────────────────────────────────────────────────────────────
 const canvas = document.getElementById('canvas');
 const mover  = document.getElementById('mover');
+const triggersModal = document.getElementById('triggers-modal');
+const triggerGuideContent = document.getElementById('triggers-content');
 let scale=1, panX=0, panY=0, curData=AWS;
+triggerGuideContent.textContent = TRIGGER_GUIDE_TEXT;
 
 function applyT() {
   mover.style.transform = 'translate('+panX+'px,'+panY+'px) scale('+scale+')';
@@ -468,6 +631,26 @@ function zC(f){ var mx=canvas.clientWidth/2,my=canvas.clientHeight/2,ns2=Math.ma
 document.getElementById('btn-in').addEventListener('click',function(){ zC(1.3); });
 document.getElementById('btn-out').addEventListener('click',function(){ zC(0.77); });
 document.getElementById('btn-fit').addEventListener('click',fit);
+document.getElementById('btn-triggers').addEventListener('click', function() {
+  triggersModal.classList.add('open');
+  triggersModal.setAttribute('aria-hidden', 'false');
+});
+document.getElementById('btn-close-triggers').addEventListener('click', function() {
+  triggersModal.classList.remove('open');
+  triggersModal.setAttribute('aria-hidden', 'true');
+});
+triggersModal.addEventListener('click', function(e) {
+  if (e.target === triggersModal) {
+    triggersModal.classList.remove('open');
+    triggersModal.setAttribute('aria-hidden', 'true');
+  }
+});
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape' && triggersModal.classList.contains('open')) {
+    triggersModal.classList.remove('open');
+    triggersModal.setAttribute('aria-hidden', 'true');
+  }
+});
 window.addEventListener('resize',fit);
 
 function switchTo(data, key) {
